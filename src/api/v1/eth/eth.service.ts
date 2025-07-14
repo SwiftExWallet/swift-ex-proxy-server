@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ethers, formatUnits, parseUnits, getAddress } from 'ethers';
+import { ethers, formatUnits, parseUnits } from 'ethers';
 import { JsonRpcProvider, Contract } from 'ethers';
 import { ETH_FACTORY, ETH_POOL, ETH_QUOTER } from '../common/abi/eth';
 import { SwapQuoteDto } from './dto/swapQuote.dto';
@@ -24,13 +24,13 @@ export class EthService {
     this.provider = new JsonRpcProvider(rpcUrl);
 
     this.factoryContract = new ethers.Contract(
-      factoryAddress!,
+      factoryAddress,
       ETH_FACTORY,
       this.provider,
     );
 
     this.quoterContract = new ethers.Contract(
-      quoterAddress!,
+      quoterAddress,
       ETH_QUOTER,
       this.provider,
     );
@@ -38,11 +38,11 @@ export class EthService {
 
   async getSwapQuote(swapQuoteDto: SwapQuoteDto) {
     try {
-      const { tokenIn, tokenOut, amount,feeTire } = swapQuoteDto;
+      const { tokenIn, tokenOut, amount } = swapQuoteDto;
       const poolAddress: string = (await this.factoryContract.getPool(
         tokenIn.address,
         tokenOut.address,
-        feeTire,
+        process.env.FEE_TIER,
       )) as string;
 
       if (!poolAddress) {
@@ -50,7 +50,7 @@ export class EthService {
       }
 
       const poolContract = new ethers.Contract(
-        poolAddress!,
+        poolAddress,
         ETH_POOL,
         this.provider,
       );

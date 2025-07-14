@@ -2,7 +2,7 @@ import { Body, Controller, Post, Res } from '@nestjs/common';
 import { SwapQuoteDto } from './dto/swapQuote.dto';
 import { EthService } from './eth.service';
 
-@Controller('eth')
+@Controller('/api/v1/eth')
 export class EthController {
   constructor(private readonly ethService: EthService) {}
   @Post('getSwapQuote')
