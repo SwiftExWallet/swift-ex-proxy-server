@@ -22,5 +22,8 @@ export class SwapQuoteDto {
   tokenOut: TokenInfoDto;
 
   @IsNotEmpty()
-  amount: string;
+  amountIn: string;
+  
+  @IsNotEmpty()
+  feeTier:number
 }
