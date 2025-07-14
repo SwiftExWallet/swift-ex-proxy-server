@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ethers, formatUnits, parseUnits, getAddress } from 'ethers';
+import { ethers, formatUnits, parseUnits } from 'ethers';
 import { JsonRpcProvider, Contract } from 'ethers';
 import { ETH_FACTORY, ETH_POOL, ETH_QUOTER } from '../common/abi/eth';
 import { SwapQuoteDto } from './dto/swapQuote.dto';
@@ -42,7 +42,7 @@ export class EthService {
       const poolAddress: string = (await this.factoryContract.getPool(
         tokenIn.address,
         tokenOut.address,
-        amount,
+        process.env.FEE_TIER,
       )) as string;
 
       if (!poolAddress) {
@@ -59,16 +59,12 @@ export class EthService {
       const formattedAmountIn = parseUnits(amount.toString(), tokenIn.decimals);
 
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const quotedAmountOut = await await (
-        this.quoterContract.callStatic as any
-      ).quoteExactInputSingle({
+      const quotedAmountOut = await this.quoterContract.quoteExactInputSingle({
         tokenIn: tokenIn.address,
         tokenOut: tokenOut.address,
         fee: fee,
-        recipient: getAddress('0x0000000000000000000000000000000000000000'),
-        deadline: Math.floor(Date.now() / 1000) + 600,
         amountIn: formattedAmountIn,
-        sqrtPriceLimitX96: 0,
+        sqrtPriceLimitX96: 0n,
       });
 
       const formattedAmountOut = formatUnits(
