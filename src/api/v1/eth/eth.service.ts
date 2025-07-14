@@ -24,13 +24,13 @@ export class EthService {
     this.provider = new JsonRpcProvider(rpcUrl);
 
     this.factoryContract = new ethers.Contract(
-      factoryAddress,
+      factoryAddress!,
       ETH_FACTORY,
       this.provider,
     );
 
     this.quoterContract = new ethers.Contract(
-      quoterAddress,
+      quoterAddress!,
       ETH_QUOTER,
       this.provider,
     );
@@ -38,11 +38,11 @@ export class EthService {
 
   async getSwapQuote(swapQuoteDto: SwapQuoteDto) {
     try {
-      const { tokenIn, tokenOut, amount } = swapQuoteDto;
+      const { tokenIn, tokenOut, amount,feeTire } = swapQuoteDto;
       const poolAddress: string = (await this.factoryContract.getPool(
         tokenIn.address,
         tokenOut.address,
-        amount,
+        feeTire,
       )) as string;
 
       if (!poolAddress) {
@@ -50,7 +50,7 @@ export class EthService {
       }
 
       const poolContract = new ethers.Contract(
-        poolAddress,
+        poolAddress!,
         ETH_POOL,
         this.provider,
       );
@@ -59,16 +59,12 @@ export class EthService {
       const formattedAmountIn = parseUnits(amount.toString(), tokenIn.decimals);
 
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const quotedAmountOut = await await (
-        this.quoterContract.callStatic as any
-      ).quoteExactInputSingle({
+      const quotedAmountOut = await this.quoterContract.quoteExactInputSingle({
         tokenIn: tokenIn.address,
         tokenOut: tokenOut.address,
         fee: fee,
-        recipient: getAddress('0x0000000000000000000000000000000000000000'),
-        deadline: Math.floor(Date.now() / 1000) + 600,
         amountIn: formattedAmountIn,
-        sqrtPriceLimitX96: 0,
+        sqrtPriceLimitX96: 0n,
       });
 
       const formattedAmountOut = formatUnits(

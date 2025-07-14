@@ -23,4 +23,7 @@ export class SwapQuoteDto {
 
   @IsNotEmpty()
   amount: string;
+
+  @IsNotEmpty()
+  feeTire:number
 }
