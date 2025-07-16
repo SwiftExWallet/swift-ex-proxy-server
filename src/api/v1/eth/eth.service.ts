@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { ethers, formatUnits, parseUnits } from 'ethers';
+import { ethers, FeeData, formatUnits, parseUnits } from 'ethers';
 import { JsonRpcProvider, Contract } from 'ethers';
 import { ETH_FACTORY, ETH_POOL, ETH_QUOTER } from '../common/abi/eth';
 import { SwapQuoteDto } from './dto/swapQuote.dto';
+import { WalletAddressInfoDto } from './dto/walletAddressInfo.dto';
+import { BroadcastTransactionDto } from './dto/broadcastTransactionDto';
 
 @Injectable()
 export class EthService {
@@ -88,5 +90,34 @@ export class EthService {
     } catch (error: any) {
       throw new Error(`Failed to get swap quote: ${error.message}`);
     }
+  }
+
+  async getWalletAddressInfo(
+    walletAddressInfoDto: WalletAddressInfoDto,
+  ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
+    const { walletAddress } = walletAddressInfoDto;
+    const transactionCount: number = await this.provider.getTransactionCount(
+      walletAddress,
+      'latest',
+    );
+
+    const gasFeeData: FeeData = await this.provider.getFeeData();
+    return {
+      transactionCount,
+      gasFeeData,
+    };
+  }
+
+  async broadcastTransaction(broadcastTransactionDto: BroadcastTransactionDto) {
+    const { signedTx } = broadcastTransactionDto;
+    const txResponse = await this.provider.broadcastTransaction(signedTx);
+    console.log('Broadcasted Tx:', txResponse.hash);
+
+    const receipt = await txResponse.wait(); // Wait for confirmation
+    console.log('📦 Receipt:', receipt);
+    return {
+      txHash: txResponse.hash,
+      receipt,
+    };
   }
 }
