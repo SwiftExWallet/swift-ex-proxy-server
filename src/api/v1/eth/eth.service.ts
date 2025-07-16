@@ -1,10 +1,37 @@
-import { Injectable } from '@nestjs/common';
-import { ethers, FeeData, formatUnits, parseUnits } from 'ethers';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  ethers,
+  FeeData,
+  formatUnits,
+  parseUnits,
+  TransactionReceipt,
+  TransactionResponse,
+} from 'ethers';
 import { JsonRpcProvider, Contract } from 'ethers';
-import { ETH_FACTORY, ETH_POOL, ETH_QUOTER } from '../common/abi/eth';
+import {
+  ETH_ERC20,
+  ETH_FACTORY,
+  ETH_POOL,
+  ETH_QUOTER,
+} from '../common/abi/eth';
 import { SwapQuoteDto } from './dto/swapQuote.dto';
 import { WalletAddressInfoDto } from './dto/walletAddressInfo.dto';
-import { BroadcastTransactionDto } from './dto/broadcastTransactionDto';
+import { BroadcastTransactionDto } from './dto/broadcastTransaction.dto';
+import {
+  broadcastTransactionToNetwork,
+  getFeeData,
+  getNetwork,
+  getTransactionCount,
+} from '../common/helpers/utilityMethods';
+import { SwapPrepareDto } from './dto/swapPrepare.dto';
+import { EthSwapEnum } from '../common/enums/ethSwap.enum';
+import {
+  I_QuotedOutput,
+  I_SwapQuote,
+  I_SwapTransaction,
+} from '../common/interface/swap.interface';
+import { GetTokenInfoDto } from './dto/fetchTokenInfo.dto';
+import { I_TokenInfo } from '../common/interface/tokenInfo.interface';
 
 @Injectable()
 export class EthService {
@@ -38,7 +65,7 @@ export class EthService {
     );
   }
 
-  async getSwapQuote(swapQuoteDto: SwapQuoteDto) {
+  async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<I_SwapQuote> {
     try {
       const { tokenIn, tokenOut, amount } = swapQuoteDto;
       const poolAddress: string = (await this.factoryContract.getPool(
@@ -51,30 +78,33 @@ export class EthService {
         throw new Error('Pool not found for token pair');
       }
 
-      const poolContract = new ethers.Contract(
+      const poolContract: Contract = new ethers.Contract(
         poolAddress,
         ETH_POOL,
         this.provider,
       );
       const fee: number = (await poolContract.fee()) as number;
 
-      const formattedAmountIn = parseUnits(amount.toString(), tokenIn.decimals);
+      const formattedAmountIn: bigint = parseUnits(
+        amount.toString(),
+        tokenIn.decimals,
+      );
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const quotedAmountOut = await this.quoterContract.quoteExactInputSingle({
-        tokenIn: tokenIn.address,
-        tokenOut: tokenOut.address,
-        fee: fee,
-        amountIn: formattedAmountIn,
-        sqrtPriceLimitX96: 0n,
-      });
+      const quotedOutput: I_QuotedOutput =
+        (await this.quoterContract.quoteExactInputSingle({
+          tokenIn: tokenIn.address,
+          tokenOut: tokenOut.address,
+          fee: fee,
+          amountIn: formattedAmountIn,
+          sqrtPriceLimitX96: 0n,
+        })) as I_QuotedOutput;
 
-      const formattedAmountOut = formatUnits(
-        quotedAmountOut[0],
+      const formattedAmountOut: string = formatUnits(
+        quotedOutput[0],
         tokenOut.decimals,
       );
 
-      const pricePerToken = (
+      const pricePerToken: string = (
         parseFloat(formattedAmountOut) / parseFloat(amount)
       ).toFixed(6);
 
@@ -96,28 +126,173 @@ export class EthService {
     walletAddressInfoDto: WalletAddressInfoDto,
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
     const { walletAddress } = walletAddressInfoDto;
-    const transactionCount: number = await this.provider.getTransactionCount(
+    const transactionCount: number = await getTransactionCount(
+      this.provider,
       walletAddress,
-      'latest',
     );
 
-    const gasFeeData: FeeData = await this.provider.getFeeData();
+    const gasFeeData: FeeData = await getFeeData(this.provider);
     return {
       transactionCount,
       gasFeeData,
     };
   }
 
-  async broadcastTransaction(broadcastTransactionDto: BroadcastTransactionDto) {
+  async broadcastTransaction(
+    broadcastTransactionDto: BroadcastTransactionDto,
+  ): Promise<{ txHash: string; receipt: TransactionReceipt | null }> {
     const { signedTx } = broadcastTransactionDto;
-    const txResponse = await this.provider.broadcastTransaction(signedTx);
+    const txResponse: TransactionResponse = await broadcastTransactionToNetwork(
+      this.provider,
+      signedTx,
+    );
     console.log('Broadcasted Tx:', txResponse.hash);
 
-    const receipt = await txResponse.wait(); // Wait for confirmation
-    console.log('📦 Receipt:', receipt);
+    const receipt: TransactionReceipt | null = await txResponse.wait(); // Wait for confirmation
+    console.log('Receipt:', receipt);
     return {
       txHash: txResponse.hash,
       receipt,
     };
+  }
+
+  async prepareSwap(
+    swapPrepareDto: SwapPrepareDto,
+  ): Promise<I_SwapTransaction[]> {
+    const { address, swapType, value, depositData, approveData, swapData } =
+      swapPrepareDto;
+    const nonce: number = await getTransactionCount(this.provider, address);
+    const { chainId } = await getNetwork(this.provider);
+
+    const txs: I_SwapTransaction[] = [];
+    const { maxFeePerGas, maxPriorityFeePerGas } = await getFeeData(
+      this.provider,
+    );
+    if (
+      !process.env.WETH ||
+      !process.env.ETH_SWAP_GAS_FEE_LIMIT ||
+      !process.env.ETH_SWAP_TYPE ||
+      !process.env.USDC ||
+      !process.env.SWAP_ROUTER ||
+      !maxFeePerGas ||
+      !maxPriorityFeePerGas
+    ) {
+      throw new Error('Missing swap variable in environment variables');
+    }
+    if (swapType == EthSwapEnum.EthToUsdc) {
+      txs.push({
+        to: process.env.WETH,
+        data: depositData,
+        value,
+        gasLimit: +process.env.ETH_SWAP_GAS_FEE_LIMIT,
+        nonce,
+        chainId,
+        type: +process.env.ETH_SWAP_TYPE,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
+      });
+      txs.push({
+        to: process.env.WETH,
+        data: approveData,
+        gasLimit: 70000,
+        nonce: nonce + 1,
+        chainId,
+        type: 2,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
+      });
+      txs.push({
+        to: process.env.SWAP_ROUTER,
+        data: swapData,
+        gasLimit: 250000,
+        nonce: nonce + 2,
+        chainId,
+        type: 2,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
+      });
+    } else if (swapType == EthSwapEnum.UsdcToWeth) {
+      txs.push({
+        to: process.env.USDC,
+        data: approveData,
+        gasLimit: 70000,
+        nonce,
+        chainId,
+        type: 2,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
+      });
+      txs.push({
+        to: process.env.SWAP_ROUTER,
+        data: swapData,
+        gasLimit: 250000,
+        nonce: nonce + 1,
+        chainId,
+        type: 2,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
+      });
+    } else {
+      throw new BadRequestException('Invalid swap type');
+    }
+    return txs;
+  }
+
+  async executeSwapTransactions(
+    txs: string[],
+  ): Promise<(TransactionReceipt | undefined)[]> {
+    const receipts: (TransactionReceipt | undefined)[] = [];
+    for (const tx of txs) {
+      const txResponse: TransactionResponse =
+        await broadcastTransactionToNetwork(this.provider, tx);
+      const receipt: TransactionReceipt | null = await txResponse.wait();
+      receipts.push(receipt ?? undefined);
+    }
+    return receipts;
+  }
+
+  async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<I_TokenInfo[]> {
+    const { addresses, walletAddress } = getTokenInfoDto;
+    let validAddresses: string[] = [];
+    if (Array.isArray(addresses)) {
+      validAddresses = addresses;
+    } else if (typeof addresses === 'string') {
+      validAddresses = addresses
+        .split(/[, ]+/)
+        .map((addr) => addr.trim())
+        .filter((addr) => addr);
+    }
+
+    if (validAddresses.length === 0) {
+      throw new Error('No valid token addresses provided');
+    }
+
+    const tokenInfos = await Promise.all(
+      validAddresses.map(async (address) => {
+        const tokenContract: Contract = new ethers.Contract(
+          address,
+          ETH_ERC20,
+          this.provider,
+        );
+        const [name, symbol, decimals, balance] = (await Promise.all([
+          tokenContract.name(),
+          tokenContract.symbol(),
+          tokenContract.decimals(),
+          tokenContract.balanceOf(walletAddress),
+        ])) as [string, string, number, bigint];
+
+        const formattedBalance: string = formatUnits(balance, decimals);
+        return {
+          name,
+          symbol,
+          balance: formattedBalance,
+          address,
+          imageUrl: '',
+          decimals: decimals,
+        };
+      }),
+    );
+
+    return tokenInfos;
   }
 }
