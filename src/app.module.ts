@@ -8,6 +8,7 @@ import { AuthTokenMiddleware } from './api/v1/common/middleware/auth-token.middl
 import { MongooseModule } from '@nestjs/mongoose';
 import { JwtModule } from '@nestjs/jwt';
 import { BscModule } from './api/v1/bsc/bsc.module';
+import { AlchemyModule } from './api/v1/alchemy/alchemy.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { BscModule } from './api/v1/bsc/bsc.module';
     EthModule,
     UsersModule,
     BscModule,
+    AlchemyModule,
   ],
   controllers: [AppController],
   providers: [AppService],

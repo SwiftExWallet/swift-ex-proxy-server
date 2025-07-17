@@ -3,6 +3,8 @@ import {
   ethers,
   FeeData,
   formatUnits,
+  Interface,
+  parseEther,
   parseUnits,
   TransactionReceipt,
   TransactionResponse,
@@ -32,21 +34,30 @@ import {
 } from '../common/interface/swap.interface';
 import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
 import { I_TokenInfo } from '../common/interface/tokenInfo.interface';
+import { UsdtSwapQuoteDto } from './dto/usdtSwapQuote.dto';
 
+type SwapTx = {
+  to: string;
+  data: string;
+  value: bigint;
+  gasLimit: bigint;
+};
 @Injectable()
 export class EthService {
   provider: JsonRpcProvider;
   factoryContract: Contract;
   quoterContract: Contract;
+  swapRouterContract: Contract;
   constructor() {
     const rpcUrl = process.env.PROVIDER_RPC_ETH;
     const factoryAddress = process.env.POOL_FACTORY_CONTRACT_ADDRESS;
     const quoterAddress = process.env.QUOTER_CONTRACT_ADDRESS;
+    const swapRouterAddress = process.env.SWAP_ROUTER_ADDRESS;
     if (!rpcUrl) {
       throw new Error('Missing rpc provider');
     }
 
-    if (!factoryAddress || !quoterAddress) {
+    if (!factoryAddress || !quoterAddress || !swapRouterAddress) {
       throw new Error('Missing contract address in environment variables');
     }
 
@@ -117,6 +128,73 @@ export class EthService {
         fee: fee.toString(),
         poolAddress: poolAddress,
       };
+    } catch (error: any) {
+      throw new Error(`Failed to get swap quote: ${error.message}`);
+    }
+  }
+
+  async prepareUsdtSwapTransaction(
+    usdtSwapQuoteDto: UsdtSwapQuoteDto,
+  ): Promise<SwapTx> {
+    try {
+      const { fromAddress, amount } = usdtSwapQuoteDto;
+      const tokenIn = process.env.WETH_ADDRESS!;
+      const tokenOut = process.env.USDT_ADDRESS!;
+
+      if (!tokenIn || !tokenOut) {
+        throw new Error('Missing token address in env vars');
+      }
+      const poolAddress: string = (await this.factoryContract.getPool(
+        tokenIn,
+        tokenOut,
+        process.env.FEE_TIER,
+      )) as string;
+
+      if (!poolAddress || poolAddress === ethers.ZeroAddress) {
+        throw new Error('Pool not found for token pair');
+      }
+
+      const poolContract: Contract = new ethers.Contract(
+        poolAddress,
+        ETH_POOL_ABI,
+        this.provider,
+      );
+      const fee: bigint = (await poolContract.fee()) as bigint;
+
+      const formattedAmountIn: bigint = parseEther(amount.toString());
+
+      const quotedOutput: I_QuotedOutput =
+        (await this.quoterContract.quoteExactInputSingle({
+          tokenIn,
+          tokenOut: process.env.USDT_ADDRESS,
+          fee: fee,
+          amountIn: formattedAmountIn,
+          sqrtPriceLimitX96: 0n,
+        })) as I_QuotedOutput;
+
+      const iface: Interface = this.swapRouterContract.interface;
+
+      const data = iface.encodeFunctionData('exactInputSingle', [
+        {
+          tokenIn,
+          tokenOut: process.env.USDT_ADDRESS,
+          fee,
+          recipient: fromAddress,
+          deadline: Math.floor(Date.now() / 1000) + 600,
+          amount,
+          amountOutMinimum: quotedOutput.amountOut,
+          sqrtPriceLimitX96: 0,
+        },
+      ]);
+
+      const unsignedTx: SwapTx = {
+        to: process.env.SWAP_ROUTER_ADDRESS as string,
+        data,
+        value: 0n,
+        gasLimit: 300000n, // estimate better in prod
+      };
+
+      return unsignedTx;
     } catch (error: any) {
       throw new Error(`Failed to get swap quote: ${error.message}`);
     }

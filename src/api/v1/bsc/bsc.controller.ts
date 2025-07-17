@@ -8,7 +8,7 @@ import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto'
 @Controller('/api/v1/bsc')
 export class BscController {
   constructor(private readonly bscService: BscService) {}
-  @Post('getSwapQuote')
+  @Post('swap-quote')
   async getSwapQuote(@Res() res, @Body() swapQuoteDto: SwapQuoteDto) {
     const data = await this.bscService.getSwapQuote(swapQuoteDto);
     res.status(200).json(data);
@@ -25,7 +25,7 @@ export class BscController {
     res.status(200).json(data);
   }
 
-  @Post('swapTransaction/prepare')
+  @Post('swap-transaction/prepare')
   async swapPrepare(
     @Res() res,
     @Body() prepareSwapTransactionDto: PrepareSwapTransactionDto,
@@ -36,7 +36,7 @@ export class BscController {
     res.status(200).json(data);
   }
 
-  @Post('getTokenInfo')
+  @Post('token/info')
   async fetchTokenInfo(@Res() res, @Body() getTokenInfoDto: GetTokenInfoDto) {
     const data = await this.bscService.getTokenInfo(getTokenInfoDto);
     res.status(200).json(data);
