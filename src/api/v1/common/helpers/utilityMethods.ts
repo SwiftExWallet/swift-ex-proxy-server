@@ -1,4 +1,12 @@
-import { FeeData, JsonRpcProvider, Network, TransactionResponse } from 'ethers';
+import {
+  Contract,
+  ethers,
+  FeeData,
+  JsonRpcProvider,
+  Network,
+  TransactionResponse,
+} from 'ethers';
+import { ETH_ERC20_ABI } from '../abi/eth';
 
 export const broadcastTransactionToNetwork = (
   provider: JsonRpcProvider,
@@ -20,4 +28,24 @@ export const getFeeData = (provider: JsonRpcProvider): Promise<FeeData> => {
 
 export const getNetwork = (provider: JsonRpcProvider): Promise<Network> => {
   return provider.getNetwork();
+};
+
+export const getErc20ContractTokenBalance = (
+  tokenContractAddress: string,
+  walletAddress: string,
+  provider: JsonRpcProvider,
+): Promise<bigint> => {
+  const tokenContract: Contract = new ethers.Contract(
+    tokenContractAddress,
+    ETH_ERC20_ABI,
+    provider,
+  );
+  return tokenContract.balanceOf(walletAddress);
+};
+
+export const getNativeCurrencyBalance = (
+  walletAddress: string,
+  provider: JsonRpcProvider,
+): Promise<bigint> => {
+  return provider.getBalance(walletAddress);
 };

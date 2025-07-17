@@ -9,14 +9,14 @@ import {
 } from 'ethers';
 import { JsonRpcProvider, Contract } from 'ethers';
 import {
-  ETH_ERC20,
-  ETH_FACTORY,
-  ETH_POOL,
-  ETH_QUOTER,
+  ETH_ERC20_ABI,
+  ETH_FACTORY_ABI,
+  ETH_POOL_ABI,
+  ETH_QUOTER_ABI,
 } from '../common/abi/eth';
-import { SwapQuoteDto } from './dto/swapQuote.dto';
+import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
 import { WalletAddressInfoDto } from './dto/walletAddressInfo.dto';
-import { BroadcastTransactionDto } from './dto/broadcastTransaction.dto';
+import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import {
   broadcastTransactionToNetwork,
   getFeeData,
@@ -30,7 +30,7 @@ import {
   I_SwapQuote,
   I_SwapTransaction,
 } from '../common/interface/swap.interface';
-import { GetTokenInfoDto } from './dto/fetchTokenInfo.dto';
+import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
 import { I_TokenInfo } from '../common/interface/tokenInfo.interface';
 
 @Injectable()
@@ -54,13 +54,13 @@ export class EthService {
 
     this.factoryContract = new ethers.Contract(
       factoryAddress,
-      ETH_FACTORY,
+      ETH_FACTORY_ABI,
       this.provider,
     );
 
     this.quoterContract = new ethers.Contract(
       quoterAddress,
-      ETH_QUOTER,
+      ETH_QUOTER_ABI,
       this.provider,
     );
   }
@@ -80,7 +80,7 @@ export class EthService {
 
       const poolContract: Contract = new ethers.Contract(
         poolAddress,
-        ETH_POOL,
+        ETH_POOL_ABI,
         this.provider,
       );
       const fee: number = (await poolContract.fee()) as number;
@@ -156,7 +156,7 @@ export class EthService {
     };
   }
 
-  async prepareSwap(
+  async prepareSwapTransaction(
     swapPrepareDto: SwapPrepareDto,
   ): Promise<I_SwapTransaction[]> {
     const { address, swapType, value, depositData, approveData, swapData } =
@@ -271,7 +271,7 @@ export class EthService {
       validAddresses.map(async (address) => {
         const tokenContract: Contract = new ethers.Contract(
           address,
-          ETH_ERC20,
+          ETH_ERC20_ABI,
           this.provider,
         );
         const [name, symbol, decimals, balance] = (await Promise.all([

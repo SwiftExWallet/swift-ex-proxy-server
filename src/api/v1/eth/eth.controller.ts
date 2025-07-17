@@ -1,10 +1,10 @@
 import { Body, Controller, Post, Res } from '@nestjs/common';
-import { SwapQuoteDto } from './dto/swapQuote.dto';
+import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
 import { EthService } from './eth.service';
 import { WalletAddressInfoDto } from './dto/walletAddressInfo.dto';
-import { BroadcastTransactionDto } from './dto/broadcastTransaction.dto';
+import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import { SwapPrepareDto } from './dto/swapPrepare.dto';
-import { GetTokenInfoDto } from './dto/fetchTokenInfo.dto';
+import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
 
 @Controller('/api/v1/eth')
 export class EthController {
@@ -25,7 +25,7 @@ export class EthController {
     res.status(200).json(data);
   }
 
-  @Post('broadcast')
+  @Post('transaction/broadcast')
   async broadcastTransaction(
     @Res() res,
     @Body() broadcastTransactionDto: BroadcastTransactionDto,
@@ -36,13 +36,13 @@ export class EthController {
     res.status(200).json(data);
   }
 
-  @Post('swapPrepare')
+  @Post('swapTransaction/prepare')
   async swapPrepare(@Res() res, @Body() swapPrepareDto: SwapPrepareDto) {
-    const data = await this.ethService.prepareSwap(swapPrepareDto);
+    const data = await this.ethService.prepareSwapTransaction(swapPrepareDto);
     res.status(200).json(data);
   }
 
-  @Post('swapExecute')
+  @Post('swapTransaction/execute')
   async swapExecute(@Res() res, @Body('txs') txs: string[]) {
     const data = await this.ethService.executeSwapTransactions(txs);
     res.status(200).json(data);

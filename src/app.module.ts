@@ -7,6 +7,7 @@ import { UsersModule } from './api/v1/users/users.module';
 import { AuthTokenMiddleware } from './api/v1/common/middleware/auth-token.middleware';
 import { MongooseModule } from '@nestjs/mongoose';
 import { JwtModule } from '@nestjs/jwt';
+import { BscModule } from './api/v1/bsc/bsc.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { JwtModule } from '@nestjs/jwt';
     }),
     EthModule,
     UsersModule,
+    BscModule,
   ],
   controllers: [AppController],
   providers: [AppService],
