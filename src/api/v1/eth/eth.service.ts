@@ -21,62 +21,59 @@ import { WalletAddressInfoDto } from './dto/walletAddressInfo.dto';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import {
   broadcastTransactionToNetwork,
+  getEstimateGas,
   getFeeData,
+  getNativeCurrencyBalance,
   getNetwork,
   getTransactionCount,
-} from '../common/helpers/utilityMethods';
+} from '../common/helpers/blockchainUtilityMethods';
 import { SwapPrepareDto } from './dto/swapPrepare.dto';
 import { EthSwapEnum } from '../common/enums/ethSwap.enum';
-import {
-  I_QuotedOutput,
-  I_SwapQuote,
-  I_SwapTransaction,
-} from '../common/interface/swap.interface';
-import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
-import { I_TokenInfo } from '../common/interface/tokenInfo.interface';
-import { UsdtSwapQuoteDto } from './dto/usdtSwapQuote.dto';
 
-type SwapTx = {
-  to: string;
-  data: string;
-  value: bigint;
-  gasLimit: bigint;
-};
+import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
+import { TokenInfo } from '../common/interface/tokenInfo.interface';
+import { UsdtSwapQuoteDto } from './dto/usdtSwapQuote.dto';
+import { ProviderService } from '../provider/provider.service';
+import { ChainEnum } from '../common/enums/chain.enum';
+import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
+import {
+  QuotedOutput,
+  SwapQuote,
+  SwapTransaction,
+  SwapTx,
+} from '../common/interface/swap.interface';
+import { FullTransaction } from '../common/interface/transaction.interface';
 @Injectable()
 export class EthService {
   provider: JsonRpcProvider;
   factoryContract: Contract;
   quoterContract: Contract;
   swapRouterContract: Contract;
-  constructor() {
-    const rpcUrl = process.env.PROVIDER_RPC_ETH;
+  constructor(private readonly providerService: ProviderService) {
     const factoryAddress = process.env.POOL_FACTORY_CONTRACT_ADDRESS;
     const quoterAddress = process.env.QUOTER_CONTRACT_ADDRESS;
     const swapRouterAddress = process.env.SWAP_ROUTER_ADDRESS;
-    if (!rpcUrl) {
-      throw new Error('Missing rpc provider');
-    }
 
     if (!factoryAddress || !quoterAddress || !swapRouterAddress) {
       throw new Error('Missing contract address in environment variables');
     }
 
-    this.provider = new JsonRpcProvider(rpcUrl);
+    this.provider = this.providerService.getProvider(ChainEnum.ETH);
 
-    this.factoryContract = new ethers.Contract(
+    this.factoryContract = this.providerService.getContract(
       factoryAddress,
       ETH_FACTORY_ABI,
-      this.provider,
+      ChainEnum.ETH,
     );
 
-    this.quoterContract = new ethers.Contract(
+    this.quoterContract = this.providerService.getContract(
       quoterAddress,
       ETH_QUOTER_ABI,
-      this.provider,
+      ChainEnum.ETH,
     );
   }
 
-  async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<I_SwapQuote> {
+  async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
     try {
       const { tokenIn, tokenOut, amount } = swapQuoteDto;
       const poolAddress: string = (await this.factoryContract.getPool(
@@ -101,14 +98,14 @@ export class EthService {
         tokenIn.decimals,
       );
 
-      const quotedOutput: I_QuotedOutput =
+      const quotedOutput: QuotedOutput =
         (await this.quoterContract.quoteExactInputSingle({
           tokenIn: tokenIn.address,
           tokenOut: tokenOut.address,
           fee: fee,
           amountIn: formattedAmountIn,
           sqrtPriceLimitX96: 0n,
-        })) as I_QuotedOutput;
+        })) as QuotedOutput;
 
       const formattedAmountOut: string = formatUnits(
         quotedOutput[0],
@@ -163,14 +160,14 @@ export class EthService {
 
       const formattedAmountIn: bigint = parseEther(amount.toString());
 
-      const quotedOutput: I_QuotedOutput =
+      const quotedOutput: QuotedOutput =
         (await this.quoterContract.quoteExactInputSingle({
           tokenIn,
           tokenOut: process.env.USDT_ADDRESS,
           fee: fee,
           amountIn: formattedAmountIn,
           sqrtPriceLimitX96: 0n,
-        })) as I_QuotedOutput;
+        })) as QuotedOutput;
 
       const iface: Interface = this.swapRouterContract.interface;
 
@@ -236,13 +233,13 @@ export class EthService {
 
   async prepareSwapTransaction(
     swapPrepareDto: SwapPrepareDto,
-  ): Promise<I_SwapTransaction[]> {
+  ): Promise<SwapTransaction[]> {
     const { address, swapType, value, depositData, approveData, swapData } =
       swapPrepareDto;
     const nonce: number = await getTransactionCount(this.provider, address);
     const { chainId } = await getNetwork(this.provider);
 
-    const txs: I_SwapTransaction[] = [];
+    const txs: SwapTransaction[] = [];
     const { maxFeePerGas, maxPriorityFeePerGas } = await getFeeData(
       this.provider,
     );
@@ -329,7 +326,7 @@ export class EthService {
     return receipts;
   }
 
-  async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<I_TokenInfo[]> {
+  async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
     const { addresses, walletAddress } = getTokenInfoDto;
     let validAddresses: string[] = [];
     if (Array.isArray(addresses)) {
@@ -372,5 +369,30 @@ export class EthService {
     );
 
     return tokenInfos;
+  }
+
+  async prepareTransaction(
+    prepareTransactionDto: PrepareTransactionDto,
+  ): Promise<FullTransaction> {
+    const { unsignedTx, walletAddress } = prepareTransactionDto;
+    const [nonce, gasLimit, feeData, network] = await Promise.all([
+      getTransactionCount(this.provider, walletAddress),
+      getEstimateGas(this.provider, walletAddress, unsignedTx),
+      getFeeData(this.provider),
+      getNetwork(this.provider),
+    ]);
+
+    const transaction: FullTransaction = {
+      unsignedTx,
+      nonce,
+      gasLimit,
+      gasPrice: feeData?.maxFeePerGas,
+      chainId: network.chainId,
+    };
+    return transaction;
+  }
+
+  getBalance(walletAddress: string): Promise<bigint> {
+    return getNativeCurrencyBalance(walletAddress, this.provider);
   }
 }

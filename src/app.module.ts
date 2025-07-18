@@ -9,6 +9,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { JwtModule } from '@nestjs/jwt';
 import { BscModule } from './api/v1/bsc/bsc.module';
 import { AlchemyModule } from './api/v1/alchemy/alchemy.module';
+import { ProviderModule } from './api/v1/provider/provider.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { AlchemyModule } from './api/v1/alchemy/alchemy.module';
     UsersModule,
     BscModule,
     AlchemyModule,
+    ProviderModule,
   ],
   controllers: [AppController],
   providers: [AppService],

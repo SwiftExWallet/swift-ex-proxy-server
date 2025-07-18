@@ -4,6 +4,7 @@ import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
 import { BscService } from './bsc.service';
 import { PrepareSwapTransactionDto } from './dto/prepareSwapTransaction.dto';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
+import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 
 @Controller('/api/v1/bsc')
 export class BscController {
@@ -49,8 +50,26 @@ export class BscController {
   }
 
   @Get('/:address/token/:tokenAddress/balance')
-  async getUsdtBalance(@Res() res, @Param('address') address: string, @Param('tokenAddress') tokenAddress: string) {
-    const data = await this.bscService.getUsdtTokenBalance(address,tokenAddress);
+  async getUsdtBalance(
+    @Res() res,
+    @Param('address') address: string,
+    @Param('tokenAddress') tokenAddress: string,
+  ) {
+    const data = await this.bscService.getUsdtTokenBalance(
+      address,
+      tokenAddress,
+    );
+    res.status(200).json(data);
+  }
+
+  @Post('transaction/prepare')
+  async prepareTransaction(
+    @Res() res,
+    @Body() prepareTransactionDto: PrepareTransactionDto,
+  ) {
+    const data = await this.bscService.prepareTransaction(
+      prepareTransactionDto,
+    );
     res.status(200).json(data);
   }
 }

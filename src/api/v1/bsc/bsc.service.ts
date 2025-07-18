@@ -15,38 +15,39 @@ import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
 import {
   broadcastTransactionToNetwork,
   getErc20ContractTokenBalance,
+  getEstimateGas,
   getFeeData,
   getNativeCurrencyBalance,
   getNetwork,
   getTransactionCount,
-} from '../common/helpers/utilityMethods';
+} from '../common/helpers/blockchainUtilityMethods';
 import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
-import { I_TokenInfo } from '../common/interface/tokenInfo.interface';
+import { TokenInfo } from '../common/interface/tokenInfo.interface';
 import { BSC_IMPORT_TOKEN_ABI, BSC_ROUTER_ABI } from '../common/abi/bsc';
 import { PrepareSwapTransactionDto } from './dto/prepareSwapTransaction.dto';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
+import { ProviderService } from '../provider/provider.service';
+import { ChainEnum } from '../common/enums/chain.enum';
+import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
+import { FullTransaction } from '../common/interface/transaction.interface';
 
 @Injectable()
 export class BscService {
   provider: JsonRpcProvider;
   routerContract: Contract;
-  constructor() {
-    const rpcUrl = process.env.PROVIDER_RPC_BSC;
+  constructor(private readonly providerService: ProviderService) {
     const routerAddress = process.env.BSC_ROUTER_ADDRESS;
-    if (!rpcUrl) {
-      throw new Error('Missing rpc provider');
-    }
 
     if (!routerAddress) {
       throw new Error('Missing contract address in environment variables');
     }
 
-    this.provider = new JsonRpcProvider(rpcUrl);
+    this.provider = this.providerService.getProvider(ChainEnum.BSC);
 
-    this.routerContract = new ethers.Contract(
+    this.routerContract = this.providerService.getContract(
       routerAddress,
       BSC_ROUTER_ABI,
-      this.provider,
+      ChainEnum.BSC,
     );
   }
 
@@ -136,21 +137,23 @@ export class BscService {
     };
   }
 
-  async getUsdtTokenBalance(walletAddress: string,tokenAddress: string): Promise<{ walletBalance: bigint; tokenBalance: bigint }> {
+  async getUsdtTokenBalance(
+    walletAddress: string,
+    tokenAddress: string,
+  ): Promise<{ walletBalance: bigint; tokenBalance: bigint }> {
     const [walletBalance, tokenBalance] = await Promise.all([
       this.getBalance(walletAddress),
       getErc20ContractTokenBalance(tokenAddress, walletAddress, this.provider),
     ]);
-  
+
     return { walletBalance, tokenBalance };
   }
-  
 
   async getBalance(walletAddress: string): Promise<bigint> {
     return getNativeCurrencyBalance(walletAddress, this.provider);
   }
 
-  async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<I_TokenInfo[]> {
+  async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
     const { addresses, walletAddress } = getTokenInfoDto;
     let validAddresses: string[] = [];
     if (Array.isArray(addresses)) {
@@ -193,5 +196,26 @@ export class BscService {
     );
 
     return tokenInfos;
+  }
+
+  async prepareTransaction(
+    prepareTransactionDto: PrepareTransactionDto,
+  ): Promise<FullTransaction> {
+    const { unsignedTx, walletAddress } = prepareTransactionDto;
+    const [nonce, gasLimit, feeData, network] = await Promise.all([
+      getTransactionCount(this.provider, walletAddress),
+      getEstimateGas(this.provider, walletAddress, unsignedTx),
+      getFeeData(this.provider),
+      getNetwork(this.provider),
+    ]);
+
+    const transaction: FullTransaction = {
+      unsignedTx,
+      nonce,
+      gasLimit,
+      gasPrice: feeData?.gasPrice,
+      chainId: network.chainId,
+    };
+    return transaction;
   }
 }
