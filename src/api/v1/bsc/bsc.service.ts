@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import {
-  ethers,
   formatUnits,
   getAddress,
   Interface,
@@ -30,6 +29,8 @@ import { ProviderService } from '../provider/provider.service';
 import { ChainEnum } from '../common/enums/chain.enum';
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 import { FullTransaction } from '../common/interface/transaction.interface';
+import { ValidateAddress } from '../common/helpers/utilityMethods';
+import { getErc20ContractInfo } from '../common/helpers/contractUtilityMethod';
 
 @Injectable()
 export class BscService {
@@ -155,15 +156,7 @@ export class BscService {
 
   async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
     const { addresses, walletAddress } = getTokenInfoDto;
-    let validAddresses: string[] = [];
-    if (Array.isArray(addresses)) {
-      validAddresses = addresses;
-    } else if (typeof addresses === 'string') {
-      validAddresses = addresses
-        .split(/[, ]+/)
-        .map((addr) => addr.trim())
-        .filter((addr) => addr);
-    }
+    const validAddresses: string[] = ValidateAddress(addresses);
 
     if (validAddresses.length === 0) {
       throw new Error('No valid token addresses provided');
@@ -171,17 +164,15 @@ export class BscService {
 
     const tokenInfos = await Promise.all(
       validAddresses.map(async (address) => {
-        const tokenContract: Contract = new ethers.Contract(
+        const tokenContract: Contract = this.providerService.getContract(
           address,
           BSC_IMPORT_TOKEN_ABI,
-          this.provider,
+          ChainEnum.BSC,
         );
-        const [name, symbol, decimals, balance] = (await Promise.all([
-          tokenContract.name(),
-          tokenContract.symbol(),
-          tokenContract.decimals(),
-          tokenContract.balanceOf(walletAddress),
-        ])) as [string, string, number, bigint];
+        const { name, symbol, decimals, balance } = await getErc20ContractInfo(
+          tokenContract,
+          walletAddress,
+        );
 
         const formattedBalance: string = formatUnits(balance, decimals);
         return {

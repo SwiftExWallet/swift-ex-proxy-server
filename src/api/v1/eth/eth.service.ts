@@ -43,6 +43,13 @@ import {
   SwapTx,
 } from '../common/interface/swap.interface';
 import { FullTransaction } from '../common/interface/transaction.interface';
+import { ValidateAddress } from '../common/helpers/utilityMethods';
+import {
+  getPool,
+  getPoolContractFee,
+  quoteExactInputSingle,
+  getErc20ContractInfo,
+} from '../common/helpers/contractUtilityMethod';
 @Injectable()
 export class EthService {
   provider: JsonRpcProvider;
@@ -76,36 +83,35 @@ export class EthService {
   async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
     try {
       const { tokenIn, tokenOut, amount } = swapQuoteDto;
-      const poolAddress: string = (await this.factoryContract.getPool(
+      const poolAddress: string = await getPool(
+        this.factoryContract,
         tokenIn.address,
         tokenOut.address,
-        process.env.FEE_TIER,
-      )) as string;
+      );
 
-      if (!poolAddress) {
+      if (!poolAddress || poolAddress === ethers.ZeroAddress) {
         throw new Error('Pool not found for token pair');
       }
 
-      const poolContract: Contract = new ethers.Contract(
+      const poolContract: Contract = this.providerService.getContract(
         poolAddress,
         ETH_POOL_ABI,
-        this.provider,
+        ChainEnum.ETH,
       );
-      const fee: number = (await poolContract.fee()) as number;
+      const fee: bigint = await getPoolContractFee(poolContract);
 
       const formattedAmountIn: bigint = parseUnits(
         amount.toString(),
         tokenIn.decimals,
       );
 
-      const quotedOutput: QuotedOutput =
-        (await this.quoterContract.quoteExactInputSingle({
-          tokenIn: tokenIn.address,
-          tokenOut: tokenOut.address,
-          fee: fee,
-          amountIn: formattedAmountIn,
-          sqrtPriceLimitX96: 0n,
-        })) as QuotedOutput;
+      const quotedOutput: QuotedOutput = await quoteExactInputSingle(
+        this.quoterContract,
+        tokenIn.address,
+        tokenOut.address,
+        fee,
+        formattedAmountIn,
+      );
 
       const formattedAmountOut: string = formatUnits(
         quotedOutput[0],
@@ -141,33 +147,32 @@ export class EthService {
       if (!tokenIn || !tokenOut) {
         throw new Error('Missing token address in env vars');
       }
-      const poolAddress: string = (await this.factoryContract.getPool(
+      const poolAddress: string = await getPool(
+        this.factoryContract,
         tokenIn,
         tokenOut,
-        process.env.FEE_TIER,
-      )) as string;
+      );
 
       if (!poolAddress || poolAddress === ethers.ZeroAddress) {
         throw new Error('Pool not found for token pair');
       }
 
-      const poolContract: Contract = new ethers.Contract(
+      const poolContract: Contract = this.providerService.getContract(
         poolAddress,
         ETH_POOL_ABI,
-        this.provider,
+        ChainEnum.ETH,
       );
-      const fee: bigint = (await poolContract.fee()) as bigint;
+      const fee: bigint = await getPoolContractFee(poolContract);
 
       const formattedAmountIn: bigint = parseEther(amount.toString());
 
-      const quotedOutput: QuotedOutput =
-        (await this.quoterContract.quoteExactInputSingle({
-          tokenIn,
-          tokenOut: process.env.USDT_ADDRESS,
-          fee: fee,
-          amountIn: formattedAmountIn,
-          sqrtPriceLimitX96: 0n,
-        })) as QuotedOutput;
+      const quotedOutput: QuotedOutput = await quoteExactInputSingle(
+        this.quoterContract,
+        tokenIn,
+        process.env.USDT_ADDRESS as string,
+        fee,
+        formattedAmountIn,
+      );
 
       const iface: Interface = this.swapRouterContract.interface;
 
@@ -328,15 +333,7 @@ export class EthService {
 
   async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
     const { addresses, walletAddress } = getTokenInfoDto;
-    let validAddresses: string[] = [];
-    if (Array.isArray(addresses)) {
-      validAddresses = addresses;
-    } else if (typeof addresses === 'string') {
-      validAddresses = addresses
-        .split(/[, ]+/)
-        .map((addr) => addr.trim())
-        .filter((addr) => addr);
-    }
+    const validAddresses: string[] = ValidateAddress(addresses);
 
     if (validAddresses.length === 0) {
       throw new Error('No valid token addresses provided');
@@ -344,17 +341,15 @@ export class EthService {
 
     const tokenInfos = await Promise.all(
       validAddresses.map(async (address) => {
-        const tokenContract: Contract = new ethers.Contract(
+        const tokenContract: Contract = this.providerService.getContract(
           address,
           ETH_ERC20_ABI,
-          this.provider,
+          ChainEnum.ETH,
         );
-        const [name, symbol, decimals, balance] = (await Promise.all([
-          tokenContract.name(),
-          tokenContract.symbol(),
-          tokenContract.decimals(),
-          tokenContract.balanceOf(walletAddress),
-        ])) as [string, string, number, bigint];
+        const { name, symbol, decimals, balance } = await getErc20ContractInfo(
+          tokenContract,
+          walletAddress,
+        );
 
         const formattedBalance: string = formatUnits(balance, decimals);
         return {
