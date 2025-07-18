@@ -136,13 +136,15 @@ export class BscService {
     };
   }
 
-  async getUsdtTokenBalance(walletAddress: string): Promise<bigint> {
-    return getErc20ContractTokenBalance(
-      process.env.USDT_TOKEN_CONTRACT_ADDRESS as string,
-      walletAddress,
-      this.provider,
-    );
+  async getUsdtTokenBalance(walletAddress: string,tokenAddress: string): Promise<{ walletBalance: bigint; tokenBalance: bigint }> {
+    const [walletBalance, tokenBalance] = await Promise.all([
+      this.getBalance(walletAddress),
+      getErc20ContractTokenBalance(tokenAddress, walletAddress, this.provider),
+    ]);
+  
+    return { walletBalance, tokenBalance };
   }
+  
 
   async getBalance(walletAddress: string): Promise<bigint> {
     return getNativeCurrencyBalance(walletAddress, this.provider);

@@ -48,9 +48,9 @@ export class BscController {
     res.status(200).json(data);
   }
 
-  @Get('/:address/usdt/balance')
-  async getUsdtBalance(@Res() res, @Param('address') address: string) {
-    const data = await this.bscService.getUsdtTokenBalance(address);
+  @Get('/:address/token/:tokenAddress/balance')
+  async getUsdtBalance(@Res() res, @Param('address') address: string, @Param('tokenAddress') tokenAddress: string) {
+    const data = await this.bscService.getUsdtTokenBalance(address,tokenAddress);
     res.status(200).json(data);
   }
 }
