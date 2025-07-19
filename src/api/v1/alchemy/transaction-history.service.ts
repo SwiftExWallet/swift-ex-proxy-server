@@ -5,32 +5,63 @@ import {
   Network,
   SortingOrder,
 } from 'alchemy-sdk';
+import { ChainEnum } from '../common/enums/chain.enum';
 
 @Injectable()
 export class TransactionHistoryService {
-  alchemy: Alchemy;
+  ethAlchemy: Alchemy;
+  bscAlchemy: Alchemy;
   constructor() {
-    this.alchemy = new Alchemy({
+    const ethNetworkKey = process.env
+      .ALCHEMY_ETH_NETWORK as keyof typeof Network;
+
+    const bscNetworkKey = process.env
+      .ALCHEMY_BSC_NETWORK as keyof typeof Network;
+
+    if (
+      !ethNetworkKey ||
+      !(ethNetworkKey in Network) ||
+      !bscNetworkKey ||
+      !(bscNetworkKey in Network)
+    ) {
+      throw new Error(
+        `Invalid ALCHEMY_ETH_NETWORK value: ${process.env.ALCHEMY_ETH_NETWORK}`,
+      );
+    }
+    this.ethAlchemy = new Alchemy({
       apiKey: process.env.ALCHEMY_API_KEY,
-      network: Network.ETH_SEPOLIA,
+      network: Network[ethNetworkKey],
+    });
+
+    this.ethAlchemy = new Alchemy({
+      apiKey: process.env.ALCHEMY_API_KEY,
+      network: Network[bscNetworkKey],
     });
   }
-  async getWalletTransactionHistory(walletAddress: string) {
-    const category: AssetTransfersCategory[] = [
-      AssetTransfersCategory.EXTERNAL,
-      AssetTransfersCategory.ERC20,
-      AssetTransfersCategory.ERC1155,
-      AssetTransfersCategory.ERC721,
-    ];
+  getCategories(): AssetTransfersCategory[] {
+    const raw = process.env.ALCHEMY_ASSET_TRANSFER_CATEGORIES ?? '';
+    const validCategories = Object.values(AssetTransfersCategory);
+
+    return raw
+      .split(',')
+      .map((c) => c.trim())
+      .filter((c): c is AssetTransfersCategory =>
+        validCategories.includes(c as AssetTransfersCategory),
+      );
+  }
+  async getWalletTransactionHistory(walletAddress: string, chain: ChainEnum) {
+    const alchemy: Alchemy =
+      chain == ChainEnum.ETH ? this.ethAlchemy : this.bscAlchemy;
+    const category: AssetTransfersCategory[] = this.getCategories();
 
     const [sentTx, receivedTx] = await Promise.all([
-      this.alchemy.core.getAssetTransfers({
+      alchemy.core.getAssetTransfers({
         fromAddress: walletAddress,
         category,
         order: SortingOrder.DESCENDING,
         maxCount: Number(process.env.ALCHEMY_HISTORY_RECORD_COUNT) || 300,
       }),
-      this.alchemy.core.getAssetTransfers({
+      alchemy.core.getAssetTransfers({
         toAddress: walletAddress,
         category,
         order: SortingOrder.DESCENDING,
