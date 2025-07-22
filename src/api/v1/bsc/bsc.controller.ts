@@ -49,6 +49,12 @@ export class BscController {
     res.status(200).json(data);
   }
 
+  @Get('wallet-address/:address/info')
+  async getAddressInfo(@Res() res, @Param('address') address: string) {
+    const data = await this.bscService.getWalletAddressInfo(address);
+    res.status(200).json(data);
+  }
+
   @Get('/:address/token/:tokenAddress/balance')
   async getUsdtBalance(
     @Res() res,

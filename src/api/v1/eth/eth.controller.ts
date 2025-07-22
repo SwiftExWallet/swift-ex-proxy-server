@@ -1,7 +1,6 @@
 import { Body, Controller, Get, Param, Post, Res } from '@nestjs/common';
 import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
 import { EthService } from './eth.service';
-import { WalletAddressInfoDto } from './dto/walletAddressInfo.dto';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import { SwapPrepareDto } from './dto/swapPrepare.dto';
 import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
@@ -13,16 +12,6 @@ export class EthController {
   @Post('swap-quote')
   async getSwapQuote(@Res() res, @Body() swapQuoteDto: SwapQuoteDto) {
     const data = await this.ethService.getSwapQuote(swapQuoteDto);
-    res.status(200).json(data);
-  }
-
-  @Post('wallet-address/info')
-  async getAddressInfo(
-    @Res() res,
-    @Body() walletAddressInfoDto: WalletAddressInfoDto,
-  ) {
-    const data =
-      await this.ethService.getWalletAddressInfo(walletAddressInfoDto);
     res.status(200).json(data);
   }
 
@@ -69,6 +58,12 @@ export class EthController {
   @Get('/:address/balance')
   async getBalance(@Res() res, @Param('address') address: string) {
     const data = await this.ethService.getBalance(address);
+    res.status(200).json(data);
+  }
+
+  @Get('wallet-address/:address/info')
+  async getAddressInfo(@Res() res, @Param('address') address: string) {
+    const data = await this.ethService.getWalletAddressInfo(address);
     res.status(200).json(data);
   }
 }

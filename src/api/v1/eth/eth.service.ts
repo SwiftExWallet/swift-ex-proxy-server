@@ -17,7 +17,6 @@ import {
   ETH_QUOTER_ABI,
 } from '../common/abi/eth';
 import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
-import { WalletAddressInfoDto } from './dto/walletAddressInfo.dto';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import {
   broadcastTransactionToNetwork,
@@ -203,15 +202,13 @@ export class EthService {
   }
 
   async getWalletAddressInfo(
-    walletAddressInfoDto: WalletAddressInfoDto,
+    walletAddress: string,
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
-    const { walletAddress } = walletAddressInfoDto;
-    const transactionCount: number = await getTransactionCount(
-      this.provider,
-      walletAddress,
-    );
+    const [transactionCount, gasFeeData] = await Promise.all([
+      getTransactionCount(this.provider, walletAddress),
+      getFeeData(this.provider),
+    ]);
 
-    const gasFeeData: FeeData = await getFeeData(this.provider);
     return {
       transactionCount,
       gasFeeData,

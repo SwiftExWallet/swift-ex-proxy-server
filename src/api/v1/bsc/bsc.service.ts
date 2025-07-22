@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  FeeData,
   formatUnits,
   getAddress,
   Interface,
@@ -152,6 +153,20 @@ export class BscService {
 
   async getBalance(walletAddress: string): Promise<bigint> {
     return getNativeCurrencyBalance(walletAddress, this.provider);
+  }
+
+  async getWalletAddressInfo(
+    walletAddress: string,
+  ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
+    const [transactionCount, gasFeeData] = await Promise.all([
+      getTransactionCount(this.provider, walletAddress),
+      getFeeData(this.provider),
+    ]);
+
+    return {
+      transactionCount,
+      gasFeeData,
+    };
   }
 
   async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {

@@ -33,7 +33,7 @@ export class TransactionHistoryService {
       network: Network[ethNetworkKey],
     });
 
-    this.ethAlchemy = new Alchemy({
+    this.bscAlchemy = new Alchemy({
       apiKey: process.env.ALCHEMY_API_KEY,
       network: Network[bscNetworkKey],
     });
