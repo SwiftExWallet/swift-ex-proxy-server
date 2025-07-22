@@ -10,6 +10,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { BscModule } from './api/v1/bsc/bsc.module';
 import { AlchemyModule } from './api/v1/alchemy/alchemy.module';
 import { ProviderModule } from './api/v1/provider/provider.module';
+import { NotificationModule } from './api/v1/notification/notification.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { ProviderModule } from './api/v1/provider/provider.module';
     BscModule,
     AlchemyModule,
     ProviderModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
