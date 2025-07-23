@@ -3,101 +3,114 @@ import {
   ethers,
   FeeData,
   formatUnits,
+  Interface,
+  parseEther,
   parseUnits,
   TransactionReceipt,
   TransactionResponse,
 } from 'ethers';
 import { JsonRpcProvider, Contract } from 'ethers';
 import {
-  ETH_ERC20,
-  ETH_FACTORY,
-  ETH_POOL,
-  ETH_QUOTER,
+  ETH_ERC20_ABI,
+  ETH_FACTORY_ABI,
+  ETH_POOL_ABI,
+  ETH_QUOTER_ABI,
 } from '../common/abi/eth';
-import { SwapQuoteDto } from './dto/swapQuote.dto';
-import { WalletAddressInfoDto } from './dto/walletAddressInfo.dto';
-import { BroadcastTransactionDto } from './dto/broadcastTransaction.dto';
+import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
+import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import {
   broadcastTransactionToNetwork,
+  getEstimateGas,
   getFeeData,
+  getNativeCurrencyBalance,
   getNetwork,
   getTransactionCount,
-} from '../common/helpers/utilityMethods';
+} from '../common/helpers/blockchainUtilityMethods';
 import { SwapPrepareDto } from './dto/swapPrepare.dto';
 import { EthSwapEnum } from '../common/enums/ethSwap.enum';
-import {
-  I_QuotedOutput,
-  I_SwapQuote,
-  I_SwapTransaction,
-} from '../common/interface/swap.interface';
-import { GetTokenInfoDto } from './dto/fetchTokenInfo.dto';
-import { I_TokenInfo } from '../common/interface/tokenInfo.interface';
 
+import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
+import { TokenInfo } from '../common/interface/tokenInfo.interface';
+import { UsdtSwapQuoteDto } from './dto/usdtSwapQuote.dto';
+import { ProviderService } from '../provider/provider.service';
+import { ChainEnum } from '../common/enums/chain.enum';
+import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
+import {
+  QuotedOutput,
+  SwapQuote,
+  SwapTransaction,
+  SwapTx,
+} from '../common/interface/swap.interface';
+import { FullTransaction } from '../common/interface/transaction.interface';
+import { ValidateAddress } from '../common/helpers/utilityMethods';
+import {
+  getPool,
+  getPoolContractFee,
+  quoteExactInputSingle,
+  getErc20ContractInfo,
+} from '../common/helpers/contractUtilityMethod';
 @Injectable()
 export class EthService {
   provider: JsonRpcProvider;
   factoryContract: Contract;
   quoterContract: Contract;
-  constructor() {
-    const rpcUrl = process.env.PROVIDER_RPC_ETH;
+  swapRouterContract: Contract;
+  constructor(private readonly providerService: ProviderService) {
     const factoryAddress = process.env.POOL_FACTORY_CONTRACT_ADDRESS;
     const quoterAddress = process.env.QUOTER_CONTRACT_ADDRESS;
-    if (!rpcUrl) {
-      throw new Error('Missing rpc provider');
-    }
+    const swapRouterAddress = process.env.SWAP_ROUTER_ADDRESS;
 
-    if (!factoryAddress || !quoterAddress) {
+    if (!factoryAddress || !quoterAddress || !swapRouterAddress) {
       throw new Error('Missing contract address in environment variables');
     }
 
-    this.provider = new JsonRpcProvider(rpcUrl);
+    this.provider = this.providerService.getProvider(ChainEnum.ETH);
 
-    this.factoryContract = new ethers.Contract(
+    this.factoryContract = this.providerService.getContract(
       factoryAddress,
-      ETH_FACTORY,
-      this.provider,
+      ETH_FACTORY_ABI,
+      ChainEnum.ETH,
     );
 
-    this.quoterContract = new ethers.Contract(
+    this.quoterContract = this.providerService.getContract(
       quoterAddress,
-      ETH_QUOTER,
-      this.provider,
+      ETH_QUOTER_ABI,
+      ChainEnum.ETH,
     );
   }
 
-  async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<I_SwapQuote> {
+  async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
     try {
       const { tokenIn, tokenOut, amount } = swapQuoteDto;
-      const poolAddress: string = (await this.factoryContract.getPool(
+      const poolAddress: string = await getPool(
+        this.factoryContract,
         tokenIn.address,
         tokenOut.address,
-        process.env.FEE_TIER,
-      )) as string;
+      );
 
-      if (!poolAddress) {
+      if (!poolAddress || poolAddress === ethers.ZeroAddress) {
         throw new Error('Pool not found for token pair');
       }
 
-      const poolContract: Contract = new ethers.Contract(
+      const poolContract: Contract = this.providerService.getContract(
         poolAddress,
-        ETH_POOL,
-        this.provider,
+        ETH_POOL_ABI,
+        ChainEnum.ETH,
       );
-      const fee: number = (await poolContract.fee()) as number;
+      const fee: bigint = await getPoolContractFee(poolContract);
 
       const formattedAmountIn: bigint = parseUnits(
         amount.toString(),
         tokenIn.decimals,
       );
 
-      const quotedOutput: I_QuotedOutput =
-        (await this.quoterContract.quoteExactInputSingle({
-          tokenIn: tokenIn.address,
-          tokenOut: tokenOut.address,
-          fee: fee,
-          amountIn: formattedAmountIn,
-          sqrtPriceLimitX96: 0n,
-        })) as I_QuotedOutput;
+      const quotedOutput: QuotedOutput = await quoteExactInputSingle(
+        this.quoterContract,
+        tokenIn.address,
+        tokenOut.address,
+        fee,
+        formattedAmountIn,
+      );
 
       const formattedAmountOut: string = formatUnits(
         quotedOutput[0],
@@ -122,16 +135,80 @@ export class EthService {
     }
   }
 
-  async getWalletAddressInfo(
-    walletAddressInfoDto: WalletAddressInfoDto,
-  ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
-    const { walletAddress } = walletAddressInfoDto;
-    const transactionCount: number = await getTransactionCount(
-      this.provider,
-      walletAddress,
-    );
+  async prepareUsdtSwapTransaction(
+    usdtSwapQuoteDto: UsdtSwapQuoteDto,
+  ): Promise<SwapTx> {
+    try {
+      const { fromAddress, amount } = usdtSwapQuoteDto;
+      const tokenIn = process.env.WETH_ADDRESS!;
+      const tokenOut = process.env.USDT_ADDRESS!;
 
-    const gasFeeData: FeeData = await getFeeData(this.provider);
+      if (!tokenIn || !tokenOut) {
+        throw new Error('Missing token address in env vars');
+      }
+      const poolAddress: string = await getPool(
+        this.factoryContract,
+        tokenIn,
+        tokenOut,
+      );
+
+      if (!poolAddress || poolAddress === ethers.ZeroAddress) {
+        throw new Error('Pool not found for token pair');
+      }
+
+      const poolContract: Contract = this.providerService.getContract(
+        poolAddress,
+        ETH_POOL_ABI,
+        ChainEnum.ETH,
+      );
+      const fee: bigint = await getPoolContractFee(poolContract);
+
+      const formattedAmountIn: bigint = parseEther(amount.toString());
+
+      const quotedOutput: QuotedOutput = await quoteExactInputSingle(
+        this.quoterContract,
+        tokenIn,
+        process.env.USDT_ADDRESS as string,
+        fee,
+        formattedAmountIn,
+      );
+
+      const iface: Interface = this.swapRouterContract.interface;
+
+      const data = iface.encodeFunctionData('exactInputSingle', [
+        {
+          tokenIn,
+          tokenOut: process.env.USDT_ADDRESS,
+          fee,
+          recipient: fromAddress,
+          deadline: Math.floor(Date.now() / 1000) + 600,
+          amount,
+          amountOutMinimum: quotedOutput.amountOut,
+          sqrtPriceLimitX96: 0,
+        },
+      ]);
+
+      const unsignedTx: SwapTx = {
+        to: process.env.SWAP_ROUTER_ADDRESS as string,
+        data,
+        value: 0n,
+        gasLimit: 300000n, // estimate better in prod
+      };
+
+      return unsignedTx;
+    } catch (error: any) {
+      throw new Error(`Failed to get swap quote: ${error.message}`);
+    }
+  }
+
+  async getWalletAddressInfo(
+    walletAddress: string,
+  ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
+    const [transactionCount, gasFeeData] = await Promise.all([
+      getTransactionCount(this.provider, walletAddress),
+      getFeeData(this.provider),
+    ]);
+
     return {
       transactionCount,
       gasFeeData,
@@ -156,15 +233,15 @@ export class EthService {
     };
   }
 
-  async prepareSwap(
+  async prepareSwapTransaction(
     swapPrepareDto: SwapPrepareDto,
-  ): Promise<I_SwapTransaction[]> {
+  ): Promise<SwapTransaction[]> {
     const { address, swapType, value, depositData, approveData, swapData } =
       swapPrepareDto;
     const nonce: number = await getTransactionCount(this.provider, address);
     const { chainId } = await getNetwork(this.provider);
 
-    const txs: I_SwapTransaction[] = [];
+    const txs: SwapTransaction[] = [];
     const { maxFeePerGas, maxPriorityFeePerGas } = await getFeeData(
       this.provider,
     );
@@ -251,17 +328,9 @@ export class EthService {
     return receipts;
   }
 
-  async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<I_TokenInfo[]> {
+  async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
     const { addresses, walletAddress } = getTokenInfoDto;
-    let validAddresses: string[] = [];
-    if (Array.isArray(addresses)) {
-      validAddresses = addresses;
-    } else if (typeof addresses === 'string') {
-      validAddresses = addresses
-        .split(/[, ]+/)
-        .map((addr) => addr.trim())
-        .filter((addr) => addr);
-    }
+    const validAddresses: string[] = ValidateAddress(addresses);
 
     if (validAddresses.length === 0) {
       throw new Error('No valid token addresses provided');
@@ -269,17 +338,15 @@ export class EthService {
 
     const tokenInfos = await Promise.all(
       validAddresses.map(async (address) => {
-        const tokenContract: Contract = new ethers.Contract(
+        const tokenContract: Contract = this.providerService.getContract(
           address,
-          ETH_ERC20,
-          this.provider,
+          ETH_ERC20_ABI,
+          ChainEnum.ETH,
         );
-        const [name, symbol, decimals, balance] = (await Promise.all([
-          tokenContract.name(),
-          tokenContract.symbol(),
-          tokenContract.decimals(),
-          tokenContract.balanceOf(walletAddress),
-        ])) as [string, string, number, bigint];
+        const { name, symbol, decimals, balance } = await getErc20ContractInfo(
+          tokenContract,
+          walletAddress,
+        );
 
         const formattedBalance: string = formatUnits(balance, decimals);
         return {
@@ -294,5 +361,30 @@ export class EthService {
     );
 
     return tokenInfos;
+  }
+
+  async prepareTransaction(
+    prepareTransactionDto: PrepareTransactionDto,
+  ): Promise<FullTransaction> {
+    const { unsignedTx, walletAddress } = prepareTransactionDto;
+    const [nonce, gasLimit, feeData, network] = await Promise.all([
+      getTransactionCount(this.provider, walletAddress),
+      getEstimateGas(this.provider, walletAddress, unsignedTx),
+      getFeeData(this.provider),
+      getNetwork(this.provider),
+    ]);
+
+    const transaction: FullTransaction = {
+      unsignedTx,
+      nonce,
+      gasLimit,
+      gasPrice: feeData?.maxFeePerGas,
+      chainId: network.chainId,
+    };
+    return transaction;
+  }
+
+  getBalance(walletAddress: string): Promise<bigint> {
+    return getNativeCurrencyBalance(walletAddress, this.provider);
   }
 }

@@ -1,4 +1,4 @@
-export interface I_SwapTransaction {
+export interface SwapTransaction {
   to: string;
   data: string;
   value?: string;
@@ -10,7 +10,14 @@ export interface I_SwapTransaction {
   maxPriorityFeePerGas: bigint;
 }
 
-export interface I_SwapQuote {
+export interface SwapTx {
+  to: string;
+  data: string;
+  value: bigint;
+  gasLimit: bigint;
+}
+
+export interface SwapQuote {
   inputAmount: string;
   inputToken: string;
   outputAmount: string;
@@ -20,7 +27,7 @@ export interface I_SwapQuote {
   poolAddress: string;
 }
 
-export interface I_QuotedOutput {
+export interface QuotedOutput {
   amountOut: number;
   sqrtPriceX96After: number;
   initializedTicksCrossed: number;

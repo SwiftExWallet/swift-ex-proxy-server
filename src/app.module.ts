@@ -7,6 +7,10 @@ import { UsersModule } from './api/v1/users/users.module';
 import { AuthTokenMiddleware } from './api/v1/common/middleware/auth-token.middleware';
 import { MongooseModule } from '@nestjs/mongoose';
 import { JwtModule } from '@nestjs/jwt';
+import { BscModule } from './api/v1/bsc/bsc.module';
+import { AlchemyModule } from './api/v1/alchemy/alchemy.module';
+import { ProviderModule } from './api/v1/provider/provider.module';
+import { NotificationModule } from './api/v1/notification/notification.module';
 
 @Module({
   imports: [
@@ -24,6 +28,10 @@ import { JwtModule } from '@nestjs/jwt';
     }),
     EthModule,
     UsersModule,
+    BscModule,
+    AlchemyModule,
+    ProviderModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -4,6 +4,7 @@ import {
   HttpException,
   HttpStatus,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../../users/users.service';
@@ -16,7 +17,7 @@ export class AuthTokenMiddleware implements NestMiddleware {
   ) {}
 
   async use(req: any, res: Response, next: () => void): Promise<any> {
-    console.log('==called ==');
+    Logger.log('==== middleware called ===');
     if (!req.headers['authorization']) {
       throw new NotFoundException('Token  not found');
     }
