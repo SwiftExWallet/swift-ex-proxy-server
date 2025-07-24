@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, RequestMethod } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { EthModule } from './api/v1/eth/eth.module';
@@ -11,6 +11,7 @@ import { BscModule } from './api/v1/bsc/bsc.module';
 import { AlchemyModule } from './api/v1/alchemy/alchemy.module';
 import { ProviderModule } from './api/v1/provider/provider.module';
 import { NotificationModule } from './api/v1/notification/notification.module';
+import { WebhookModule } from './api/v1/webhook/webhook.module';
 
 @Module({
   imports: [
@@ -32,12 +33,18 @@ import { NotificationModule } from './api/v1/notification/notification.module';
     AlchemyModule,
     ProviderModule,
     NotificationModule,
+    WebhookModule
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer): any {
-    consumer.apply(AuthTokenMiddleware).forRoutes('*');
+    consumer.apply(AuthTokenMiddleware)
+    .exclude(
+      { path: "/api/v1/webhook/steller-transactions", method: RequestMethod.POST },
+      { path: "/api/v1/webhook/moralis-transactions", method: RequestMethod.POST },
+    )
+    .forRoutes('*');
   }
 }
