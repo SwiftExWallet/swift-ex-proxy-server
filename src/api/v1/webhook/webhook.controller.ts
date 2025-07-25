@@ -3,12 +3,18 @@ import { WebhookEnum } from '../common/enums/webhook.enum';
 import { WebhookStellarDto } from './dto/webhook.steller.dto';
 import { WebhookMoralisDto } from './dto/webhook.moralis.dto';
 import { WebhookService } from './webhook.service';
+import { AlchemyOnRampWebhookDto } from './dto/webhook.alchemyOnramp.dto';
+import { AlchemyOffRampWebhookDto } from './dto/webhook.alchemyOfframp.dto';
+import { AlchemyWebhookService } from './alchemy.webhook.service';
 
 @Controller('/api/v1/webhook')
 export class WebhookController {
     private readonly logger = new Logger(WebhookController.name);
 
-    constructor(private readonly webhookService: WebhookService) { }
+    constructor(
+        private readonly webhookService: WebhookService,
+        private readonly alchemyWebhookService: AlchemyWebhookService
+    ) { }
 
     @Post('steller-transactions')
     @HttpCode(HttpStatus.OK)
@@ -44,5 +50,17 @@ export class WebhookController {
             this.logger.error('Moralis webhook processing payload error:', error.stack);
             throw new InternalServerErrorException('Failed to process moralis webhook.');
         }
+    }
+
+    @Post('alchemy-onramp')
+    async handleOnRamp(@Body() body: AlchemyOnRampWebhookDto) {
+        await this.alchemyWebhookService.handleAlchmeyOnRamp(body);
+        return { status: 'ok', message: 'webhook received.' };
+    }
+
+    @Post('alchemy-offramp')
+    async handleOffRamp(@Body() body: AlchemyOffRampWebhookDto) {
+        await this.alchemyWebhookService.handleAlchmeyOffRamp(body);
+        return { status: 'ok', message: 'webhook received.' };
     }
 }

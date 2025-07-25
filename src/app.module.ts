@@ -44,6 +44,8 @@ export class AppModule {
     .exclude(
       { path: "/api/v1/webhook/steller-transactions", method: RequestMethod.POST },
       { path: "/api/v1/webhook/moralis-transactions", method: RequestMethod.POST },
+      { path: "/api/v1/webhook/alchemy-onramp", method: RequestMethod.POST },
+      { path: "/api/v1/webhook/alchemy-offramp", method: RequestMethod.POST },
     )
     .forRoutes('*');
   }
