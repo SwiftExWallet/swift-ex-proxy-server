@@ -1,11 +1,11 @@
-export const ETH_ERC20 = [
+export const ETH_ERC20_ABI = [
   'function name() view returns (string)',
   'function symbol() view returns (string)',
   'function decimals() view returns (uint8)',
   'function balanceOf(address owner) view returns (uint256)',
 ];
 
-export const ETH_FACTORY = [
+export const ETH_FACTORY_ABI = [
   { inputs: [], stateMutability: 'nonpayable', type: 'constructor' },
   {
     anonymous: false,
@@ -140,7 +140,7 @@ export const ETH_FACTORY = [
   },
 ];
 
-export const ETH_POOL = [
+export const ETH_POOL_ABI = [
   { inputs: [], stateMutability: 'nonpayable', type: 'constructor' },
   {
     anonymous: false,
@@ -783,7 +783,7 @@ export const ETH_POOL = [
   },
 ];
 
-export const ETH_QUOTER = [
+export const ETH_QUOTER_ABI = [
   {
     inputs: [
       {
@@ -847,7 +847,7 @@ export const ETH_QUOTER = [
   },
 ];
 
-export const ETH_SWAP_ROUTER = [
+export const ETH_SWAP_ROUTER_ABI = [
   {
     inputs: [
       { internalType: 'address', name: '_factoryV2', type: 'address' },
