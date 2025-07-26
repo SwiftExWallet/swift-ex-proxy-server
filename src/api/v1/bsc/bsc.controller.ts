@@ -5,6 +5,7 @@ import { BscService } from './bsc.service';
 import { PrepareSwapTransactionDto } from './dto/prepareSwapTransaction.dto';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
+import { ValidateWalletAddressPipe } from '../common/middleware/validate-wallett-address.pipe';
 
 @Controller('/api/v1/bsc')
 export class BscController {
@@ -44,13 +45,13 @@ export class BscController {
   }
 
   @Get('/:address/balance')
-  async getBalance(@Res() res, @Param('address') address: string) {
+  async getBalance(@Res() res, @Param('address',new ValidateWalletAddressPipe('address')) address: string) {
     const data = await this.bscService.getBalance(address);
     res.status(200).json(data);
   }
 
   @Get('wallet-address/:address/info')
-  async getAddressInfo(@Res() res, @Param('address') address: string) {
+  async getAddressInfo(@Res() res, @Param('address',new ValidateWalletAddressPipe('address')) address: string) {
     const data = await this.bscService.getWalletAddressInfo(address);
     res.status(200).json(data);
   }
@@ -58,8 +59,8 @@ export class BscController {
   @Get('/:address/token/:tokenAddress/balance')
   async getUsdtBalance(
     @Res() res,
-    @Param('address') address: string,
-    @Param('tokenAddress') tokenAddress: string,
+    @Param('address',new ValidateWalletAddressPipe('address')) address: string,
+    @Param('tokenAddress',new ValidateWalletAddressPipe('tokenAddress')) tokenAddress: string,
   ) {
     const data = await this.bscService.getUsdtTokenBalance(
       address,

@@ -1,8 +1,9 @@
-import { IsNotEmpty, ValidateNested } from 'class-validator';
+import { IsEthereumAddress, IsNotEmpty, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class TokenInfoDto {
   @IsNotEmpty()
+  @IsEthereumAddress()
   address: string;
 
   @IsNotEmpty()

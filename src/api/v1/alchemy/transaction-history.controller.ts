@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Res } from '@nestjs/common';
 import { TransactionHistoryService } from './transaction-history.service';
 import { ChainEnum } from '../common/enums/chain.enum';
+import { ValidateWalletAddressPipe } from '../common/middleware/validate-wallett-address.pipe';
 
 @Controller('api/v1/transaction-history')
 export class TransactionHistoryController {
@@ -11,7 +12,7 @@ export class TransactionHistoryController {
   @Get(':walletAddress/eth')
   async getEthWalletHistory(
     @Res() res,
-    @Param('walletAddress') walletAddress: string,
+    @Param('walletAddress',new ValidateWalletAddressPipe('walletAddress')) walletAddress: string,
   ) {
     const data =
       await this.transactionHistoryService.getWalletTransactionHistory(
@@ -24,7 +25,7 @@ export class TransactionHistoryController {
   @Get(':walletAddress/bsc')
   async getBscWalletHistory(
     @Res() res,
-    @Param('walletAddress') walletAddress: string,
+    @Param('walletAddress',new ValidateWalletAddressPipe('walletAddress')) walletAddress: string,
   ) {
     const data =
       await this.transactionHistoryService.getWalletTransactionHistory(

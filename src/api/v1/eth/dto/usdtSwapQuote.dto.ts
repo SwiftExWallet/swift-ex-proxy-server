@@ -1,7 +1,8 @@
-import { IsNotEmpty } from 'class-validator';
+import { IsEthereumAddress, IsNotEmpty } from 'class-validator';
 
 export class UsdtSwapQuoteDto {
   @IsNotEmpty()
+  @IsEthereumAddress()
   fromAddress: string;
 
   @IsNotEmpty()
