@@ -32,6 +32,8 @@ import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 import { FullTransaction } from '../common/interface/transaction.interface';
 import { ValidateAddress } from '../common/helpers/utilityMethods';
 import { getErc20ContractInfo } from '../common/helpers/contractUtilityMethod';
+import { WalletAddressDto } from '../common/dto/walletAddress.dto';
+import { UsdtBalanceDto } from './dto/usdtBalance.dto';
 
 @Injectable()
 export class BscService {
@@ -140,24 +142,33 @@ export class BscService {
   }
 
   async getUsdtTokenBalance(
-    walletAddress: string,
-    tokenAddress: string,
+    usdtBalanceDto: UsdtBalanceDto,
   ): Promise<{ walletBalance: bigint; tokenBalance: bigint }> {
+    const { walletAddress, tokenAddress } = usdtBalanceDto;
+    const walletAddressDto: WalletAddressDto = {
+      walletAddress: walletAddress as string,
+    };
     const [walletBalance, tokenBalance] = await Promise.all([
-      this.getBalance(walletAddress),
-      getErc20ContractTokenBalance(tokenAddress, walletAddress, this.provider),
+      this.getBalance(walletAddressDto),
+      getErc20ContractTokenBalance(
+        tokenAddress,
+        walletAddress as string,
+        this.provider,
+      ),
     ]);
 
     return { walletBalance, tokenBalance };
   }
 
-  async getBalance(walletAddress: string): Promise<bigint> {
+  async getBalance(walletAddressDto: WalletAddressDto): Promise<bigint> {
+    const { walletAddress } = walletAddressDto;
     return getNativeCurrencyBalance(walletAddress, this.provider);
   }
 
   async getWalletAddressInfo(
-    walletAddress: string,
+    walletAddressDto: WalletAddressDto,
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
+    const { walletAddress } = walletAddressDto;
     const [transactionCount, gasFeeData] = await Promise.all([
       getTransactionCount(this.provider, walletAddress),
       getFeeData(this.provider),

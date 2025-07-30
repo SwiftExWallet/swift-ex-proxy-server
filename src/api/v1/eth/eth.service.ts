@@ -49,6 +49,7 @@ import {
   quoteExactInputSingle,
   getErc20ContractInfo,
 } from '../common/helpers/contractUtilityMethod';
+import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 @Injectable()
 export class EthService {
   provider: JsonRpcProvider;
@@ -202,8 +203,9 @@ export class EthService {
   }
 
   async getWalletAddressInfo(
-    walletAddress: string,
+    walletAddressDto: WalletAddressDto,
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
+    const { walletAddress } = walletAddressDto;
     const [transactionCount, gasFeeData] = await Promise.all([
       getTransactionCount(this.provider, walletAddress),
       getFeeData(this.provider),
@@ -384,7 +386,8 @@ export class EthService {
     return transaction;
   }
 
-  getBalance(walletAddress: string): Promise<bigint> {
+  getBalance(walletAddressDto: WalletAddressDto): Promise<bigint> {
+    const { walletAddress } = walletAddressDto;
     return getNativeCurrencyBalance(walletAddress, this.provider);
   }
 }

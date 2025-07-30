@@ -6,6 +6,7 @@ import {
   SortingOrder,
 } from 'alchemy-sdk';
 import { ChainEnum } from '../common/enums/chain.enum';
+import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 
 @Injectable()
 export class TransactionHistoryService {
@@ -49,7 +50,11 @@ export class TransactionHistoryService {
         validCategories.includes(c as AssetTransfersCategory),
       );
   }
-  async getWalletTransactionHistory(walletAddress: string, chain: ChainEnum) {
+  async getWalletTransactionHistory(
+    walletAddressDto: WalletAddressDto,
+    chain: ChainEnum,
+  ) {
+    const { walletAddress } = walletAddressDto;
     const alchemy: Alchemy =
       chain == ChainEnum.ETH ? this.ethAlchemy : this.bscAlchemy;
     const category: AssetTransfersCategory[] = this.getCategories();

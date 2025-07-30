@@ -1,4 +1,4 @@
-export class WebhookStellarDto  {
+export class WebhookStellarDto {
   eventType: string;
   data: {
     id: string;

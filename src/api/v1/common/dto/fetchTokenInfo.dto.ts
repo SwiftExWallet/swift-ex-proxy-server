@@ -1,8 +1,9 @@
 import { IsEthereumAddress, IsNotEmpty } from 'class-validator';
+import { ValidateEthereumAddresses } from '../validation/ethereumAddress';
 
 export class GetTokenInfoDto {
   @IsNotEmpty()
-  @IsEthereumAddress()
+  @ValidateEthereumAddresses()
   addresses: string[] | string;
 
   @IsNotEmpty()

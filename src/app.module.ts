@@ -12,6 +12,8 @@ import { AlchemyModule } from './api/v1/alchemy/alchemy.module';
 import { ProviderModule } from './api/v1/provider/provider.module';
 import { NotificationModule } from './api/v1/notification/notification.module';
 import { WebhookModule } from './api/v1/webhook/webhook.module';
+import { OrdersModule } from './api/v1/orders/orders.module';
+import { DeviceModule } from './api/v1/device/device.module';
 
 @Module({
   imports: [
@@ -33,20 +35,32 @@ import { WebhookModule } from './api/v1/webhook/webhook.module';
     AlchemyModule,
     ProviderModule,
     NotificationModule,
-    WebhookModule
+    WebhookModule,
+    OrdersModule,
+    DeviceModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer): any {
-    consumer.apply(AuthTokenMiddleware)
-    .exclude(
-      { path: "/api/v1/webhook/steller-transactions", method: RequestMethod.POST },
-      { path: "/api/v1/webhook/moralis-transactions", method: RequestMethod.POST },
-      { path: "/api/v1/webhook/alchemy-onramp", method: RequestMethod.POST },
-      { path: "/api/v1/webhook/alchemy-offramp", method: RequestMethod.POST },
-    )
-    .forRoutes('*');
+    consumer
+      .apply(AuthTokenMiddleware)
+      .exclude(
+        {
+          path: '/api/v1/webhook/stellar-transactions',
+          method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/webhook/moralis-transactions',
+          method: RequestMethod.POST,
+        },
+        { path: '/api/v1/webhook/alchemy-on-ramp', method: RequestMethod.POST },
+        {
+          path: '/api/v1/webhook/alchemy-off-ramp',
+          method: RequestMethod.POST,
+        },
+      )
+      .forRoutes('*');
   }
 }

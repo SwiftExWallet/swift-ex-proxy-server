@@ -5,7 +5,7 @@ import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto'
 import { SwapPrepareDto } from './dto/swapPrepare.dto';
 import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
-import { ValidateWalletAddressPipe } from '../common/middleware/validate-wallett-address.pipe';
+import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 
 @Controller('/api/v1/eth')
 export class EthController {
@@ -57,14 +57,17 @@ export class EthController {
   }
 
   @Get('/:address/balance')
-  async getBalance(@Res() res, @Param('address',new ValidateWalletAddressPipe('address')) address: string) {
-    const data = await this.ethService.getBalance(address);
+  async getBalance(@Res() res, @Param() walletAddressDto: WalletAddressDto) {
+    const data = await this.ethService.getBalance(walletAddressDto);
     res.status(200).json(data);
   }
 
   @Get('wallet-address/:address/info')
-  async getAddressInfo(@Res() res, @Param('address',new ValidateWalletAddressPipe('address')) address: string) {
-    const data = await this.ethService.getWalletAddressInfo(address);
+  async getAddressInfo(
+    @Res() res,
+    @Param() walletAddressDto: WalletAddressDto,
+  ) {
+    const data = await this.ethService.getWalletAddressInfo(walletAddressDto);
     res.status(200).json(data);
   }
 }

@@ -5,7 +5,8 @@ import { BscService } from './bsc.service';
 import { PrepareSwapTransactionDto } from './dto/prepareSwapTransaction.dto';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
-import { ValidateWalletAddressPipe } from '../common/middleware/validate-wallett-address.pipe';
+import { WalletAddressDto } from '../common/dto/walletAddress.dto';
+import { UsdtBalanceDto } from './dto/usdtBalance.dto';
 
 @Controller('/api/v1/bsc')
 export class BscController {
@@ -45,27 +46,23 @@ export class BscController {
   }
 
   @Get('/:address/balance')
-  async getBalance(@Res() res, @Param('address',new ValidateWalletAddressPipe('address')) address: string) {
-    const data = await this.bscService.getBalance(address);
+  async getBalance(@Res() res, @Param() walletAddressDto: WalletAddressDto) {
+    const data = await this.bscService.getBalance(walletAddressDto);
     res.status(200).json(data);
   }
 
   @Get('wallet-address/:address/info')
-  async getAddressInfo(@Res() res, @Param('address',new ValidateWalletAddressPipe('address')) address: string) {
-    const data = await this.bscService.getWalletAddressInfo(address);
+  async getAddressInfo(
+    @Res() res,
+    @Param() walletAddressDto: WalletAddressDto,
+  ) {
+    const data = await this.bscService.getWalletAddressInfo(walletAddressDto);
     res.status(200).json(data);
   }
 
   @Get('/:address/token/:tokenAddress/balance')
-  async getUsdtBalance(
-    @Res() res,
-    @Param('address',new ValidateWalletAddressPipe('address')) address: string,
-    @Param('tokenAddress',new ValidateWalletAddressPipe('tokenAddress')) tokenAddress: string,
-  ) {
-    const data = await this.bscService.getUsdtTokenBalance(
-      address,
-      tokenAddress,
-    );
+  async getUsdtBalance(@Res() res, @Param() usdtBalanceDto: UsdtBalanceDto) {
+    const data = await this.bscService.getUsdtTokenBalance(usdtBalanceDto);
     res.status(200).json(data);
   }
 
