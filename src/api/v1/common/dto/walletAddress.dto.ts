@@ -1,10 +1,7 @@
 import { IsEthereumAddress, IsNotEmpty } from 'class-validator';
 
-export class PrepareTransactionDto {
-  @IsNotEmpty()
-  unsignedTx: string;
-
-  @IsNotEmpty()
+export class WalletAddressDto {
   @IsEthereumAddress()
+  @IsNotEmpty()
   walletAddress: string;
 }

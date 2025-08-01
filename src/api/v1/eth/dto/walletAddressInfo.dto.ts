@@ -1,6 +1,7 @@
-import { IsNotEmpty } from 'class-validator';
+import { IsEthereumAddress, IsNotEmpty } from 'class-validator';
 
 export class WalletAddressInfoDto {
   @IsNotEmpty()
+  @IsEthereumAddress()
   walletAddress: string;
 }

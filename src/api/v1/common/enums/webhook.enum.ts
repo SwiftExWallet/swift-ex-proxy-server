@@ -2,10 +2,10 @@ export enum WebhookEnum {
   TEST = 'test',
 }
 export enum WebhookNotificationType {
-  STELLAR='Stellar',
-  MULTICAHIN="MultiChian"
+  STELLAR = 'Stellar',
+  MULTI_CHAIN = 'MultiChian',
 }
 export enum WebhookAssetType {
-  XLM='native',
-  LUMANS="XLM"
+  XLM = 'native',
+  LUMENS = 'XLM',
 }

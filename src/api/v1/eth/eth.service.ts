@@ -49,6 +49,7 @@ import {
   quoteExactInputSingle,
   getErc20ContractInfo,
 } from '../common/helpers/contractUtilityMethod';
+import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 @Injectable()
 export class EthService {
   provider: JsonRpcProvider;
@@ -202,8 +203,9 @@ export class EthService {
   }
 
   async getWalletAddressInfo(
-    walletAddress: string,
+    walletAddressDto: WalletAddressDto,
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
+    const { walletAddress } = walletAddressDto;
     const [transactionCount, gasFeeData] = await Promise.all([
       getTransactionCount(this.provider, walletAddress),
       getFeeData(this.provider),
@@ -256,12 +258,35 @@ export class EthService {
     ) {
       throw new Error('Missing swap variable in environment variables');
     }
+    const estimateGas = async (to: string, data: string, txValue?: string | bigint): Promise<number> => {
+      try {
+        const valueInBigInt = txValue ? (typeof txValue === 'string' ? BigInt(txValue) : txValue) : 0n;
+        const estimated = await this.provider.estimateGas({
+          to,
+          data,
+          value: valueInBigInt,
+          from: address
+        });
+
+        return Number((estimated * 130n) / 100n);
+      } catch (error: any) {
+        console.warn('Gas estimation failed, using fallback:', error?.message || error);
+        if (data.includes('0xa9059cbb') || data.includes('0x095ea7b3')) return 100000;
+        if (to === process.env.SWAP_ROUTER_ADDRESS) return 400000;
+        return 80000;
+      }
+    };
+  
     if (swapType == EthSwapEnum.EthToUsdc) {
+      const depositGas = await estimateGas(process.env.WETH, depositData, value);
+      const approveGas = await estimateGas(process.env.WETH, approveData);
+      const swapGas = await estimateGas(process.env.SWAP_ROUTER_ADDRESS as string, swapData);
+  
       txs.push({
         to: process.env.WETH,
         data: depositData,
         value,
-        gasLimit: +process.env.ETH_SWAP_GAS_FEE_LIMIT,
+        gasLimit: depositGas,
         nonce,
         chainId,
         type: +process.env.ETH_SWAP_TYPE,
@@ -271,7 +296,7 @@ export class EthService {
       txs.push({
         to: process.env.WETH,
         data: approveData,
-        gasLimit: 70000,
+        gasLimit: approveGas,
         nonce: nonce + 1,
         chainId,
         type: 2,
@@ -281,7 +306,7 @@ export class EthService {
       txs.push({
         to: process.env.SWAP_ROUTER,
         data: swapData,
-        gasLimit: 250000,
+        gasLimit: swapGas,
         nonce: nonce + 2,
         chainId,
         type: 2,
@@ -289,10 +314,13 @@ export class EthService {
         maxPriorityFeePerGas,
       });
     } else if (swapType == EthSwapEnum.UsdcToWeth) {
+      const approveGas = await estimateGas(process.env.USDC, approveData);
+      const swapGas = await estimateGas(process.env.SWAP_ROUTER_ADDRESS as string, swapData);
+  
       txs.push({
         to: process.env.USDC,
         data: approveData,
-        gasLimit: 70000,
+        gasLimit: approveGas,
         nonce,
         chainId,
         type: 2,
@@ -302,7 +330,7 @@ export class EthService {
       txs.push({
         to: process.env.SWAP_ROUTER,
         data: swapData,
-        gasLimit: 250000,
+        gasLimit: swapGas,
         nonce: nonce + 1,
         chainId,
         type: 2,
@@ -384,7 +412,8 @@ export class EthService {
     return transaction;
   }
 
-  getBalance(walletAddress: string): Promise<bigint> {
+  getBalance(walletAddressDto: WalletAddressDto): Promise<bigint> {
+    const { walletAddress } = walletAddressDto;
     return getNativeCurrencyBalance(walletAddress, this.provider);
   }
 }

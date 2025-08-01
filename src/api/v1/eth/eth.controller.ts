@@ -5,6 +5,7 @@ import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto'
 import { SwapPrepareDto } from './dto/swapPrepare.dto';
 import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
+import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 
 @Controller('/api/v1/eth')
 export class EthController {
@@ -55,15 +56,18 @@ export class EthController {
     res.status(200).json(data);
   }
 
-  @Get('/:address/balance')
-  async getBalance(@Res() res, @Param('address') address: string) {
-    const data = await this.ethService.getBalance(address);
+  @Get('/:walletAddress/balance')
+  async getBalance(@Res() res, @Param() walletAddressDto: WalletAddressDto) {
+    const data = await this.ethService.getBalance(walletAddressDto);
     res.status(200).json(data);
   }
 
-  @Get('wallet-address/:address/info')
-  async getAddressInfo(@Res() res, @Param('address') address: string) {
-    const data = await this.ethService.getWalletAddressInfo(address);
+  @Get('wallet-address/:walletAddress/info')
+  async getAddressInfo(
+    @Res() res,
+    @Param() walletAddressDto: WalletAddressDto,
+  ) {
+    const data = await this.ethService.getWalletAddressInfo(walletAddressDto);
     res.status(200).json(data);
   }
 }

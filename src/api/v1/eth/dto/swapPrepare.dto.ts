@@ -1,8 +1,9 @@
-import { IsEnum, IsNotEmpty, IsOptional } from 'class-validator';
+import { IsEnum, IsEthereumAddress, IsNotEmpty, IsOptional } from 'class-validator';
 import { EthSwapEnum } from '../../common/enums/ethSwap.enum';
 
 export class SwapPrepareDto {
   @IsNotEmpty()
+  @IsEthereumAddress()
   address: string;
 
   @IsNotEmpty()
