@@ -45,13 +45,13 @@ export class BscController {
     res.status(200).json(data);
   }
 
-  @Get('/:address/balance')
+  @Get('/:walletAddress/balance')
   async getBalance(@Res() res, @Param() walletAddressDto: WalletAddressDto) {
     const data = await this.bscService.getBalance(walletAddressDto);
     res.status(200).json(data);
   }
 
-  @Get('wallet-address/:address/info')
+  @Get('wallet-address/:walletAddress/info')
   async getAddressInfo(
     @Res() res,
     @Param() walletAddressDto: WalletAddressDto,
@@ -60,7 +60,7 @@ export class BscController {
     res.status(200).json(data);
   }
 
-  @Get('/:address/token/:tokenAddress/balance')
+  @Get('/:walletAddress/token/:tokenAddress/balance')
   async getUsdtBalance(@Res() res, @Param() usdtBalanceDto: UsdtBalanceDto) {
     const data = await this.bscService.getUsdtTokenBalance(usdtBalanceDto);
     res.status(200).json(data);

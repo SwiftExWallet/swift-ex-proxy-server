@@ -56,13 +56,13 @@ export class EthController {
     res.status(200).json(data);
   }
 
-  @Get('/:address/balance')
+  @Get('/:walletAddress/balance')
   async getBalance(@Res() res, @Param() walletAddressDto: WalletAddressDto) {
     const data = await this.ethService.getBalance(walletAddressDto);
     res.status(200).json(data);
   }
 
-  @Get('wallet-address/:address/info')
+  @Get('wallet-address/:walletAddress/info')
   async getAddressInfo(
     @Res() res,
     @Param() walletAddressDto: WalletAddressDto,

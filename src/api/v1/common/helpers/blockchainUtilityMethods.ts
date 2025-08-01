@@ -50,13 +50,20 @@ export const getNativeCurrencyBalance = (
   return provider.getBalance(walletAddress);
 };
 
-export const getEstimateGas = (
+export const getEstimateGas = async (
   provider: JsonRpcProvider,
   walletAddress: string,
-  unsignedTx: string,
+  unsignedTx: any,
 ): Promise<bigint> => {
-  return provider.estimateGas({
-    data: unsignedTx,
-    from: walletAddress,
-  });
+  try {
+    return await provider.estimateGas({
+      data: unsignedTx.data,
+      from: walletAddress,
+      to: unsignedTx.to,
+      value: unsignedTx.value || '0x0',
+    });
+  } catch (error) {
+    console.error("Gas estimation error details:", error);
+    throw error;
+  }
 };
