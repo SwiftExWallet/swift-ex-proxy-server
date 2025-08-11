@@ -14,6 +14,8 @@ import { NotificationModule } from './api/v1/notification/notification.module';
 import { WebhookModule } from './api/v1/webhook/webhook.module';
 import { OrdersModule } from './api/v1/orders/orders.module';
 import { DeviceModule } from './api/v1/device/device.module';
+import { AllBridgeModule } from './api/v1/bridge/all-bridge/all-bridge.module';
+import { BridgeModule } from './api/v1/bridge/bridge.module';
 
 @Module({
   imports: [
@@ -38,6 +40,8 @@ import { DeviceModule } from './api/v1/device/device.module';
     WebhookModule,
     OrdersModule,
     DeviceModule,
+    AllBridgeModule,
+    BridgeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
