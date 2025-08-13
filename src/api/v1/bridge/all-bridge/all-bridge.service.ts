@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { ValidWalletType } from '../../common/enums/all-bridge.enum';
 import { AllBridgeSwapADto } from './dto/all-bridge-swap.dto';
+import { AllbridgeQuotesDto } from './dto/all-bridge-swap-quotes.dto';
 
 @Injectable()
 export class AllBridgeService {
@@ -22,6 +23,7 @@ export class AllBridgeService {
     this.sdk = new AllbridgeCoreSdk({
       ETH: process.env.ETH_PROVIDER as string,
     });
+    const provider=process.env.ETH_PROVIDER as string
   }
 
   private async fetchTokens(sourceToken: string, walletType?: ValidWalletType) {
@@ -133,6 +135,50 @@ export class AllBridgeService {
     } catch (error) {
       console.error('Error in swap_prepare:', error);
       throw new BadRequestException(error.message);
+    }
+  }
+
+  async getSwapDetails(allbridgeQuotes:AllbridgeQuotesDto){
+    try {
+      const chains = await this.sdk.chainDetailsMap();
+      if (allbridgeQuotes.chainType !== "ETH" && allbridgeQuotes.chainType !== "BSC") {
+        throw new HttpException('Wrong Chain', HttpStatus.BAD_REQUEST);
+      }     
+      const sourceChain = allbridgeQuotes.chainType=="ETH"?chains[ChainSymbol.ETH]:chains[ChainSymbol.BSC]
+      const destinationChain = chains[ChainSymbol.SRB];
+
+      if (!sourceChain || !destinationChain) {
+        throw new HttpException('Chain details not found', HttpStatus.BAD_REQUEST);
+      }
+
+      const sourceToken = sourceChain.tokens.find(token => token.symbol === 'USDT');
+      const destinationToken = destinationChain.tokens.find(token => token.symbol === 'USDC');
+
+      if (!sourceToken || !destinationToken) {
+        throw new HttpException('Token not found', HttpStatus.BAD_REQUEST);
+      }
+
+      // Get minimum amount after bridge swap
+      const minimumReceiveAmount = await this.sdk.getAmountToBeReceived(
+        allbridgeQuotes.amount,
+        sourceToken,
+        destinationToken,
+        Messenger.ALLBRIDGE,
+      );
+
+      // Calculate conversion rate
+      const conversionRate = (parseFloat(minimumReceiveAmount) / parseFloat(allbridgeQuotes.amount)).toFixed(12);
+
+      // Set slippage tolerance (default 1%)
+      const slippageTolerance = "1";
+      const result= {
+        conversionRate,
+        minimumAmountOut: minimumReceiveAmount,
+        slippageTolerance,
+      };
+      return new HttpException(result,HttpStatus.OK)
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 }
