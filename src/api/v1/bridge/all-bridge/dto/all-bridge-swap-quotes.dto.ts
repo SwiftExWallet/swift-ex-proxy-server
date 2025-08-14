@@ -1,11 +1,12 @@
-import { IsNotEmpty, IsString } from "class-validator";
+import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { ValidWalletType } from '../../../../../api/v1/common/enums/all-bridge.enum';
 
-export class AllbridgeQuotesDto {
-    @IsNotEmpty()
-    @IsString()
-    amount: string;
+export class AllBridgeQuotesDto {
+  @IsNotEmpty()
+  @IsString()
+  amount: string;
 
-    @IsNotEmpty()
-    @IsString()
-    chainType: string;
+  @IsNotEmpty()
+  @IsEnum(ValidWalletType)
+  chainType: ValidWalletType;
 }

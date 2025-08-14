@@ -25,7 +25,7 @@ export class WebhookService {
 
   async handleStellar(payload: WebhookStellarDto) {
     try {
-      this.logger.log('==== WebhookReceived: HandleStellar');
+      this.logger.log('==== WebhookReceived: HandleStellar ===', { payload });
       if (payload.isTestPayload()) {
         return { status: 'ok', message: 'Test payload skipped' };
       }
@@ -38,6 +38,8 @@ export class WebhookService {
 
       const { decryptedToken } = this.decryptToken(tagSource);
 
+      this.logger.log('==== decryptedToken', { decryptedToken });
+
       const body = `${payload.data.amount} ${payload.data.asset_type === WebhookAssetType.XLM ? WebhookAssetType.LUMENS : payload.data.asset_code} has been received.`;
 
       const notificationPayload: NotificationDto = {
@@ -45,6 +47,9 @@ export class WebhookService {
         body,
         data: {},
       };
+      this.logger.log('==== notificationPayload', {
+        notificationPayload,
+      });
 
       const notificationStatus =
         await this.notificationService.sendNotification(
@@ -65,21 +70,39 @@ export class WebhookService {
 
   async handleWebhookMoralis(payload: WebhookMoralisDto) {
     try {
-      this.logger.log('==== WebhookReceived: handleWebhookMoralis');
+      const { erc20Transfers, erc20Approvals, txs } = payload;
+      this.logger.log('==== WebhookReceived: handleWebhookMoralis ===', {
+        payload,
+      });
 
       if (payload.isTestPayload()) {
         return { status: 'ok', message: 'Test payload skipped' };
       }
 
       const { decryptedToken } = this.decryptToken(payload.tag);
+      this.logger.log('==== decryptedToken ===', { decryptedToken });
+
       let body = 'A transaction has been received.';
 
-      if (payload.erc20Transfers?.length > 0) {
-        const erc = payload.erc20Transfers[0];
+      if (erc20Transfers?.length > 0) {
+        this.logger.log('==== erc20Transfers ===');
+
+        // ERC-20 Transfer
+
+        const erc = erc20Transfers[0];
         const amount = erc.valueWithDecimals || formatEther(erc.value);
         body = `${amount} ${erc.tokenSymbol} has been received.`;
-      } else if (payload.txs?.[0]?.value) {
-        body = `${formatEther(payload.txs[0].value)} ETH has been received.`;
+      } else if (erc20Approvals?.length > 0) {
+        this.logger.log('==== erc20Approvals ===');
+        // ERC-20 Approval
+        const approval = erc20Approvals[0];
+        const amount =
+          approval.valueWithDecimals || formatEther(approval.value);
+        body = `${amount} ${approval.tokenSymbol} has been approved for ${approval.spender}`;
+      } else if (txs?.[0]?.value) {
+        this.logger.log('==== value ===');
+
+        body = `${formatEther(txs[0].value)} ETH has been received.`;
       }
 
       const notificationPayload: NotificationDto = {

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   FeeData,
   formatUnits,
@@ -37,6 +37,8 @@ import { UsdtBalanceDto } from './dto/usdtBalance.dto';
 
 @Injectable()
 export class BscService {
+  private readonly logger = new Logger(BscService.name);
+
   provider: JsonRpcProvider;
   routerContract: Contract;
   constructor(private readonly providerService: ProviderService) {
@@ -61,10 +63,12 @@ export class BscService {
       const path: [string, string] = [tokenIn.address, tokenOut.address];
 
       const amountIn: bigint = parseEther(amount);
+      this.logger.log('====== amountIn =====', { amountIn });
       const amountsOut: bigint[] = (await this.routerContract.getAmountsOut(
         amountIn,
         path,
       )) as bigint[];
+      this.logger.log('====== amountsOut =====', { amountsOut });
 
       return formatUnits(amountsOut[1], tokenIn.decimals);
     } catch (error: any) {
@@ -82,10 +86,13 @@ export class BscService {
     ];
 
     const amountIn: bigint = parseEther(bnbAmount);
+    this.logger.log('====== amountIn =====', { amountIn });
+
     const amountsOut: bigint[] = (await this.routerContract.getAmountsOut(
       amountIn,
       path,
     )) as bigint[];
+    this.logger.log('====== amountsOut =====', { amountsOut });
 
     const slippagePercent = Number(process.env.BSC_SLIPPAGE ?? '5'); // fallback to 5 if undefined
     const minOut: bigint =
@@ -102,6 +109,7 @@ export class BscService {
       address,
       deadline,
     ]);
+    this.logger.log('====== IfaceData =====', { data });
 
     const nonce: number = await getTransactionCount(this.provider, address);
     const { chainId } = await getNetwork(this.provider);
@@ -109,6 +117,12 @@ export class BscService {
     const { maxFeePerGas, maxPriorityFeePerGas } = await getFeeData(
       this.provider,
     );
+    this.logger.log('====== nonce, maxFeePerGas, maxPriorityFeePerGas =====', {
+      nonce,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+    });
+
     const tx: TransactionRequest = {
       to: getAddress(process.env.BSC_ROUTER_ADDRESS!),
       value: amountIn,
@@ -131,10 +145,10 @@ export class BscService {
       this.provider,
       signedTx,
     );
-    console.log('Broadcasted Tx:', txResponse.hash);
+    this.logger.log('Broadcasted Tx:', txResponse.hash);
 
     const receipt: TransactionReceipt | null = await txResponse.wait(); // Wait for confirmation
-    console.log('Receipt:', receipt);
+    this.logger.log('Receipt:', receipt);
     return {
       txHash: txResponse.hash,
       receipt,

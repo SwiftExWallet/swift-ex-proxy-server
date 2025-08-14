@@ -4,6 +4,7 @@ import {
   ChainSymbol,
   ChainType,
   Messenger,
+  RawTransaction,
   TokenWithChainDetails,
 } from '@allbridge/bridge-core-sdk';
 import {
@@ -11,19 +12,22 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { ValidWalletType } from '../../common/enums/all-bridge.enum';
 import { AllBridgeSwapADto } from './dto/all-bridge-swap.dto';
-import { AllbridgeQuotesDto } from './dto/all-bridge-swap-quotes.dto';
+import { AllBridgeQuotesDto } from './dto/all-bridge-swap-quotes.dto';
 
 @Injectable()
 export class AllBridgeService {
+  private readonly logger = new Logger(AllBridgeService.name);
+
   private sdk: AllbridgeCoreSdk;
   constructor() {
     this.sdk = new AllbridgeCoreSdk({
       ETH: process.env.ETH_PROVIDER as string,
     });
-    const provider=process.env.ETH_PROVIDER as string
   }
 
   private async fetchTokens(sourceToken: string, walletType?: ValidWalletType) {
@@ -105,6 +109,11 @@ export class AllBridgeService {
         );
       }
 
+      this.logger.log('===tokens ==', {
+        sourceTokenCoin,
+        destinationTokenCoin,
+      });
+
       if (
         !(await this.sdk.bridge.checkAllowance({
           token: sourceTokenCoin as TokenWithChainDetails,
@@ -112,47 +121,70 @@ export class AllBridgeService {
           amount: amount,
         }))
       ) {
-        const rawTransactionApprove =
+        this.logger.log('=== preparing approve transaction ===');
+
+        const transaction: RawTransaction =
           await this.sdk.bridge.rawTxBuilder.approve({
             token: sourceTokenCoin as TokenWithChainDetails,
             owner: fromAddress,
           });
-        console.log('rawTransactionApprove', rawTransactionApprove);
-        return new HttpException(
-          { res: rawTransactionApprove, statusSwap: true },
-          HttpStatus.CREATED,
-        );
+        this.logger.log('=== rawTransactionApprove ===', transaction);
+        return {
+          transaction,
+          type: 'approve',
+        };
       }
+      this.logger.log('=== preparing transfer transaction ===');
+
       // Initiate transfer
-      return this.sdk.bridge.rawTxBuilder.send({
-        amount: amount,
-        fromAccountAddress: fromAddress,
-        toAccountAddress: toAddress,
-        sourceToken: sourceTokenCoin as TokenWithChainDetails,
-        destinationToken: destinationTokenCoin as TokenWithChainDetails,
-        messenger: Messenger.ALLBRIDGE,
-      });
+      const transaction: RawTransaction =
+        await this.sdk.bridge.rawTxBuilder.send({
+          amount: amount,
+          fromAccountAddress: fromAddress,
+          toAccountAddress: toAddress,
+          sourceToken: sourceTokenCoin as TokenWithChainDetails,
+          destinationToken: destinationTokenCoin as TokenWithChainDetails,
+          messenger: Messenger.ALLBRIDGE,
+        });
+      this.logger.log('=== transfer transaction ===', transaction);
+
+      return {
+        transaction,
+        type: 'transfer',
+      };
     } catch (error) {
-      console.error('Error in swap_prepare:', error);
+      console.error('Error in swap prepare:', error);
       throw new BadRequestException(error.message);
     }
   }
 
-  async getSwapDetails(allbridgeQuotes:AllbridgeQuotesDto){
+  async getSwapDetails(allBridgeQuotes: AllBridgeQuotesDto): Promise<{
+    conversionRate: string;
+    minimumAmountOut: string;
+    slippageTolerance: string;
+  }> {
     try {
       const chains = await this.sdk.chainDetailsMap();
-      if (allbridgeQuotes.chainType !== "ETH" && allbridgeQuotes.chainType !== "BSC") {
-        throw new HttpException('Wrong Chain', HttpStatus.BAD_REQUEST);
-      }     
-      const sourceChain = allbridgeQuotes.chainType=="ETH"?chains[ChainSymbol.ETH]:chains[ChainSymbol.BSC]
+      const { chainType, amount } = allBridgeQuotes;
+
+      const sourceChain =
+        chainType == ValidWalletType.ETH
+          ? chains[ChainSymbol.ETH]
+          : chains[ChainSymbol.BSC];
       const destinationChain = chains[ChainSymbol.SRB];
+      this.logger.log('===chains ==', { sourceChain, destinationChain });
 
       if (!sourceChain || !destinationChain) {
-        throw new HttpException('Chain details not found', HttpStatus.BAD_REQUEST);
+        throw new NotFoundException('Chain details not found');
       }
 
-      const sourceToken = sourceChain.tokens.find(token => token.symbol === 'USDT');
-      const destinationToken = destinationChain.tokens.find(token => token.symbol === 'USDC');
+      const sourceToken = sourceChain.tokens.find(
+        (token) => token.symbol === 'USDT',
+      );
+      const destinationToken = destinationChain.tokens.find(
+        (token) => token.symbol === 'USDC',
+      );
+      this.logger.log('===tokens ==', { sourceToken, destinationToken });
 
       if (!sourceToken || !destinationToken) {
         throw new HttpException('Token not found', HttpStatus.BAD_REQUEST);
@@ -160,23 +192,26 @@ export class AllBridgeService {
 
       // Get minimum amount after bridge swap
       const minimumReceiveAmount = await this.sdk.getAmountToBeReceived(
-        allbridgeQuotes.amount,
+        amount,
         sourceToken,
         destinationToken,
         Messenger.ALLBRIDGE,
       );
+      this.logger.log('===minimumReceiveAmount ==', minimumReceiveAmount);
 
       // Calculate conversion rate
-      const conversionRate = (parseFloat(minimumReceiveAmount) / parseFloat(allbridgeQuotes.amount)).toFixed(12);
+      const conversionRate = (
+        parseFloat(minimumReceiveAmount) / parseFloat(amount)
+      ).toFixed(12);
+      this.logger.log('===conversionRate ==', conversionRate);
 
       // Set slippage tolerance (default 1%)
-      const slippageTolerance = "1";
-      const result= {
+      const slippageTolerance = process.env.SLIPPAGE_TOLERANCE as string;
+      return {
         conversionRate,
         minimumAmountOut: minimumReceiveAmount,
         slippageTolerance,
       };
-      return new HttpException(result,HttpStatus.OK)
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
