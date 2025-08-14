@@ -48,6 +48,26 @@ import { BridgeModule } from './api/v1/bridge/bridge.module';
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer): any {
-    consumer.apply(DeviceAuthTokenMiddleware).forRoutes('*');
+    consumer
+      .apply(DeviceAuthTokenMiddleware)
+      .exclude(
+        {
+          path: '/api/v1/wehbook/stellar-transactions',
+          method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/wehbook/moralis-transactions',
+          method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/wehbook/alchemy-on-ramp',
+          method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/wehbook/alchemy-off-ramp',
+          method: RequestMethod.POST,
+        },
+      )
+      .forRoutes('*');
   }
 }

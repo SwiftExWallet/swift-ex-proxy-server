@@ -85,15 +85,14 @@ export class WebhookService {
       let body = 'A transaction has been received.';
 
       if (erc20Transfers?.length > 0) {
-        this.logger.log('==== erc20Transfers ===');
+        this.logger.log('==== erc20Transfers ===', erc20Transfers);
 
         // ERC-20 Transfer
-
         const erc = erc20Transfers[0];
         const amount = erc.valueWithDecimals || formatEther(erc.value);
         body = `${amount} ${erc.tokenSymbol} has been received.`;
       } else if (erc20Approvals?.length > 0) {
-        this.logger.log('==== erc20Approvals ===');
+        this.logger.log('==== erc20Approvals ===', erc20Approvals);
         // ERC-20 Approval
         const approval = erc20Approvals[0];
         const amount =

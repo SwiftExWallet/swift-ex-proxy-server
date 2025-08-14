@@ -11,6 +11,6 @@ export class DeviceRepository {
   ) {}
 
   async findOne(cond: Record<string, any>): Promise<Device | null> {
-    return await this.deviceModel.findOne(cond);
+    return this.deviceModel.findOne(cond);
   }
 }
