@@ -8,8 +8,12 @@ import { UpdateOrderDto } from './dto/updateOrder.dto';
 export class OrdersService {
   constructor(private readonly orderRepo: OrderRepository) {}
 
-  findOne(cond: any): Promise<Order | null> {
-    return this.orderRepo.findOne(cond);
+  findOne(_id: mongoose.Schema.Types.ObjectId): Promise<Order | null> {
+    return this.orderRepo.findOne({ _id });
+  }
+
+  findOneByOrderNo(orderNo: string): Promise<Order | null> {
+    return this.orderRepo.findOne({ orderNo });
   }
 
   update(

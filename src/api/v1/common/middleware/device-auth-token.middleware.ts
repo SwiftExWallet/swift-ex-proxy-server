@@ -29,10 +29,13 @@ export class DeviceAuthTokenMiddleware implements NestMiddleware {
 
     console.log('===decoded token ===', decodedToken);
 
-    if (!decodedToken) {
+    if (!decodedToken?._id) {
+      console.log('==== no id ===');
       throw new HttpException('Invalid Device', HttpStatus.FORBIDDEN);
     }
     const device = await this.deviceService.findOne(decodedToken._id);
+    console.log('==== device===', { device });
+
     if (!device) {
       throw new HttpException('Invalid Device', HttpStatus.FORBIDDEN);
     }
