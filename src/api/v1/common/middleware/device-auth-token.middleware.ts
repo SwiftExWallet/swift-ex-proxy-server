@@ -18,6 +18,8 @@ export class DeviceAuthTokenMiddleware implements NestMiddleware {
 
   async use(req: any, res: Response, next: () => void): Promise<any> {
     Logger.log('==== device auth middleware called ===');
+    const route = req.originalUrl;
+    console.log('route =====', route);
     if (!req.headers['x-auth-device-token']) {
       throw new NotFoundException('Device token  not found');
     }

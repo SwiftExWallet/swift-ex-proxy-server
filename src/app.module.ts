@@ -52,19 +52,19 @@ export class AppModule {
       .apply(DeviceAuthTokenMiddleware)
       .exclude(
         {
-          path: '/api/v1/wehbook/stellar-transactions',
+          path: 'api/v1/webhook/stellar-transactions',
           method: RequestMethod.POST,
         },
         {
-          path: '/api/v1/wehbook/moralis-transactions',
+          path: '/api/v1/webhook/moralis-transactions',
           method: RequestMethod.POST,
         },
         {
-          path: '/api/v1/wehbook/alchemy-on-ramp',
+          path: '/api/v1/webhook/alchemy-on-ramp',
           method: RequestMethod.POST,
         },
         {
-          path: '/api/v1/wehbook/alchemy-off-ramp',
+          path: '/api/v1/webhook/alchemy-off-ramp',
           method: RequestMethod.POST,
         },
       )

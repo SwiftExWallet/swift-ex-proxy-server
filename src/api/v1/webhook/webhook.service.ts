@@ -43,7 +43,7 @@ export class WebhookService {
       const body = `${payload.data.amount} ${payload.data.asset_type === WebhookAssetType.XLM ? WebhookAssetType.LUMENS : payload.data.asset_code} has been received.`;
 
       const notificationPayload: NotificationDto = {
-        title: `${WebhookNotificationType.STELLAR} Notification`,
+        title: `${WebhookNotificationType.FUND_RECEIVED}`,
         body,
         data: {},
       };
@@ -81,38 +81,52 @@ export class WebhookService {
 
       const { decryptedToken } = this.decryptToken(payload.tag);
       this.logger.log('==== decryptedToken ===', { decryptedToken });
-
+      const splittedDecryptedToken = decryptedToken.split(
+        process.env.NOTIFICATION_SPLIT_KEY as string,
+      );
+      const address = splittedDecryptedToken[1];
       let body = 'A transaction has been received.';
-
+      let toAddress;
       if (erc20Transfers?.length > 0) {
         this.logger.log('==== erc20Transfers ===', erc20Transfers);
-
         // ERC-20 Transfer
         const erc = erc20Transfers[0];
+        toAddress = erc.toAddress;
+
         const amount = erc.valueWithDecimals || formatEther(erc.value);
         body = `${amount} ${erc.tokenSymbol} has been received.`;
       } else if (erc20Approvals?.length > 0) {
         this.logger.log('==== erc20Approvals ===', erc20Approvals);
         // ERC-20 Approval
         const approval = erc20Approvals[0];
+        toAddress = approval.toAddress;
+
         const amount =
           approval.valueWithDecimals || formatEther(approval.value);
         body = `${amount} ${approval.tokenSymbol} has been approved for ${approval.spender}`;
       } else if (txs?.[0]?.value) {
         this.logger.log('==== value ===');
+        toAddress = txs?.[0]?.toAddress;
 
         body = `${formatEther(txs[0].value)} ETH has been received.`;
       }
 
+      if (!toAddress.startsWith(`0x${address}`)) {
+        this.logger.log('=== to address did not match ===', {
+          toAddress,
+          address,
+        });
+        return;
+      }
       const notificationPayload: NotificationDto = {
-        title: `${WebhookNotificationType.MULTI_CHAIN} Notification`,
+        title: `${WebhookNotificationType.FUND_RECEIVED}`,
         body,
         data: {},
       };
 
       const notificationEthStatus =
         await this.notificationService.sendNotification(
-          decryptedToken,
+          splittedDecryptedToken[0],
           notificationPayload,
         );
       return { status: 'ok', message: notificationEthStatus };
