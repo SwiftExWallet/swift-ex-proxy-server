@@ -14,6 +14,7 @@ import {
 } from '../common/enums/webhook.enum';
 import { formatEther } from 'ethers';
 import * as crypto from 'crypto';
+import { RedisService } from '../redis/redis.service';
 
 @Injectable()
 export class WebhookService {
@@ -21,6 +22,7 @@ export class WebhookService {
 
   constructor(
     private readonly notificationService: FirebaseNotificationService,
+    private readonly redisService: RedisService,
   ) {}
 
   async handleStellar(payload: WebhookStellarDto) {
@@ -86,12 +88,13 @@ export class WebhookService {
       );
       const address = splittedDecryptedToken[1];
       let body = 'A transaction has been received.';
-      let toAddress;
+      let toAddress, txnHash;
       if (erc20Transfers?.length > 0) {
         this.logger.log('==== erc20Transfers ===', erc20Transfers);
         // ERC-20 Transfer
         const erc = erc20Transfers[0];
         toAddress = erc.toAddress;
+        txnHash = erc.hash;
 
         const amount = erc.valueWithDecimals || formatEther(erc.value);
         body = `${amount} ${erc.tokenSymbol} has been received.`;
@@ -100,6 +103,7 @@ export class WebhookService {
         // ERC-20 Approval
         const approval = erc20Approvals[0];
         toAddress = approval.toAddress;
+        txnHash = approval.hash;
 
         const amount =
           approval.valueWithDecimals || formatEther(approval.value);
@@ -107,15 +111,30 @@ export class WebhookService {
       } else if (txs?.[0]?.value) {
         this.logger.log('==== value ===');
         toAddress = txs?.[0]?.toAddress;
+        txnHash = txs?.[0]?.hash;
 
         body = `${formatEther(txs[0].value)} ETH has been received.`;
       }
 
-      if (!toAddress.startsWith(`0x${address}`)) {
-        this.logger.log('=== to address did not match ===', {
-          toAddress,
-          address,
+      this.logger.log('=== address detail===', {
+        toAddress,
+        address,
+        txnHash,
+      });
+      const redisValue = await this.redisService.getKey(txnHash);
+      this.logger.log('=== redis Value===', { redisValue });
+
+      if (redisValue) {
+        this.logger.log('=== event already sent with this hash ===', {
+          txnHash,
         });
+        return;
+      }
+      if (!toAddress) {
+        this.logger.log('=== to address not found ===');
+      }
+      if (!toAddress.startsWith(`0x${address}`)) {
+        this.logger.log('=== to address did not match ===');
         return;
       }
       const notificationPayload: NotificationDto = {
@@ -124,11 +143,12 @@ export class WebhookService {
         data: {},
       };
 
-      const notificationEthStatus =
-        await this.notificationService.sendNotification(
-          splittedDecryptedToken[0],
-          notificationPayload,
-        );
+      const notificationEthStatus = this.notificationService.sendNotification(
+        splittedDecryptedToken[0],
+        notificationPayload,
+      );
+      this.logger.log('=== setting up redis key ===');
+      this.redisService.setKey(txnHash, '1');
       return { status: 'ok', message: notificationEthStatus };
     } catch (error: any) {
       this.logger.error(
