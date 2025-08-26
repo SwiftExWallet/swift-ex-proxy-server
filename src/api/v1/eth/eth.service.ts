@@ -300,11 +300,11 @@ export class EthService {
     });
 
     if (
-      !process.env.WETH ||
+      !process.env.WETH_ADDRESS ||
       !process.env.ETH_SWAP_GAS_FEE_LIMIT ||
       !process.env.ETH_SWAP_TYPE ||
-      !process.env.USDC ||
-      !process.env.SWAP_ROUTER ||
+      !process.env.USDC_ADDRESS ||
+      !process.env.SWAP_ROUTER_ADDRESS ||
       !maxFeePerGas ||
       !maxPriorityFeePerGas
     ) {
@@ -314,13 +314,13 @@ export class EthService {
 
     if (swapType == EthSwapEnum.EthToUsdc) {
       const depositGas = await this.estimateGas(
-        process.env.WETH,
+        process.env.WETH_ADDRESS,
         address,
         depositData,
         value,
       );
       const approveGas = await this.estimateGas(
-        process.env.WETH,
+        process.env.WETH_ADDRESS,
         address,
         approveData,
       );
@@ -332,7 +332,7 @@ export class EthService {
       this.logger.log('==== gases ===', { depositGas, approveGas, swapGas });
 
       txs.push({
-        to: process.env.WETH,
+        to: process.env.WETH_ADDRESS,
         data: depositData,
         value,
         gasLimit: depositGas,
@@ -343,7 +343,7 @@ export class EthService {
         maxPriorityFeePerGas,
       });
       txs.push({
-        to: process.env.WETH,
+        to: process.env.WETH_ADDRESS,
         data: approveData,
         gasLimit: approveGas,
         nonce: nonce + 1,
@@ -353,7 +353,7 @@ export class EthService {
         maxPriorityFeePerGas,
       });
       txs.push({
-        to: process.env.SWAP_ROUTER,
+        to: process.env.SWAP_ROUTER_ADDRESS,
         data: swapData,
         gasLimit: swapGas,
         nonce: nonce + 2,
@@ -364,7 +364,7 @@ export class EthService {
       });
     } else if (swapType == EthSwapEnum.UsdcToWeth) {
       const approveGas = await this.estimateGas(
-        process.env.USDC,
+        process.env.USDC_ADDRESS,
         address,
         approveData,
       );
@@ -379,7 +379,7 @@ export class EthService {
       });
 
       txs.push({
-        to: process.env.USDC,
+        to: process.env.USDC_ADDRESS,
         data: approveData,
         gasLimit: approveGas,
         nonce,
@@ -389,7 +389,7 @@ export class EthService {
         maxPriorityFeePerGas,
       });
       txs.push({
-        to: process.env.SWAP_ROUTER,
+        to: process.env.SWAP_ROUTER_ADDRESS,
         data: swapData,
         gasLimit: swapGas,
         nonce: nonce + 1,

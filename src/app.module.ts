@@ -16,6 +16,7 @@ import { OrdersModule } from './api/v1/orders/orders.module';
 import { DeviceModule } from './api/v1/device/device.module';
 import { AllBridgeModule } from './api/v1/bridge/all-bridge/all-bridge.module';
 import { BridgeModule } from './api/v1/bridge/bridge.module';
+import { RedisModule } from './api/v1/redis/redis.module';
 
 @Module({
   imports: [
@@ -42,12 +43,33 @@ import { BridgeModule } from './api/v1/bridge/bridge.module';
     DeviceModule,
     AllBridgeModule,
     BridgeModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer): any {
-    consumer.apply(DeviceAuthTokenMiddleware).forRoutes('*');
+    consumer
+      .apply(DeviceAuthTokenMiddleware)
+      .exclude(
+        {
+          path: 'api/v1/webhook/stellar-transactions',
+          method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/webhook/moralis-transactions',
+          method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/webhook/alchemy-on-ramp',
+          method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/webhook/alchemy-off-ramp',
+          method: RequestMethod.POST,
+        },
+      )
+      .forRoutes('*');
   }
 }

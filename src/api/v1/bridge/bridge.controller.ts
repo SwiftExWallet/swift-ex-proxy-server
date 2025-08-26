@@ -9,9 +9,9 @@ export class BridgeController {
 
   @Post('swap-transaction/prepare')
   async getSwapQuote(@Res() res, @Body() allBridgeSwapADto: AllBridgeSwapADto) {
-    const rawTransaction =
+    const { transaction, type } =
       await this.allBridgeService.prepareTransaction(allBridgeSwapADto);
-    res.status(200).json({ rawTransaction });
+    res.status(200).json({ transaction, type });
   }
 
   @Post('swap-quotes')
@@ -20,6 +20,6 @@ export class BridgeController {
     @Body() allBridgeQuotes: AllBridgeQuotesDto,
   ) {
     const quotes = await this.allBridgeService.getSwapDetails(allBridgeQuotes);
-    res.status(200).json({ ...quotes });
+    res.status(200).json({ quotes });
   }
 }

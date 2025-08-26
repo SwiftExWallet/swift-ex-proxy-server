@@ -18,6 +18,8 @@ export class DeviceAuthTokenMiddleware implements NestMiddleware {
 
   async use(req: any, res: Response, next: () => void): Promise<any> {
     Logger.log('==== device auth middleware called ===');
+    const route = req.originalUrl;
+    console.log('route =====', route);
     if (!req.headers['x-auth-device-token']) {
       throw new NotFoundException('Device token  not found');
     }
@@ -29,10 +31,13 @@ export class DeviceAuthTokenMiddleware implements NestMiddleware {
 
     console.log('===decoded token ===', decodedToken);
 
-    if (!decodedToken) {
+    if (!decodedToken?._id) {
+      console.log('==== no id ===');
       throw new HttpException('Invalid Device', HttpStatus.FORBIDDEN);
     }
     const device = await this.deviceService.findOne(decodedToken._id);
+    console.log('==== device===', { device });
+
     if (!device) {
       throw new HttpException('Invalid Device', HttpStatus.FORBIDDEN);
     }

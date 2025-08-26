@@ -3,7 +3,7 @@ export enum WebhookEnum {
 }
 export enum WebhookNotificationType {
   STELLAR = 'Stellar',
-  MULTI_CHAIN = 'MultiChian',
+  FUND_RECEIVED = 'Funds Received',
 }
 export enum WebhookAssetType {
   XLM = 'native',

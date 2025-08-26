@@ -30,7 +30,8 @@ export class AlchemyWebhookService {
       }
       this.logger.log('Processing OnRamp webhook...');
       const { orderNo } = dto;
-      const order: Order | null = await this.orderService.findOne({ orderNo });
+      const order: Order | null =
+        await this.orderService.findOneByOrderNo(orderNo);
       if (!order) {
         this.logger.error(`order not found ${orderNo}`);
         return;
@@ -39,9 +40,9 @@ export class AlchemyWebhookService {
       if (!order.deviceId) {
         return;
       }
-      const device: Device | null = await this.deviceService.findOne({
-        _id: order.deviceId,
-      });
+      const device: Device | null = await this.deviceService.findOne(
+        order.deviceId,
+      );
       const notificationPayload: NotificationDto = {
         title: `Buy Notification`,
         body,
@@ -71,18 +72,17 @@ export class AlchemyWebhookService {
         );
         return;
       }
-      const order: Order | null = await this.orderService.findOne({
-        merchantOrderNo,
-      });
+      const order: Order | null =
+        await this.orderService.findOneByOrderNo(merchantOrderNo);
       if (!order) {
         this.logger.error(`order not found ${merchantOrderNo}`);
         return;
       }
       const body = `Order update: ₹${order.amount} payment has been marked as ${status}.`;
 
-      const device: Device | null = await this.deviceService.findOne({
-        _id: order.deviceId,
-      });
+      const device: Device | null = await this.deviceService.findOne(
+        order.deviceId,
+      );
       const notificationPayload: NotificationDto = {
         title: `Sell Notification`,
         body,
