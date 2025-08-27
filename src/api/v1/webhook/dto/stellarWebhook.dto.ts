@@ -1,4 +1,4 @@
-export class WebhookStellarDto  {
+export class WebhookStellarDto {
   eventType: string;
   data: {
     id: string;
@@ -22,10 +22,6 @@ export class WebhookStellarDto  {
   additionalData?: string;
 
   isTestPayload(): boolean {
-    return (
-      this.eventType === 'test' &&
-      this.data?.asset_type === 'test' &&
-      this.data?.amount === 'test'
-    );
+    return this.eventType === 'test';
   }
 }

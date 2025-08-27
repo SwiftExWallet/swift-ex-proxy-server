@@ -1,105 +1,196 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { WebhookStellarDto } from './dto/webhook.steller.dto';
-import { WebhookMoralisDto } from './dto/webhook.moralis.dto';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { WebhookStellarDto } from './dto/stellarWebhook.dto';
+import { WebhookMoralisDto } from './dto/moralisWebhook.dto';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';
 import { NotificationDto } from '../notification/dto/notification.dto';
-import { WebhookAssetType, WebhookNotificationType } from '../common/enums/webhook.enum';
+import {
+  WebhookAssetType,
+  WebhookNotificationType,
+} from '../common/enums/webhook.enum';
 import { formatEther } from 'ethers';
 import * as crypto from 'crypto';
+import { RedisService } from '../redis/redis.service';
 
 @Injectable()
 export class WebhookService {
   private readonly logger = new Logger(WebhookService.name);
 
-  constructor(private readonly notificationService: FirebaseNotificationService) {}
+  constructor(
+    private readonly notificationService: FirebaseNotificationService,
+    private readonly redisService: RedisService,
+  ) {}
 
   async handleStellar(payload: WebhookStellarDto) {
-    if (payload.isTestPayload()) {
-      return { status: 'ok', message: 'Test payload skipped' };
+    try {
+      this.logger.log('==== WebhookReceived: HandleStellar ===', { payload });
+      if (payload.isTestPayload()) {
+        return { status: 'ok', message: 'Test payload skipped' };
+      }
+
+      const tagSource = payload.tag ?? payload.data?.additionalData;
+      if (!tagSource) {
+        this.logger.error('No tag or additionalData found for decryption');
+        return;
+      }
+
+      const { decryptedToken } = this.decryptToken(tagSource);
+
+      this.logger.log('==== decryptedToken', { decryptedToken });
+
+      const body = `${payload.data.amount} ${payload.data.asset_type === WebhookAssetType.XLM ? WebhookAssetType.LUMENS : payload.data.asset_code} has been received.`;
+
+      const notificationPayload: NotificationDto = {
+        title: `${WebhookNotificationType.FUND_RECEIVED}`,
+        body,
+        data: {},
+      };
+      this.logger.log('==== notificationPayload', {
+        notificationPayload,
+      });
+
+      const notificationStatus =
+        await this.notificationService.sendNotification(
+          decryptedToken,
+          notificationPayload,
+        );
+      this.logger.log(
+        `==== Notification send successfully ===, ${notificationStatus}`,
+      );
+      return { status: 'ok', message: notificationStatus };
+    } catch (error) {
+      this.logger.error(
+        `=== Error in sending notification ===, ${error.message}`,
+      );
+      this.logger.error(error);
     }
-
-    const tagSource = payload.tag ?? payload.data?.additionalData;
-    if (!tagSource) return { status: false, message: 'No tag or additionalData found for decryption' };
-
-    const decryptRes = await this.decryptToken(tagSource);
-    if (!decryptRes.status) return { status: false, message: 'Token decryption failed' };
-
-    const token = decryptRes.response;
-    const body = `${payload.data.amount} ${payload.data.asset_type===WebhookAssetType.XLM?WebhookAssetType.LUMANS:payload.data.asset_code} has been received.`;
-
-    const notificationPayload: NotificationDto = {
-      title: `${WebhookNotificationType.STELLAR} Notification`,
-      body,
-      data: {},
-    };
-    
-    const notificationStatus=await this.notificationService.sendNotification(token, notificationPayload);
-    return { status: 'ok', message: notificationStatus };
   }
 
   async handleWebhookMoralis(payload: WebhookMoralisDto) {
-    if (payload.isTestPayload()) {
-      return { status: 'ok', message: 'Test payload skipped' };
-    }
-  
-    const decryptRes = await this.decryptToken(payload.tag);
-    if (!decryptRes.status) return { status: false, message: 'Token decryption failed' };
-  
-    const token = decryptRes.response;
-  
-    let body = 'A transaction has been received.';
-  
-    if (payload.erc20Transfers?.length > 0) {
-      const erc = payload.erc20Transfers[0];
-      const amount = erc.valueWithDecimals || formatEther(erc.value);
-      body = `${amount} ${erc.tokenSymbol} has been received.`;
-    } else if (payload.txs?.[0]?.value) {
-      body = `${formatEther(payload.txs[0].value)} ETH has been received.`;
-    }
-  
-    const notificationPayload: NotificationDto = {
-      title: `${WebhookNotificationType.MULTICAHIN} Notification`,
-      body,
-      data: {},
-    };
-  
-    const notificationEthStatus = await this.notificationService.sendNotification(token, notificationPayload);
-    return { status: 'ok', message: notificationEthStatus };
-  }
-
-  private async decryptToken(tagBase64: string): Promise<{ status: boolean; response: string }> {
     try {
-      const keyRes = await this.getSecretKey();
-      if (!keyRes.status){
-        return { status: keyRes.status, response: keyRes.response?.toString() }
+      const { erc20Transfers, erc20Approvals, txs } = payload;
+      this.logger.log('==== WebhookReceived: handleWebhookMoralis ===', {
+        payload,
+      });
+
+      if (payload.isTestPayload()) {
+        return { status: 'ok', message: 'Test payload skipped' };
       }
 
-      const packed = Buffer.from(tagBase64, 'base64');
-      const iv = packed.slice(0, 12);
-      const authTag = packed.slice(-16);
-      const ciphertext = packed.slice(12, -16);
+      const { decryptedToken } = this.decryptToken(payload.tag);
+      this.logger.log('==== decryptedToken ===', { decryptedToken });
+      const splittedDecryptedToken = decryptedToken.split(
+        process.env.NOTIFICATION_SPLIT_KEY as string,
+      );
+      const address = splittedDecryptedToken[1];
+      let body = 'A transaction has been received.';
+      let toAddress, txnHash;
+      if (erc20Transfers?.length > 0) {
+        this.logger.log('==== erc20Transfers ===', erc20Transfers);
+        // ERC-20 Transfer
+        const erc = erc20Transfers[0];
+        toAddress = erc.toAddress;
+        txnHash = erc.hash;
 
-      const decipher = crypto.createDecipheriv('aes-256-gcm', keyRes.response, iv);
-      decipher.setAuthTag(authTag);
+        const amount = erc.valueWithDecimals || formatEther(erc.value);
+        body = `${amount} ${erc.tokenSymbol} has been received.`;
+      } else if (erc20Approvals?.length > 0) {
+        this.logger.log('==== erc20Approvals ===', erc20Approvals);
+        // ERC-20 Approval
+        const approval = erc20Approvals[0];
+        toAddress = approval.toAddress;
+        txnHash = approval.hash;
 
-      const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-      return { status: true, response: decrypted.toString('utf8') };
-    } catch (err) {
-      return { status: false, response: err.message };
+        const amount =
+          approval.valueWithDecimals || formatEther(approval.value);
+        body = `${amount} ${approval.tokenSymbol} has been approved for ${approval.spender}`;
+      } else if (txs?.[0]?.value) {
+        this.logger.log('==== value ===');
+        toAddress = txs?.[0]?.toAddress;
+        txnHash = txs?.[0]?.hash;
+
+        body = `${formatEther(txs[0].value)} ETH has been received.`;
+      }
+
+      this.logger.log('=== address detail===', {
+        toAddress,
+        address,
+        txnHash,
+      });
+      const redisValue = await this.redisService.getKey(txnHash);
+      this.logger.log('=== redis Value===', { redisValue });
+
+      if (redisValue) {
+        this.logger.log('=== event already sent with this hash ===', {
+          txnHash,
+        });
+        return;
+      }
+      if (!toAddress) {
+        this.logger.log('=== to address not found ===');
+      }
+      if (!toAddress.startsWith(`0x${address}`)) {
+        this.logger.log('=== to address did not match ===');
+        return;
+      }
+      const notificationPayload: NotificationDto = {
+        title: `${WebhookNotificationType.FUND_RECEIVED}`,
+        body,
+        data: {},
+      };
+
+      const notificationEthStatus = this.notificationService.sendNotification(
+        splittedDecryptedToken[0],
+        notificationPayload,
+      );
+      this.logger.log('=== setting up redis key ===');
+      this.redisService.setKey(txnHash, '1');
+      return { status: 'ok', message: notificationEthStatus };
+    } catch (error: any) {
+      this.logger.error(
+        `=== Error in sending notification ===, ${error.message}`,
+      );
+      this.logger.error(error);
     }
   }
 
-  private async getSecretKey(): Promise<{ status: boolean; response: Buffer }> {
-   try {
+  private decryptToken(tagBase64: string): {
+    decryptedToken: string;
+  } {
+    const { secretKey } = this.getSecretKey();
+    const packed = Buffer.from(tagBase64, 'base64');
+    const iv = packed.subarray(0, 12);
+    const authTag = packed.subarray(-16);
+    const cipherText = packed.subarray(12, -16);
+
+    const decipher = crypto.createDecipheriv('aes-256-gcm', secretKey, iv);
+    decipher.setAuthTag(authTag);
+
+    const decrypted = Buffer.concat([
+      decipher.update(cipherText),
+      decipher.final(),
+    ]);
+    return { decryptedToken: decrypted.toString('utf8') };
+  }
+
+  private getSecretKey(): { status: boolean; secretKey: Buffer } {
     const base64Key = process.env.TAG_SECRET_KEY;
-    if (!base64Key) return { status: false, response: Buffer.from('') };
+    if (!base64Key) {
+      this.logger.error(`=== TAG_SECRET_KEY not found ====`);
+      throw new NotFoundException('==== TAG_SECRET_KEY Not found ===');
+    }
 
     const keyBuffer = Buffer.from(base64Key, 'base64');
-    if (keyBuffer.length !== 32) return { status: false, response: Buffer.from('') };
-
-    return { status: true, response: keyBuffer };
-   } catch (error) {
-    return { status: false, response: error };
-   }
+    if (keyBuffer.length !== 32) {
+      this.logger.error(`=== Invalid or missing TAG_SECRET_KEY ====`);
+      throw new InternalServerErrorException(
+        'TAG_SECRET_KEY is invalid or not configured properly.',
+      );
+    }
+    return { status: true, secretKey: keyBuffer };
   }
 }

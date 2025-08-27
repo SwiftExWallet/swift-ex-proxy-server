@@ -1,48 +1,50 @@
-import { Controller, Post, Body, Logger, HttpCode, HttpStatus, InternalServerErrorException, } from '@nestjs/common';
-import { WebhookEnum } from '../common/enums/webhook.enum';
-import { WebhookStellarDto } from './dto/webhook.steller.dto';
-import { WebhookMoralisDto } from './dto/webhook.moralis.dto';
+import {
+  Controller,
+  Post,
+  Body,
+  Logger,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { WebhookMoralisDto } from './dto/moralisWebhook.dto';
 import { WebhookService } from './webhook.service';
+import { AlchemyOnRampWebhookDto } from './dto/alchemyOnRampWebhook.dto';
+import { AlchemyOffRampWebhookDto } from './dto/alchemyOffRampWebhook.dto';
+import { AlchemyWebhookService } from './alchemyWebhook.service';
+import { WebhookStellarDto } from './dto/stellarWebhook.dto';
 
 @Controller('/api/v1/webhook')
 export class WebhookController {
-    private readonly logger = new Logger(WebhookController.name);
+  private readonly logger = new Logger(WebhookController.name);
 
-    constructor(private readonly webhookService: WebhookService) { }
+  constructor(
+    private readonly webhookService: WebhookService,
+    private readonly alchemyWebhookService: AlchemyWebhookService,
+  ) {}
 
-    @Post('steller-transactions')
-    @HttpCode(HttpStatus.OK)
-    async handleWebhookStellar(@Body() payload: WebhookStellarDto) {
-        const isTest = payload.eventType === WebhookEnum.TEST;
+  @Post('stellar-transactions')
+  @HttpCode(HttpStatus.OK)
+  async handleWebhookStellar(@Body() webhookStellarDto: WebhookStellarDto) {
+    await this.webhookService.handleStellar(webhookStellarDto);
+    return { status: 'ok', message: 'stellar webhook received.' };
+  }
 
-        if (isTest) {
-            this.logger.warn('Stellar webhook test payload detected.');
-            return { status: 'ok', message: 'Test payload.' };
-        }
+  @Post('moralis-transactions')
+  @HttpCode(HttpStatus.OK)
+  async handleWebhookMoralis(@Body() payload: WebhookMoralisDto) {
+    await this.webhookService.handleWebhookMoralis(payload);
+    return { status: 'ok', message: 'moralis webhook received.' };
+  }
 
-        try {
-            this.logger.log('Stellar webhook processing...');
-            return await this.webhookService.handleStellar(payload);
-        } catch (error) {
-            this.logger.error('Stellar webhook processing payload error:', error.stack);
-            throw new InternalServerErrorException('Failed to process stellar webhook.');
-        }
-    }
+  @Post('alchemy-on-ramp')
+  async handleOnRamp(@Body() body: AlchemyOnRampWebhookDto) {
+    await this.alchemyWebhookService.handleAlchemyOnRamp(body);
+    return { status: 'ok', message: 'alchemy on ramp webhook received.' };
+  }
 
-    @Post('moralis-transactions')
-    @HttpCode(HttpStatus.OK)
-    async handleWebhookMoralis(@Body() payload: WebhookMoralisDto) {
-        if (payload.isTestPayload()) {
-            this.logger.warn('Moralis webhook test payload detected.');
-            return { status: 'ok', message: 'Test payload.' };
-        }
-
-        try {
-            this.logger.log('Moralis webhook processing...');
-            return await this.webhookService.handleWebhookMoralis(payload);
-        } catch (error) {
-            this.logger.error('Moralis webhook processing payload error:', error.stack);
-            throw new InternalServerErrorException('Failed to process moralis webhook.');
-        }
-    }
+  @Post('alchemy-off-ramp')
+  async handleOffRamp(@Body() body: AlchemyOffRampWebhookDto) {
+    await this.alchemyWebhookService.handleAlchemyOffRamp(body);
+    return { status: 'ok', message: 'alchemy off ramp webhook received.' };
+  }
 }

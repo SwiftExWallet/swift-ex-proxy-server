@@ -5,6 +5,8 @@ import { BscService } from './bsc.service';
 import { PrepareSwapTransactionDto } from './dto/prepareSwapTransaction.dto';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
+import { WalletAddressDto } from '../common/dto/walletAddress.dto';
+import { UsdtBalanceDto } from './dto/usdtBalance.dto';
 
 @Controller('/api/v1/bsc')
 export class BscController {
@@ -43,28 +45,24 @@ export class BscController {
     res.status(200).json(data);
   }
 
-  @Get('/:address/balance')
-  async getBalance(@Res() res, @Param('address') address: string) {
-    const data = await this.bscService.getBalance(address);
+  @Get('/:walletAddress/balance')
+  async getBalance(@Res() res, @Param() walletAddressDto: WalletAddressDto) {
+    const data = await this.bscService.getBalance(walletAddressDto);
     res.status(200).json(data);
   }
 
-  @Get('wallet-address/:address/info')
-  async getAddressInfo(@Res() res, @Param('address') address: string) {
-    const data = await this.bscService.getWalletAddressInfo(address);
-    res.status(200).json(data);
-  }
-
-  @Get('/:address/token/:tokenAddress/balance')
-  async getUsdtBalance(
+  @Get('wallet-address/:walletAddress/info')
+  async getAddressInfo(
     @Res() res,
-    @Param('address') address: string,
-    @Param('tokenAddress') tokenAddress: string,
+    @Param() walletAddressDto: WalletAddressDto,
   ) {
-    const data = await this.bscService.getUsdtTokenBalance(
-      address,
-      tokenAddress,
-    );
+    const data = await this.bscService.getWalletAddressInfo(walletAddressDto);
+    res.status(200).json(data);
+  }
+
+  @Get('/:walletAddress/token/:tokenAddress/balance')
+  async getUsdtBalance(@Res() res, @Param() usdtBalanceDto: UsdtBalanceDto) {
+    const data = await this.bscService.getUsdtTokenBalance(usdtBalanceDto);
     res.status(200).json(data);
   }
 

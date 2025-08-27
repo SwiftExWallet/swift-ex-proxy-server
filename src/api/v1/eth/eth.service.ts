@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   ethers,
   FeeData,
@@ -49,8 +49,11 @@ import {
   quoteExactInputSingle,
   getErc20ContractInfo,
 } from '../common/helpers/contractUtilityMethod';
+import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 @Injectable()
 export class EthService {
+  private readonly logger = new Logger(EthService.name);
+
   provider: JsonRpcProvider;
   factoryContract: Contract;
   quoterContract: Contract;
@@ -87,7 +90,7 @@ export class EthService {
         tokenIn.address,
         tokenOut.address,
       );
-
+      this.logger.log('==== poolAddress ===', { poolAddress });
       if (!poolAddress || poolAddress === ethers.ZeroAddress) {
         throw new Error('Pool not found for token pair');
       }
@@ -98,6 +101,7 @@ export class EthService {
         ChainEnum.ETH,
       );
       const fee: bigint = await getPoolContractFee(poolContract);
+      this.logger.log('==== fee ===', { fee });
 
       const formattedAmountIn: bigint = parseUnits(
         amount.toString(),
@@ -112,6 +116,9 @@ export class EthService {
         formattedAmountIn,
       );
 
+      this.logger.log('==== quotedOutput ===', {
+        quotedOutput,
+      });
       const formattedAmountOut: string = formatUnits(
         quotedOutput[0],
         tokenOut.decimals,
@@ -152,6 +159,8 @@ export class EthService {
         tokenOut,
       );
 
+      this.logger.log('==== poolAddress ===', { poolAddress });
+
       if (!poolAddress || poolAddress === ethers.ZeroAddress) {
         throw new Error('Pool not found for token pair');
       }
@@ -162,6 +171,7 @@ export class EthService {
         ChainEnum.ETH,
       );
       const fee: bigint = await getPoolContractFee(poolContract);
+      this.logger.log('==== fee ===', { fee });
 
       const formattedAmountIn: bigint = parseEther(amount.toString());
 
@@ -172,7 +182,9 @@ export class EthService {
         fee,
         formattedAmountIn,
       );
-
+      this.logger.log('==== quotedOutput ===', {
+        quotedOutput,
+      });
       const iface: Interface = this.swapRouterContract.interface;
 
       const data = iface.encodeFunctionData('exactInputSingle', [
@@ -187,7 +199,9 @@ export class EthService {
           sqrtPriceLimitX96: 0,
         },
       ]);
-
+      this.logger.log('==== Iface data ===', {
+        data,
+      });
       const unsignedTx: SwapTx = {
         to: process.env.SWAP_ROUTER_ADDRESS as string,
         data,
@@ -202,8 +216,9 @@ export class EthService {
   }
 
   async getWalletAddressInfo(
-    walletAddress: string,
+    walletAddressDto: WalletAddressDto,
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
+    const { walletAddress } = walletAddressDto;
     const [transactionCount, gasFeeData] = await Promise.all([
       getTransactionCount(this.provider, walletAddress),
       getFeeData(this.provider),
@@ -223,14 +238,47 @@ export class EthService {
       this.provider,
       signedTx,
     );
-    console.log('Broadcasted Tx:', txResponse.hash);
+    this.logger.log('Broadcasted Tx:', txResponse.hash);
 
     const receipt: TransactionReceipt | null = await txResponse.wait(); // Wait for confirmation
-    console.log('Receipt:', receipt);
+    this.logger.log('Receipt:', receipt);
     return {
       txHash: txResponse.hash,
       receipt,
     };
+  }
+
+  async estimateGas(
+    to: string,
+    from: string,
+    data: string,
+    txValue?: string | bigint,
+  ): Promise<number> {
+    try {
+      const valueInBigInt = txValue
+        ? typeof txValue === 'string'
+          ? BigInt(txValue)
+          : txValue
+        : 0n;
+      const estimated = await this.provider.estimateGas({
+        to,
+        data,
+        value: valueInBigInt,
+        from,
+      });
+      this.logger.log('==== estimated ===', { estimated });
+
+      return Number((estimated * 130n) / 100n);
+    } catch (error: any) {
+      this.logger.warn(
+        'Gas estimation failed, using fallback:',
+        error?.message || error,
+      );
+      if (data.includes('0xa9059cbb') || data.includes('0x095ea7b3'))
+        return 100000;
+      if (to === process.env.SWAP_ROUTER_ADDRESS) return 400000;
+      return 80000;
+    }
   }
 
   async prepareSwapTransaction(
@@ -240,28 +288,54 @@ export class EthService {
       swapPrepareDto;
     const nonce: number = await getTransactionCount(this.provider, address);
     const { chainId } = await getNetwork(this.provider);
+    this.logger.log('==== nonce, chainId ===', { nonce, chainId });
 
     const txs: SwapTransaction[] = [];
     const { maxFeePerGas, maxPriorityFeePerGas } = await getFeeData(
       this.provider,
     );
+    this.logger.log('====maxFeePerGas, maxPriorityFeePerGas  ===', {
+      maxFeePerGas,
+      maxPriorityFeePerGas,
+    });
+
     if (
-      !process.env.WETH ||
+      !process.env.WETH_ADDRESS ||
       !process.env.ETH_SWAP_GAS_FEE_LIMIT ||
       !process.env.ETH_SWAP_TYPE ||
-      !process.env.USDC ||
-      !process.env.SWAP_ROUTER ||
+      !process.env.USDC_ADDRESS ||
+      !process.env.SWAP_ROUTER_ADDRESS ||
       !maxFeePerGas ||
       !maxPriorityFeePerGas
     ) {
       throw new Error('Missing swap variable in environment variables');
     }
+    this.logger.log('==== swapType ===', { swapType });
+
     if (swapType == EthSwapEnum.EthToUsdc) {
+      const depositGas = await this.estimateGas(
+        process.env.WETH_ADDRESS,
+        address,
+        depositData,
+        value,
+      );
+      const approveGas = await this.estimateGas(
+        process.env.WETH_ADDRESS,
+        address,
+        approveData,
+      );
+      const swapGas = await this.estimateGas(
+        process.env.SWAP_ROUTER_ADDRESS as string,
+        address,
+        swapData,
+      );
+      this.logger.log('==== gases ===', { depositGas, approveGas, swapGas });
+
       txs.push({
-        to: process.env.WETH,
+        to: process.env.WETH_ADDRESS,
         data: depositData,
         value,
-        gasLimit: +process.env.ETH_SWAP_GAS_FEE_LIMIT,
+        gasLimit: depositGas,
         nonce,
         chainId,
         type: +process.env.ETH_SWAP_TYPE,
@@ -269,9 +343,9 @@ export class EthService {
         maxPriorityFeePerGas,
       });
       txs.push({
-        to: process.env.WETH,
+        to: process.env.WETH_ADDRESS,
         data: approveData,
-        gasLimit: 70000,
+        gasLimit: approveGas,
         nonce: nonce + 1,
         chainId,
         type: 2,
@@ -279,9 +353,9 @@ export class EthService {
         maxPriorityFeePerGas,
       });
       txs.push({
-        to: process.env.SWAP_ROUTER,
+        to: process.env.SWAP_ROUTER_ADDRESS,
         data: swapData,
-        gasLimit: 250000,
+        gasLimit: swapGas,
         nonce: nonce + 2,
         chainId,
         type: 2,
@@ -289,10 +363,25 @@ export class EthService {
         maxPriorityFeePerGas,
       });
     } else if (swapType == EthSwapEnum.UsdcToWeth) {
+      const approveGas = await this.estimateGas(
+        process.env.USDC_ADDRESS,
+        address,
+        approveData,
+      );
+      const swapGas = await this.estimateGas(
+        process.env.SWAP_ROUTER_ADDRESS as string,
+        address,
+        swapData,
+      );
+      this.logger.log('==== gases ===', {
+        approveGas,
+        swapGas,
+      });
+
       txs.push({
-        to: process.env.USDC,
+        to: process.env.USDC_ADDRESS,
         data: approveData,
-        gasLimit: 70000,
+        gasLimit: approveGas,
         nonce,
         chainId,
         type: 2,
@@ -300,9 +389,9 @@ export class EthService {
         maxPriorityFeePerGas,
       });
       txs.push({
-        to: process.env.SWAP_ROUTER,
+        to: process.env.SWAP_ROUTER_ADDRESS,
         data: swapData,
-        gasLimit: 250000,
+        gasLimit: swapGas,
         nonce: nonce + 1,
         chainId,
         type: 2,
@@ -325,6 +414,8 @@ export class EthService {
       const receipt: TransactionReceipt | null = await txResponse.wait();
       receipts.push(receipt ?? undefined);
     }
+    this.logger.log('==== receipt ===', receipts);
+
     return receipts;
   }
 
@@ -384,7 +475,8 @@ export class EthService {
     return transaction;
   }
 
-  getBalance(walletAddress: string): Promise<bigint> {
+  getBalance(walletAddressDto: WalletAddressDto): Promise<bigint> {
+    const { walletAddress } = walletAddressDto;
     return getNativeCurrencyBalance(walletAddress, this.provider);
   }
 }
