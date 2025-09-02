@@ -18,15 +18,19 @@ import {
 import { ValidWalletType } from '../../common/enums/all-bridge.enum';
 import { AllBridgeSwapADto } from './dto/all-bridge-swap.dto';
 import { AllBridgeQuotesDto } from './dto/all-bridge-swap-quotes.dto';
+import { getEstimateGas, getFeeData, getNetwork, getTransactionCount } from '../../common/helpers/blockchainUtilityMethods';
+import { JsonRpcProvider } from 'ethers';
 
 @Injectable()
 export class AllBridgeService {
   private readonly logger = new Logger(AllBridgeService.name);
+  provider: JsonRpcProvider;
 
   private sdk: AllbridgeCoreSdk;
   constructor() {
+    this.provider = new JsonRpcProvider(process.env.PROVIDER_RPC_ETH || '');
     this.sdk = new AllbridgeCoreSdk({
-      ETH: process.env.ETH_PROVIDER as string,
+      ETH: process.env.PROVIDER_RPC_ETH as string,
     });
   }
 
@@ -129,8 +133,21 @@ export class AllBridgeService {
             owner: fromAddress,
           });
         this.logger.log('=== rawTransactionApprove ===', transaction);
+        const [nonce, gasLimit, feeData, network] = await Promise.all([
+          getTransactionCount(this.provider, fromAddress),
+          getEstimateGas(this.provider, fromAddress, transaction),
+          getFeeData(this.provider),
+          getNetwork(this.provider),
+        ]);
+        const txMeta = {
+          nonce: nonce,
+          gasLimit: gasLimit,
+          feeData: feeData,
+          network: network,
+        };
         return {
           transaction,
+          txMeta,
           type: 'approve',
         };
       }
@@ -147,9 +164,22 @@ export class AllBridgeService {
           messenger: Messenger.ALLBRIDGE,
         });
       this.logger.log('=== transfer transaction ===', transaction);
+      const [nonce, gasLimit, feeData, network] = await Promise.all([
+        getTransactionCount(this.provider, fromAddress),
+        getEstimateGas(this.provider, fromAddress, transaction),
+        getFeeData(this.provider),
+        getNetwork(this.provider),
+      ]);
+      const txMeta = {
+        nonce: nonce,
+        gasLimit: gasLimit,
+        feeData: feeData,
+        network: network,
+      };
 
       return {
         transaction,
+         txMeta,
         type: 'transfer',
       };
     } catch (error) {
