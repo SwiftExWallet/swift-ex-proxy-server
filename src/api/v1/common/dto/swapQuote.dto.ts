@@ -1,4 +1,4 @@
-import { IsEthereumAddress, IsNotEmpty, ValidateNested } from 'class-validator';
+import { IsEthereumAddress, IsNotEmpty, IsOptional, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class TokenInfoDto {
@@ -24,4 +24,10 @@ export class SwapQuoteDto {
 
   @IsNotEmpty()
   amount: string;
+
+  @IsOptional()
+  recipient?:string;
+
+  @IsOptional()
+  slippage?:number
 }

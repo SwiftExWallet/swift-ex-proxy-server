@@ -7,13 +7,17 @@ import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto'
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 import { UsdtBalanceDto } from './dto/usdtBalance.dto';
+import { PancakeSwapService } from './pancake/bsc.pancake.service';
 
 @Controller('/api/v1/bsc')
 export class BscController {
-  constructor(private readonly bscService: BscService) {}
+  constructor(
+    private readonly bscService: BscService,
+    private readonly pancakeSwapService:PancakeSwapService
+  ) {}
   @Post('swap-quote')
   async getSwapQuote(@Res() res, @Body() swapQuoteDto: SwapQuoteDto) {
-    const data = await this.bscService.getSwapQuote(swapQuoteDto);
+    const data = await this.pancakeSwapService.getSwapQuote(swapQuoteDto);
     res.status(200).json(data);
   }
 
