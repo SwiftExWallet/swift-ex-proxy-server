@@ -50,6 +50,7 @@ import {
   getErc20ContractInfo,
 } from '../common/helpers/contractUtilityMethod';
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
+import { UniSwapService } from './uniSwap/eth.uniswap.service';
 @Injectable()
 export class EthService {
   private readonly logger = new Logger(EthService.name);
@@ -58,7 +59,7 @@ export class EthService {
   factoryContract: Contract;
   quoterContract: Contract;
   swapRouterContract: Contract;
-  constructor(private readonly providerService: ProviderService) {
+  constructor(private readonly providerService: ProviderService,private readonly uniSwapService:UniSwapService) {
     const factoryAddress = process.env.POOL_FACTORY_CONTRACT_ADDRESS;
     const quoterAddress = process.env.QUOTER_CONTRACT_ADDRESS;
     const swapRouterAddress = process.env.SWAP_ROUTER_ADDRESS;
@@ -83,63 +84,7 @@ export class EthService {
   }
 
   async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
-    try {
-      const { tokenIn, tokenOut, amount } = swapQuoteDto;
-      const poolAddress: string = await getPool(
-        this.factoryContract,
-        tokenIn.address,
-        tokenOut.address,
-      );
-      this.logger.log('==== poolAddress ===', { poolAddress });
-      if (!poolAddress || poolAddress === ethers.ZeroAddress) {
-        throw new Error('Pool not found for token pair');
-      }
-
-      const poolContract: Contract = this.providerService.getContract(
-        poolAddress,
-        ETH_POOL_ABI,
-        ChainEnum.ETH,
-      );
-      const fee: bigint = await getPoolContractFee(poolContract);
-      this.logger.log('==== fee ===', { fee });
-
-      const formattedAmountIn: bigint = parseUnits(
-        amount.toString(),
-        tokenIn.decimals,
-      );
-
-      const quotedOutput: QuotedOutput = await quoteExactInputSingle(
-        this.quoterContract,
-        tokenIn.address,
-        tokenOut.address,
-        fee,
-        formattedAmountIn,
-      );
-
-      this.logger.log('==== quotedOutput ===', {
-        quotedOutput,
-      });
-      const formattedAmountOut: string = formatUnits(
-        quotedOutput[0],
-        tokenOut.decimals,
-      );
-
-      const pricePerToken: string = (
-        parseFloat(formattedAmountOut) / parseFloat(amount)
-      ).toFixed(6);
-
-      return {
-        inputAmount: amount,
-        inputToken: tokenIn.symbol,
-        outputAmount: formattedAmountOut,
-        outputToken: tokenOut.symbol,
-        pricePerToken: pricePerToken,
-        fee: fee.toString(),
-        poolAddress: poolAddress,
-      };
-    } catch (error: any) {
-      throw new Error(`Failed to get swap quote: ${error.message}`);
-    }
+    return await this.uniSwapService.getQuote(swapQuoteDto)
   }
 
   async prepareUsdtSwapTransaction(
@@ -233,20 +178,23 @@ export class EthService {
   async broadcastTransaction(
     broadcastTransactionDto: BroadcastTransactionDto,
   ): Promise<{ txHash: string; receipt: TransactionReceipt | null }> {
-    const { signedTx } = broadcastTransactionDto;
-    const txResponse: TransactionResponse = await broadcastTransactionToNetwork(
-      this.provider,
-      signedTx,
-    );
-    this.logger.log('Broadcasted Tx:', txResponse.hash);
-
-    const receipt: TransactionReceipt | null = await txResponse.wait(); // Wait for confirmation
-    this.logger.log('Receipt:', receipt);
-    return {
-      txHash: txResponse.hash,
-      receipt,
-    };
+    try {
+      const { signedTx } = broadcastTransactionDto;
+      const txResponse: TransactionResponse = await this.provider.broadcastTransaction(signedTx);
+      this.logger.log(`Broadcasted Tx: ${txResponse.hash}`);
+      const receipt: TransactionReceipt | null = await txResponse.wait();
+      this.logger.log(`Receipt: ${JSON.stringify(receipt)}`);
+  
+      return {
+        txHash: txResponse.hash,
+        receipt,
+      };
+    } catch (error) {
+      this.logger.error('Broadcast error:', error);
+      throw error;
+    }
   }
+  
 
   async estimateGas(
     to: string,
@@ -282,142 +230,25 @@ export class EthService {
   }
 
   async prepareSwapTransaction(
-    swapPrepareDto: SwapPrepareDto,
-  ): Promise<SwapTransaction[]> {
-    const { address, swapType, value, depositData, approveData, swapData } =
-      swapPrepareDto;
-    const nonce: number = await getTransactionCount(this.provider, address);
-    const { chainId } = await getNetwork(this.provider);
-    this.logger.log('==== nonce, chainId ===', { nonce, chainId });
-
-    const txs: SwapTransaction[] = [];
-    const { maxFeePerGas, maxPriorityFeePerGas } = await getFeeData(
-      this.provider,
-    );
-    this.logger.log('====maxFeePerGas, maxPriorityFeePerGas  ===', {
-      maxFeePerGas,
-      maxPriorityFeePerGas,
-    });
-
-    if (
-      !process.env.WETH_ADDRESS ||
-      !process.env.ETH_SWAP_GAS_FEE_LIMIT ||
-      !process.env.ETH_SWAP_TYPE ||
-      !process.env.USDC_ADDRESS ||
-      !process.env.SWAP_ROUTER_ADDRESS ||
-      !maxFeePerGas ||
-      !maxPriorityFeePerGas
-    ) {
-      throw new Error('Missing swap variable in environment variables');
-    }
-    this.logger.log('==== swapType ===', { swapType });
-
-    if (swapType == EthSwapEnum.EthToUsdc) {
-      const depositGas = await this.estimateGas(
-        process.env.WETH_ADDRESS,
-        address,
-        depositData,
-        value,
-      );
-      const approveGas = await this.estimateGas(
-        process.env.WETH_ADDRESS,
-        address,
-        approveData,
-      );
-      const swapGas = await this.estimateGas(
-        process.env.SWAP_ROUTER_ADDRESS as string,
-        address,
-        swapData,
-      );
-      this.logger.log('==== gases ===', { depositGas, approveGas, swapGas });
-
-      txs.push({
-        to: process.env.WETH_ADDRESS,
-        data: depositData,
-        value,
-        gasLimit: depositGas,
-        nonce,
-        chainId,
-        type: +process.env.ETH_SWAP_TYPE,
-        maxFeePerGas,
-        maxPriorityFeePerGas,
-      });
-      txs.push({
-        to: process.env.WETH_ADDRESS,
-        data: approveData,
-        gasLimit: approveGas,
-        nonce: nonce + 1,
-        chainId,
-        type: 2,
-        maxFeePerGas,
-        maxPriorityFeePerGas,
-      });
-      txs.push({
-        to: process.env.SWAP_ROUTER_ADDRESS,
-        data: swapData,
-        gasLimit: swapGas,
-        nonce: nonce + 2,
-        chainId,
-        type: 2,
-        maxFeePerGas,
-        maxPriorityFeePerGas,
-      });
-    } else if (swapType == EthSwapEnum.UsdcToWeth) {
-      const approveGas = await this.estimateGas(
-        process.env.USDC_ADDRESS,
-        address,
-        approveData,
-      );
-      const swapGas = await this.estimateGas(
-        process.env.SWAP_ROUTER_ADDRESS as string,
-        address,
-        swapData,
-      );
-      this.logger.log('==== gases ===', {
-        approveGas,
-        swapGas,
-      });
-
-      txs.push({
-        to: process.env.USDC_ADDRESS,
-        data: approveData,
-        gasLimit: approveGas,
-        nonce,
-        chainId,
-        type: 2,
-        maxFeePerGas,
-        maxPriorityFeePerGas,
-      });
-      txs.push({
-        to: process.env.SWAP_ROUTER_ADDRESS,
-        data: swapData,
-        gasLimit: swapGas,
-        nonce: nonce + 1,
-        chainId,
-        type: 2,
-        maxFeePerGas,
-        maxPriorityFeePerGas,
-      });
-    } else {
-      throw new BadRequestException('Invalid swap type');
-    }
-    return txs;
+    swapPrepareDto:SwapQuoteDto,
+  ): Promise<any> {
+   return await this.uniSwapService.buildSwapTx(swapPrepareDto)
   }
 
   async executeSwapTransactions(
-    txs: string[],
-  ): Promise<(TransactionReceipt | undefined)[]> {
-    const receipts: (TransactionReceipt | undefined)[] = [];
-    for (const tx of txs) {
-      const txResponse: TransactionResponse =
-        await broadcastTransactionToNetwork(this.provider, tx);
-      const receipt: TransactionReceipt | null = await txResponse.wait();
-      receipts.push(receipt ?? undefined);
+    txs: string[],   // array of signed tx strings
+  ): Promise<any> {
+    const txHashes: string[] = [];
+  
+    for (const signedTx of txs) {
+      const txResponse = await this.provider.broadcastTransaction(signedTx);
+      txHashes.push(txResponse.hash);
+      await txResponse.wait();
     }
-    this.logger.log('==== receipt ===', receipts);
-
-    return receipts;
+  
+    return { txHashes };
   }
+  
 
   async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
     const { addresses, walletAddress } = getTokenInfoDto;

@@ -24,7 +24,7 @@ export interface SwapQuote {
   outputToken: string;
   pricePerToken: string;
   fee: string;
-  poolAddress: string;
+  poolAddress?: string;
 }
 
 export interface QuotedOutput {
@@ -32,4 +32,35 @@ export interface QuotedOutput {
   sqrtPriceX96After: number;
   initializedTicksCrossed: number;
   gasEstimate: number;
+}
+
+export interface PancakeSwapQuoteParams {
+    fromTokenAddress: string;
+    toTokenAddress: string;
+    amount: string;
+    slippage?: number;
+}
+
+export interface PancakeSwapParams extends PancakeSwapQuoteParams {
+    fromAddress: string;
+    gasPrice?: string;
+}
+
+export interface PancakeSwapQuote {
+    fromToken: PancakeTokenInfo;
+    toToken: PancakeTokenInfo;
+    fromTokenAmount: string;
+    toTokenAmount: string;
+    priceImpact: string;
+    minimumReceived: string;
+    route: string[];
+    gasEstimate?: string;
+    transaction?: any;
+}
+
+export interface PancakeTokenInfo {
+    symbol: string;
+    name: string;
+    address: string;
+    decimals: number;
 }
