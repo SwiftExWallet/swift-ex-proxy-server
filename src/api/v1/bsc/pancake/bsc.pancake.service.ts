@@ -112,10 +112,6 @@ export class PancakeSwapService {
       );
       const route = new Route([pair], fromToken, toToken);
       const trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
-      const slippageTolerance = new Percent(
-        Math.floor(slippage * 100),
-        '10000',
-      );
       const formattedAmountOut = trade.outputAmount.toExact();
       const pricePerToken = trade.executionPrice.invert();
 
@@ -125,7 +121,7 @@ export class PancakeSwapService {
         outputAmount: formattedAmountOut,
         outputToken: tokenOut.symbol,
         pricePerToken: pricePerToken.toSignificant(6),
-        fee: (3000).toString(),
+        fee: process.env.FEE_TIER as string,
       };
     } catch (error) {
       console.error('Quote error:', error);
@@ -160,7 +156,7 @@ export class PancakeSwapService {
       const trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
       const slippageTolerance = new Percent(
         Math.floor(slippage * 100),
-        '10000',
+        process.env.PANCAKE_SLIPPAGE as string,
       );
       const minimumAmountOut = trade.minimumAmountOut(slippageTolerance);
 
@@ -172,7 +168,7 @@ export class PancakeSwapService {
         fromToken.address,
       );
       const feeData = await this.ethersProvider.getFeeData();
-      const gasPrice = feeData.gasPrice || parseUnits('5', 'gwei');
+      const gasPrice = feeData.gasPrice || parseUnits(process.env.BSC_SLIPPAGE as string, 'gwei');
 
       let swapTransaction: any;
       let approvalTransaction: any = null;
@@ -192,7 +188,7 @@ export class PancakeSwapService {
           to: this.ROUTER_ADDRESS,
           value: currencyAmount.quotient.toString(),
           data,
-          gasLimit: '300000',
+          gasLimit: process.env.BSC_TRANSACTION_GAS_LIMIT as string,
           gasPrice: gasPrice.toString(),
           nonce,
           chainId: this.chainId,
@@ -227,7 +223,7 @@ export class PancakeSwapService {
           to: this.ROUTER_ADDRESS,
           value: '0',
           data,
-          gasLimit: '300000',
+          gasLimit: process.env.BSC_TRANSACTION_GAS_LIMIT as string,
           gasPrice: gasPrice.toString(),
           nonce: needsApproval ? nonce + 1 : nonce,
           chainId: this.chainId,
@@ -262,7 +258,7 @@ export class PancakeSwapService {
           to: this.ROUTER_ADDRESS,
           value: '0',
           data,
-          gasLimit: '300000',
+          gasLimit: process.env.BSC_TRANSACTION_GAS_LIMIT as string,
           gasPrice: gasPrice.toString(),
           nonce: needsApproval ? nonce + 1 : nonce,
           chainId: this.chainId,
@@ -334,13 +330,13 @@ export class PancakeSwapService {
     ]);
 
     const feeData = await this.ethersProvider.getFeeData();
-    const gasPrice = feeData.gasPrice || parseUnits('5', 'gwei');
+    const gasPrice = feeData.gasPrice || parseUnits(process.env.BSC_SLIPPAGE as string, 'gwei');
 
     return {
       to: tokenAddress,
       value: '0',
       data,
-      gasLimit: '100000',
+      gasLimit: process.env.PANCAKE_GAS_FEE_LIMIT as string,
       gasPrice: gasPrice.toString(),
       nonce,
       chainId: this.chainId,
@@ -360,7 +356,7 @@ export class PancakeSwapService {
       return estimatedGas.toString();
     } catch (error) {
       console.error('Gas estimation failed:', error);
-      return '300000';
+      return process.env.BSC_TRANSACTION_GAS_LIMIT as string;
     }
   }
 }
