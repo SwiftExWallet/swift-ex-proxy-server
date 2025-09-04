@@ -1,13 +1,12 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
-  ethers,
   FeeData,
   formatUnits,
   Interface,
   parseEther,
-  parseUnits,
   TransactionReceipt,
   TransactionResponse,
+  ZeroAddress,
 } from 'ethers';
 import { JsonRpcProvider, Contract } from 'ethers';
 import {
@@ -38,7 +37,6 @@ import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 import {
   QuotedOutput,
   SwapQuote,
-  SwapTransaction,
   SwapTx,
 } from '../common/interface/swap.interface';
 import { FullTransaction } from '../common/interface/transaction.interface';
@@ -59,7 +57,10 @@ export class EthService {
   factoryContract: Contract;
   quoterContract: Contract;
   swapRouterContract: Contract;
-  constructor(private readonly providerService: ProviderService,private readonly uniSwapService:UniSwapService) {
+  constructor(
+    private readonly providerService: ProviderService,
+    private readonly uniSwapService: UniSwapService,
+  ) {
     const factoryAddress = process.env.POOL_FACTORY_CONTRACT_ADDRESS;
     const quoterAddress = process.env.QUOTER_CONTRACT_ADDRESS;
     const swapRouterAddress = process.env.SWAP_ROUTER_ADDRESS;
@@ -84,7 +85,7 @@ export class EthService {
   }
 
   async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
-    return await this.uniSwapService.getQuote(swapQuoteDto)
+    return await this.uniSwapService.getQuote(swapQuoteDto);
   }
 
   async prepareUsdtSwapTransaction(
@@ -106,7 +107,7 @@ export class EthService {
 
       this.logger.log('==== poolAddress ===', { poolAddress });
 
-      if (!poolAddress || poolAddress === ethers.ZeroAddress) {
+      if (!poolAddress || poolAddress === ZeroAddress) {
         throw new Error('Pool not found for token pair');
       }
 
@@ -180,11 +181,12 @@ export class EthService {
   ): Promise<{ txHash: string; receipt: TransactionReceipt | null }> {
     try {
       const { signedTx } = broadcastTransactionDto;
-      const txResponse: TransactionResponse = await this.provider.broadcastTransaction(signedTx);
+      const txResponse: TransactionResponse =
+        await this.provider.broadcastTransaction(signedTx);
       this.logger.log(`Broadcasted Tx: ${txResponse.hash}`);
       const receipt: TransactionReceipt | null = await txResponse.wait();
       this.logger.log(`Receipt: ${JSON.stringify(receipt)}`);
-  
+
       return {
         txHash: txResponse.hash,
         receipt,
@@ -194,7 +196,6 @@ export class EthService {
       throw error;
     }
   }
-  
 
   async estimateGas(
     to: string,
@@ -229,26 +230,23 @@ export class EthService {
     }
   }
 
-  async prepareSwapTransaction(
-    swapPrepareDto:SwapQuoteDto,
-  ): Promise<any> {
-   return await this.uniSwapService.buildSwapTx(swapPrepareDto)
+  async prepareSwapTransaction(swapPrepareDto: SwapQuoteDto): Promise<any> {
+    return await this.uniSwapService.buildSwapTx(swapPrepareDto);
   }
 
   async executeSwapTransactions(
-    txs: string[],   // array of signed tx strings
+    txs: string[], // array of signed tx strings
   ): Promise<any> {
     const txHashes: string[] = [];
-  
+
     for (const signedTx of txs) {
       const txResponse = await this.provider.broadcastTransaction(signedTx);
       txHashes.push(txResponse.hash);
       await txResponse.wait();
     }
-  
+
     return { txHashes };
   }
-  
 
   async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
     const { addresses, walletAddress } = getTokenInfoDto;
