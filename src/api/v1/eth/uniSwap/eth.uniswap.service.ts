@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
-  ethers,
   JsonRpcProvider,
   Contract,
   parseUnits,
@@ -12,6 +11,7 @@ import { Token } from '@uniswap/sdk-core';
 import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
 import { SwapQuote } from '../../common/interface/swap.interface';
 import { ETH_POOL_ABI, ETH_PREPARE_ABI, WETH_ABI } from '../../common/abi/eth';
+import { AddressType } from '../../common/enums/pancake.enum';
 
 @Injectable()
 export class UniSwapService {
@@ -54,7 +54,7 @@ export class UniSwapService {
       const amountOut = await quoterContract.quoteExactInputSingle.staticCall(
         tokenIn.address,
         tokenOut.address,
-        3000,
+        process.env.FEE_TIER,
         amountInWei,
         0,
       );
@@ -70,7 +70,7 @@ export class UniSwapService {
         outputAmount: formattedAmountOut,
         outputToken: swapQuoteDto.tokenOut.symbol,
         pricePerToken: pricePerToken.toString(),
-        fee: (3000).toString(),
+        fee: process.env.FEE_TIER as string,
       };
     } catch (error) {
       this.logger.error('Quote error:', error.message);
@@ -80,7 +80,7 @@ export class UniSwapService {
 
   async buildSwapTx(
     swapQuoteDto: SwapQuoteDto,
-    slippageBps = 50,
+    slippageBps = process.env.UNISWAP_SLIPPAGE as any,
   ): Promise<TransactionRequest[]> {
     try {
       const quote = await this.getQuote(swapQuoteDto);
@@ -113,7 +113,7 @@ export class UniSwapService {
       const nonce = await this.provider.getTransactionCount(fromAddress);
 
       const txs: TransactionRequest[] = [];
-      if (tokenIn.symbol === 'WETH') {
+      if (tokenIn.symbol === AddressType.WETH) {
         const wethContract = new Contract(
           tokenIn.address,
           WETH_ABI,
@@ -129,16 +129,16 @@ export class UniSwapService {
         const gasForWrap = await this.provider.estimateGas(wrapTx);
         wrapTx.gasLimit = (gasForWrap * 120n) / 100n;
         wrapTx.chainId = 1n;
-        wrapTx.type = 2;
-        wrapTx.maxFeePerGas = parseUnits('30', 'gwei');
-        wrapTx.maxPriorityFeePerGas = parseUnits('2', 'gwei');
+        wrapTx.type = process.env.ETH_SWAP_TYPE as any;
+        wrapTx.maxFeePerGas = parseUnits(process.env.UNISWAP_MAXFEE as string, 'gwei');
+        wrapTx.maxPriorityFeePerGas = parseUnits(process.env.UNISWAP_MAX_PRIORITY_FEE as string, 'gwei');
 
         txs.push(wrapTx);
         const txData = routerIface.encodeFunctionData('exactInputSingle', [
           {
             tokenIn: tokenIn.address,
             tokenOut: tokenOut.address,
-            fee: 3000,
+            fee: process.env.FEE_TIER,
             recipient: swapQuoteDto.recipient,
             deadline,
             amountIn: amountInWei,
@@ -153,21 +153,21 @@ export class UniSwapService {
           data: txData,
           chainId: 1,
           nonce: nonce + 1,
-          type: 2,
-          maxFeePerGas: parseUnits('30', 'gwei'),
-          maxPriorityFeePerGas: parseUnits('2', 'gwei'),
+          type: process.env.ETH_SWAP_TYPE as any,
+          maxFeePerGas: parseUnits(process.env.UNISWAP_MAXFEE as string, 'gwei'),
+          maxPriorityFeePerGas: parseUnits(process.env.UNISWAP_MAX_PRIORITY_FEE as string, 'gwei'),
         };
 
         const estimatedGas = await this.provider.estimateGas(swapTx);
         swapTx.gasLimit = (estimatedGas * 120n) / 100n;
 
         txs.push(swapTx);
-      } else if (tokenIn.symbol === 'ETH') {
+      } else if (tokenIn.symbol === AddressType.ETH) {
         const txData = routerIface.encodeFunctionData('exactInputSingle', [
           {
             tokenIn: tokenIn.address,
             tokenOut: tokenOut.address,
-            fee: 3000,
+            fee: process.env.FEE_TIER,
             recipient: swapQuoteDto.recipient,
             deadline,
             amountIn: amountInWei,
@@ -183,9 +183,9 @@ export class UniSwapService {
           value: amountInWei,
           chainId: 1,
           nonce,
-          type: 2,
-          maxFeePerGas: parseUnits('30', 'gwei'),
-          maxPriorityFeePerGas: parseUnits('2', 'gwei'),
+          type: process.env.ETH_SWAP_TYPE as any,
+          maxFeePerGas: parseUnits(process.env.UNISWAP_MAXFEE as string, 'gwei'),
+          maxPriorityFeePerGas: parseUnits(process.env.UNISWAP_MAX_PRIORITY_FEE as string, 'gwei'),
         };
 
         const estimatedGas = await this.provider.estimateGas(rawTx);
@@ -197,7 +197,7 @@ export class UniSwapService {
           {
             tokenIn: tokenIn.address,
             tokenOut: tokenOut.address,
-            fee: 3000,
+            fee: process.env.FEE_TIER,
             recipient: swapQuoteDto.recipient,
             deadline,
             amountIn: amountInWei,
@@ -212,9 +212,9 @@ export class UniSwapService {
           data: txData,
           chainId: 1,
           nonce,
-          type: 2,
-          maxFeePerGas: parseUnits('30', 'gwei'),
-          maxPriorityFeePerGas: parseUnits('2', 'gwei'),
+          type: process.env.ETH_SWAP_TYPE as any,
+          maxFeePerGas: parseUnits(process.env.UNISWAP_MAXFEE as string, 'gwei'),
+          maxPriorityFeePerGas: parseUnits(process.env.UNISWAP_MAX_PRIORITY_FEE as string, 'gwei'),
         };
 
         const estimatedGas = await this.provider.estimateGas(rawTx);
