@@ -35,7 +35,7 @@ export const getErc20ContractTokenBalance = (
   walletAddress: string,
   provider: JsonRpcProvider,
 ): Promise<bigint> => {
-  const tokenContract: Contract = new ethers.Contract(
+  const tokenContract: Contract = new Contract(
     tokenContractAddress,
     ETH_ERC20_ABI,
     provider,
@@ -63,7 +63,7 @@ export const getEstimateGas = async (
       value: unsignedTx.value || '0x0',
     });
   } catch (error) {
-    console.error("Gas estimation error details:", error);
+    console.error('Gas estimation error details:', error);
     throw error;
   }
 };

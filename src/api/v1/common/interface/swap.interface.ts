@@ -64,3 +64,26 @@ export interface PancakeTokenInfo {
     address: string;
     decimals: number;
 }
+
+export interface PancakeUnsignedSwapTransaction {
+    transaction: {
+      to: string;
+      value: string;
+      data: string;
+      gasLimit: string;
+      gasPrice: string;
+      nonce: number;
+      chainId: number;
+    };
+    approvalTransaction?: {
+      to: string;
+      value: string;
+      data: string;
+      gasLimit: string;
+      gasPrice: string;
+      nonce: number;
+      chainId: number;
+    } | null;
+    quote: PancakeSwapQuote;
+  }
+  
