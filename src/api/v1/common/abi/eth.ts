@@ -141,7 +141,7 @@ export const ETH_FACTORY_ABI = [
 ];
 export const ETH_PREPARE_ABI =['function exactInputSingle((address tokenIn,address tokenOut,uint24 fee,address recipient,uint256 deadline,uint256 amountIn,uint256 amountOutMinimum,uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)']
 
-// export const ETH_POOL_ABI = ['function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)'];
+export const ETH_UNI_POOL_ABI = ['function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)'];
 export const ETH_POOL_ABI = [
   { inputs: [], stateMutability: 'nonpayable', type: 'constructor' },
   {

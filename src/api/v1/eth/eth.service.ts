@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   FeeData,
   formatUnits,
@@ -35,9 +35,9 @@ import { ProviderService } from '../provider/provider.service';
 import { ChainEnum } from '../common/enums/chain.enum';
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 import {
+  ExecutedTransaction,
   QuotedOutput,
   SwapQuote,
-  SwapTransaction,
   SwapTx,
 } from '../common/interface/swap.interface';
 import { FullTransaction } from '../common/interface/transaction.interface';
@@ -182,19 +182,22 @@ export class EthService {
   async broadcastTransaction(
     broadcastTransactionDto: BroadcastTransactionDto,
   ): Promise<{ txHash: string; receipt: TransactionReceipt | null }> {
-    const { signedTx } = broadcastTransactionDto;
-    const txResponse: TransactionResponse = await broadcastTransactionToNetwork(
-      this.provider,
-      signedTx,
-    );
-    this.logger.log('Broadcasted Tx:', txResponse.hash);
+    try {
+      const { signedTx } = broadcastTransactionDto;
+      const txResponse: TransactionResponse =
+        await this.provider.broadcastTransaction(signedTx);
+      this.logger.log(`Broadcasted Tx: ${txResponse.hash}`);
+      const receipt: TransactionReceipt | null = await txResponse.wait();
+      this.logger.log(`Receipt: ${JSON.stringify(receipt)}`);
 
-    const receipt: TransactionReceipt | null = await txResponse.wait(); // Wait for confirmation
-    this.logger.log('Receipt:', receipt);
-    return {
-      txHash: txResponse.hash,
-      receipt,
-    };
+      return {
+        txHash: txResponse.hash,
+        receipt,
+      };
+    } catch (error) {
+      this.logger.error('Broadcast error:', error);
+      throw error;
+    }
   }
 
   async estimateGas(
@@ -236,17 +239,18 @@ export class EthService {
 
   async executeSwapTransactions(
     txs: string[],
-  ): Promise<(TransactionReceipt | undefined)[]> {
-    const receipts: (TransactionReceipt | undefined)[] = [];
-    for (const tx of txs) {
-      const txResponse: TransactionResponse =
-        await broadcastTransactionToNetwork(this.provider, tx);
-      const receipt: TransactionReceipt | null = await txResponse.wait();
-      receipts.push(receipt ?? undefined);
+  ): Promise<ExecutedTransaction[]> {
+    const txResponses: ExecutedTransaction[] = [];
+  
+    for (const signedTx of txs) {
+      const txResponse: TransactionResponse = await this.provider.broadcastTransaction(signedTx);      
+      const receipt = await txResponse.wait();
+      if (!receipt) {
+        throw new Error(`Transaction ${txResponse.hash} failed or not mined`);
+      }
+      txResponses.push({ txResponse, receipt });
     }
-    this.logger.log('==== receipt ===', receipts);
-
-    return receipts;
+    return txResponses;
   }
 
   async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {

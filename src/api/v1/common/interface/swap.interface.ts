@@ -1,3 +1,5 @@
+import { TransactionReceipt, TransactionResponse } from "ethers";
+
 export interface SwapTransaction {
   to: string;
   data: string;
@@ -87,3 +89,7 @@ export interface PancakeUnsignedSwapTransaction {
     quote: PancakeSwapQuote;
   }
   
+export interface ExecutedTransaction {
+    txResponse: TransactionResponse;
+    receipt: TransactionReceipt;
+  }
