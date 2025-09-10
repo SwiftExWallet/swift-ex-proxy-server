@@ -12,6 +12,7 @@ import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
 import { SwapQuote } from '../../common/interface/swap.interface';
 import { ETH_POOL_ABI, ETH_PREPARE_ABI, WETH_ABI } from '../../common/abi/eth';
 import { AddressType } from '../../common/enums/pancake.enum';
+import { ProviderService } from '../../provider/provider.service';
 
 @Injectable()
 export class UniSwapService {
@@ -24,8 +25,9 @@ export class UniSwapService {
   private readonly SWAP_ROUTER_ADDRESS = process.env
     .SWAP_ROUTER_ADDRESS as string;
 
-  constructor() {
-    this.provider = new JsonRpcProvider(process.env.PROVIDER_RPC_ETH);
+  constructor(private readonly providerService: ProviderService) {
+      const rpcUrl = providerService.getRpcUrl();
+        this.provider = new JsonRpcProvider(rpcUrl);
   }
 
   async getQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {

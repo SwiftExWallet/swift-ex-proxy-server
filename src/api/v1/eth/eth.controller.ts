@@ -28,7 +28,7 @@ export class EthController {
   }
 
   @Post('swap-transaction/prepare')
-  async swapPrepare(@Res() res, @Body() swapPrepareDto: SwapQuoteDto) {
+  async swapPrepare(@Res() res, @Body() swapPrepareDto: SwapPrepareDto) {
     const data = await this.ethService.prepareSwapTransaction(swapPrepareDto);
     res.status(200).json(data);
   }

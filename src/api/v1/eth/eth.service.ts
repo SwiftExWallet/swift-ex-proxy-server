@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   FeeData,
   formatUnits,
@@ -37,6 +37,7 @@ import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 import {
   QuotedOutput,
   SwapQuote,
+  SwapTransaction,
   SwapTx,
 } from '../common/interface/swap.interface';
 import { FullTransaction } from '../common/interface/transaction.interface';
@@ -49,6 +50,7 @@ import {
 } from '../common/helpers/contractUtilityMethod';
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 import { UniSwapService } from './uniSwap/eth.uniswap.service';
+import { EthTestnetSwapService } from './eth.testnet.service';
 @Injectable()
 export class EthService {
   private readonly logger = new Logger(EthService.name);
@@ -60,6 +62,7 @@ export class EthService {
   constructor(
     private readonly providerService: ProviderService,
     private readonly uniSwapService: UniSwapService,
+    private readonly ethTestnetSwapService: EthTestnetSwapService
   ) {
     const factoryAddress = process.env.POOL_FACTORY_CONTRACT_ADDRESS;
     const quoterAddress = process.env.QUOTER_CONTRACT_ADDRESS;
@@ -85,7 +88,7 @@ export class EthService {
   }
 
   async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
-    return await this.uniSwapService.getQuote(swapQuoteDto);
+    return process.env.ENVIRONMENT==="dev"?await this.ethTestnetSwapService.getQuote(swapQuoteDto):await this.uniSwapService.getQuote(swapQuoteDto);
   }
 
   async prepareUsdtSwapTransaction(
@@ -179,22 +182,19 @@ export class EthService {
   async broadcastTransaction(
     broadcastTransactionDto: BroadcastTransactionDto,
   ): Promise<{ txHash: string; receipt: TransactionReceipt | null }> {
-    try {
-      const { signedTx } = broadcastTransactionDto;
-      const txResponse: TransactionResponse =
-        await this.provider.broadcastTransaction(signedTx);
-      this.logger.log(`Broadcasted Tx: ${txResponse.hash}`);
-      const receipt: TransactionReceipt | null = await txResponse.wait();
-      this.logger.log(`Receipt: ${JSON.stringify(receipt)}`);
+    const { signedTx } = broadcastTransactionDto;
+    const txResponse: TransactionResponse = await broadcastTransactionToNetwork(
+      this.provider,
+      signedTx,
+    );
+    this.logger.log('Broadcasted Tx:', txResponse.hash);
 
-      return {
-        txHash: txResponse.hash,
-        receipt,
-      };
-    } catch (error) {
-      this.logger.error('Broadcast error:', error);
-      throw error;
-    }
+    const receipt: TransactionReceipt | null = await txResponse.wait(); // Wait for confirmation
+    this.logger.log('Receipt:', receipt);
+    return {
+      txHash: txResponse.hash,
+      receipt,
+    };
   }
 
   async estimateGas(
@@ -230,22 +230,23 @@ export class EthService {
     }
   }
 
-  async prepareSwapTransaction(swapPrepareDto: SwapQuoteDto): Promise<any> {
-    return await this.uniSwapService.buildSwapTx(swapPrepareDto);
+  async prepareSwapTransaction(dto: SwapPrepareDto | SwapQuoteDto): Promise<any> {
+    return process.env.ENVIRONMENT==="dev"?await this.ethTestnetSwapService.prepareSwapTransaction(dto as SwapPrepareDto):await this.uniSwapService.buildSwapTx(dto as SwapQuoteDto);
   }
 
   async executeSwapTransactions(
-    txs: string[], // array of signed tx strings
-  ): Promise<any> {
-    const txHashes: string[] = [];
-
-    for (const signedTx of txs) {
-      const txResponse = await this.provider.broadcastTransaction(signedTx);
-      txHashes.push(txResponse.hash);
-      await txResponse.wait();
+    txs: string[],
+  ): Promise<(TransactionReceipt | undefined)[]> {
+    const receipts: (TransactionReceipt | undefined)[] = [];
+    for (const tx of txs) {
+      const txResponse: TransactionResponse =
+        await broadcastTransactionToNetwork(this.provider, tx);
+      const receipt: TransactionReceipt | null = await txResponse.wait();
+      receipts.push(receipt ?? undefined);
     }
+    this.logger.log('==== receipt ===', receipts);
 
-    return { txHashes };
+    return receipts;
   }
 
   async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {

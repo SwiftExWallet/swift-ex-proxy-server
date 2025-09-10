@@ -17,7 +17,7 @@ export class BscController {
   ) {}
   @Post('swap-quote')
   async getSwapQuote(@Res() res, @Body() swapQuoteDto: SwapQuoteDto) {
-    const data = await this.pancakeSwapService.getSwapQuote(swapQuoteDto);
+    const data = process.env.ENVIRONMENT==="dev"?await this.bscService.getSwapQuote(swapQuoteDto):await this.pancakeSwapService.getSwapQuote(swapQuoteDto);
     res.status(200).json(data);
   }
 
