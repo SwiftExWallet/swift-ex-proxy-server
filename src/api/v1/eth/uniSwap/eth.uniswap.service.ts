@@ -112,8 +112,10 @@ export class UniSwapService {
         (Number(process.env.TX_DEADLINE_SEC) || 600);
 
       const fromAddress = swapQuoteDto.recipient!;
-      const nonce = await this.provider.getTransactionCount(fromAddress, "pending");
-      const feeData = await this.provider.getFeeData();
+      const [nonce,feeData]= await Promise.all([
+        this.provider.getTransactionCount(fromAddress, "pending"),
+        this.provider.getFeeData()
+      ]);
       const maxFeePerGas = feeData.maxFeePerGas ?? parseUnits("20", "gwei");
       const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? parseUnits("1.5", "gwei");
   
@@ -132,12 +134,15 @@ export class UniSwapService {
         });
 
         const gasForWrap = await this.provider.estimateGas(wrapTx);
-        wrapTx.gasLimit = (gasForWrap * 120n) / 100n;
-        wrapTx.chainId = 1n;
-        wrapTx.type = 2;
-        wrapTx.maxFeePerGas = maxFeePerGas;
-        wrapTx.maxPriorityFeePerGas = maxPriorityFeePerGas;
 
+        Object.assign(wrapTx, {
+          gasLimit: (gasForWrap * 120n) / 100n,
+          chainId: 1n,
+          type: 2,
+          maxFeePerGas,
+          maxPriorityFeePerGas,
+        });
+        
         txs.push(wrapTx);
         const txData = routerIface.encodeFunctionData("exactInputSingle", [
           {

@@ -234,7 +234,7 @@ export class EthService {
   }
 
   async prepareSwapTransaction(dto: SwapPrepareDto | SwapQuoteDto): Promise<any> {
-    return process.env.ENVIRONMENT==="dev"?await this.ethTestnetSwapService.prepareSwapTransaction(dto as SwapPrepareDto):await this.uniSwapService.buildSwapTx(dto as SwapQuoteDto);
+    return this.buildSwapTransaction(dto);
   }
 
   async executeSwapTransactions(
@@ -312,5 +312,12 @@ export class EthService {
   getBalance(walletAddressDto: WalletAddressDto): Promise<bigint> {
     const { walletAddress } = walletAddressDto;
     return getNativeCurrencyBalance(walletAddress, this.provider);
+  }
+
+  private async buildSwapTransaction(dto: SwapPrepareDto | SwapQuoteDto): Promise<any> {
+    if (process.env.ENVIRONMENT === "dev") {
+      return this.ethTestnetSwapService.prepareSwapTransaction(dto as SwapPrepareDto);
+    }
+    return this.uniSwapService.buildSwapTx(dto as SwapQuoteDto);
   }
 }
