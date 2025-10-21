@@ -16,6 +16,9 @@ export class WebhookStellarDto {
     to: string;
     amount: string;
     message: string;
+    starting_balance?: string;
+    funder?: string;
+    account?: string;
     additionalData: string;
   };
   tag?: string;

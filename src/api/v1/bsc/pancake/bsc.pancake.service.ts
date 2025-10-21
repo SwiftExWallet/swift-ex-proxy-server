@@ -29,6 +29,7 @@ import {
   BSC_TOKEN_ABI,
 } from '../../common/abi/bsc';
 import { AddressType } from '../../common/enums/pancake.enum';
+import { ProviderService } from '../../provider/provider.service';
 
 @Injectable()
 export class PancakeSwapService {
@@ -40,10 +41,11 @@ export class PancakeSwapService {
   private readonly WBNB = WETH9[this.chainId];
   private readonly ROUTER_ADDRESS = process.env.BSC_SWAP_ROUTER_ADD as string;
 
-  constructor() {
-    this.ethersProvider = new JsonRpcProvider(
-      process.env.PROVIDER_RPC_BSC as string,
-    );
+  constructor(
+    private readonly providerService: ProviderService,
+  ) {
+    const rpcUrl = providerService.getRpcUrl();
+    this.ethersProvider = new JsonRpcProvider(rpcUrl);
     this.viemProvider = createPublicClient({
       chain: bsc,
       transport: http(process.env.PROVIDER_RPC_BSC as string),
