@@ -1,3 +1,5 @@
+import { TransactionReceipt, TransactionResponse } from "ethers";
+
 export interface SwapTransaction {
   to: string;
   data: string;
@@ -64,3 +66,30 @@ export interface PancakeTokenInfo {
     address: string;
     decimals: number;
 }
+
+export interface PancakeUnsignedSwapTransaction {
+    transaction: {
+      to: string;
+      value: string;
+      data: string;
+      gasLimit: string;
+      gasPrice: string;
+      nonce: number;
+      chainId: number;
+    };
+    approvalTransaction?: {
+      to: string;
+      value: string;
+      data: string;
+      gasLimit: string;
+      gasPrice: string;
+      nonce: number;
+      chainId: number;
+    } | null;
+    quote: PancakeSwapQuote;
+  }
+  
+export interface ExecutedTransaction {
+    txResponse: TransactionResponse;
+    receipt: TransactionReceipt;
+  }

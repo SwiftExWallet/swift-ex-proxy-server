@@ -42,7 +42,11 @@ export class WebhookService {
 
       this.logger.log('==== decryptedToken', { decryptedToken });
 
-      const body = `${payload.data.amount} ${payload.data.asset_type === WebhookAssetType.XLM ? WebhookAssetType.LUMENS : payload.data.asset_code} has been received.`;
+      const amount = payload.data.amount || payload.data.starting_balance;
+      
+      const asset =payload.data.asset_type === WebhookAssetType.XLM? WebhookAssetType.LUMENS: payload.data.asset_code || 'XLM';
+      
+      const body = `${amount} ${asset} has been received.`;
 
       const notificationPayload: NotificationDto = {
         title: `${WebhookNotificationType.FUND_RECEIVED}`,
@@ -93,8 +97,8 @@ export class WebhookService {
         this.logger.log('==== erc20Transfers ===', erc20Transfers);
         // ERC-20 Transfer
         const erc = erc20Transfers[0];
-        toAddress = erc.toAddress;
-        txnHash = erc.hash;
+        toAddress = erc.toAddress || erc.to || null;
+        txnHash = erc.hash || erc.transactionHash;
 
         const amount = erc.valueWithDecimals || formatEther(erc.value);
         body = `${amount} ${erc.tokenSymbol} has been received.`;
@@ -102,18 +106,19 @@ export class WebhookService {
         this.logger.log('==== erc20Approvals ===', erc20Approvals);
         // ERC-20 Approval
         const approval = erc20Approvals[0];
-        toAddress = approval.toAddress;
-        txnHash = approval.hash;
+        toAddress = approval.toAddress || approval.spender || null;
+        txnHash = approval.hash || approval.transactionHash;
 
         const amount =
           approval.valueWithDecimals || formatEther(approval.value);
         body = `${amount} ${approval.tokenSymbol} has been approved for ${approval.spender}`;
       } else if (txs?.[0]?.value) {
         this.logger.log('==== value ===');
-        toAddress = txs?.[0]?.toAddress;
-        txnHash = txs?.[0]?.hash;
+        const tx = txs[0];
+        toAddress = tx.toAddress || tx.to || null;
+        txnHash = tx.hash || tx.transactionHash;
 
-        body = `${formatEther(txs[0].value)} ETH has been received.`;
+        body = `${formatEther(tx.value)} ETH has been received.`;
       }
 
       this.logger.log('=== address detail===', {
