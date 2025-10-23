@@ -8,7 +8,7 @@ PART_NAME="${PART_NAME:-proxy}"
 AWS_REGION="${AWS_REGION:-ap-south-1}"
 
 # Base path for parameters
-PARAM_BASE_PATH="/${ENVIRONMENT_NAME}/${COMPONENT_NAME}/${PART_NAME}"
+PARAM_BASE_PATH="/${COMPONENT_NAME}/${ENVIRONMENT_NAME}/${PART_NAME}"
 
 echo "Fetching environment variables from Parameter Store at runtime..."
 echo "Base path: ${PARAM_BASE_PATH}"
