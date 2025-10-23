@@ -1,0 +1,77 @@
+name: Build and Deploy Proxy Server
+
+on:
+  push:
+    branches: [ devops, main ]
+  pull_request:
+    branches: [ devops, main ]
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REGISTRY: 542005048192.dkr.ecr.ap-south-1.amazonaws.com
+  ECR_REPOSITORY: dev-swiftx-proxy-ecr
+  FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Create Firebase service account file
+      run: |
+        mkdir -p src/api/v1/notification/firebase
+        echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > src/api/v1/notification/firebase/firebaseServiceAccount.json
+        echo "Firebase service account file created at correct location"
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::542005048192:role/github-ecr-role
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build, tag, and push image to Amazon ECR
+      id: build-image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        # Build a docker container and push it to ECR
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+    - name: Update ECS Service
+      if: github.ref == 'refs/heads/dev'
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        # Force new deployment of ECS service
+        aws ecs update-service \
+          --cluster dev-swiftx-engines-cluster \
+          --service dev-swiftx-proxy-service \
+          --force-new-deployment \
+          --region ${{ env.AWS_REGION }}
+
+    - name: Wait for deployment
+      if: github.ref == 'refs/heads/dev'
+      run: |
+        echo "Waiting for ECS service to stabilize..."
+        aws ecs wait services-stable \
+          --cluster dev-swiftx-engines-cluster \
+          --services dev-swiftx-proxy-service \
+          --region ${{ env.AWS_REGION }}
+        echo "Deployment completed successfully!"

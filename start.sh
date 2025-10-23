@@ -8,7 +8,7 @@ PART_NAME="${PART_NAME:-proxy}"
 AWS_REGION="${AWS_REGION:-ap-south-1}"
 
 # Base path for parameters
-PARAM_BASE_PATH="/${COMPONENT_NAME}/${ENVIRONMENT_NAME}/${PART_NAME}"
+PARAM_BASE_PATH="/${ENVIRONMENT_NAME}/${COMPONENT_NAME}/${PART_NAME}"
 
 echo "Fetching environment variables from Parameter Store at runtime..."
 echo "Base path: ${PARAM_BASE_PATH}"
@@ -24,26 +24,40 @@ if [[ -n "${AWS_PROFILE:-}" ]]; then
     AWS_PROFILE_OPT="--profile ${AWS_PROFILE}"
 fi
 
-aws ssm describe-parameters \
+# Get parameter names
+param_names=$(aws ssm describe-parameters \
     --parameter-filters "Key=Name,Option=BeginsWith,Values=${PARAM_BASE_PATH}/" \
     --region "${AWS_REGION}" \
     ${AWS_PROFILE_OPT} \
     --query 'Parameters[].Name' \
-    --output text | tr '\t' '\n' | while read param_name; do
-        param_key=$(basename "$param_name")
-        # Convert parameter name to uppercase for environment variable
-        env_var_name=$(echo "$param_key" | tr '[:lower:]' '[:upper:]')
-        param_value=$(aws ssm get-parameter \
-            --name "$param_name" \
-            --with-decryption \
-            --region "${AWS_REGION}" \
-            ${AWS_PROFILE_OPT} \
-            --query 'Parameter.Value' \
-            --output text 2>/dev/null || echo "")
-        if [[ -n "$param_value" ]]; then
-            echo "${env_var_name}=${param_value}" >> /app/.env
+    --output text 2>/dev/null || echo "")
+
+if [[ -z "$param_names" ]]; then
+    echo "Warning: No parameters found at path ${PARAM_BASE_PATH}/"
+    echo "This might be due to missing AWS credentials or incorrect path"
+else
+    echo "Found parameters, processing..."
+    echo "$param_names" | tr '\t' '\n' | while read param_name; do
+        if [[ -n "$param_name" ]]; then
+            param_key=$(basename "$param_name")
+            # Convert parameter name to uppercase for environment variable
+            env_var_name=$(echo "$param_key" | tr '[:lower:]' '[:upper:]')
+            param_value=$(aws ssm get-parameter \
+                --name "$param_name" \
+                --with-decryption \
+                --region "${AWS_REGION}" \
+                ${AWS_PROFILE_OPT} \
+                --query 'Parameter.Value' \
+                --output text 2>/dev/null || echo "")
+            if [[ -n "$param_value" ]]; then
+                echo "${env_var_name}=${param_value}" >> /app/.env
+                echo "Added: ${env_var_name}=${param_value}"
+            else
+                echo "Failed to get value for: ${param_name}"
+            fi
         fi
     done
+fi
 
 echo "Environment variables fetched and .env file created successfully!"
 echo "Total variables: $(wc -l < /app/.env)"
