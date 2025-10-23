@@ -61,6 +61,18 @@ fi
 
 echo "Environment variables fetched and .env file created successfully!"
 echo "Total variables: $(wc -l < /app/.env)"
+
+# Fetch Firebase service account from S3
+echo "Fetching Firebase service account from S3..."
+mkdir -p /app/src/api/v1/notification/firebase
+
+# Try to fetch from S3, fallback to placeholder if not available
+aws s3 cp s3://dev-swiftx-secrets/firebase-service-account.json /app/src/api/v1/notification/firebase/firebaseServiceAccount.json 2>/dev/null || {
+    echo "Firebase service account not found in S3, creating placeholder..."
+    echo '{"type": "service_account", "project_id": "placeholder", "private_key": "placeholder"}' > /app/src/api/v1/notification/firebase/firebaseServiceAccount.json
+}
+
+echo "Firebase service account file ready"
 echo "Starting application..."
 
 # Execute the command passed to the container

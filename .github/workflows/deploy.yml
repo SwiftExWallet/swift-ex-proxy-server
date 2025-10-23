@@ -10,7 +10,6 @@ env:
   AWS_REGION: ap-south-1
   ECR_REGISTRY: 542005048192.dkr.ecr.ap-south-1.amazonaws.com
   ECR_REPOSITORY: dev-swiftx-proxy-ecr
-  FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 
 jobs:
   build-and-deploy:
@@ -23,12 +22,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-
-    - name: Create Firebase service account file
-      run: |
-        mkdir -p src/api/v1/notification/firebase
-        echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > src/api/v1/notification/firebase/firebaseServiceAccount.json
-        echo "Firebase service account file created at correct location"
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
