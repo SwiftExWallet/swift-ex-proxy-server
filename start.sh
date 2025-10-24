@@ -66,11 +66,18 @@ echo "Total variables: $(wc -l < /app/.env)"
 echo "Fetching Firebase service account from S3..."
 mkdir -p /app/src/api/v1/notification/firebase
 
+# Remove any existing placeholder file first
+rm -f /app/src/api/v1/notification/firebase/firebaseServiceAccount.json
+
 # Try to fetch from S3, keep placeholder if not available
 aws s3 cp s3://dev-swiftx-secrets/firebase-service-account.json /app/src/api/v1/notification/firebase/firebaseServiceAccount.json 2>/dev/null && {
     echo "Firebase service account downloaded from S3"
+    echo "Firebase service account file ready"
 } || {
     echo "Firebase service account not found in S3, using placeholder..."
+    # Create a minimal placeholder if S3 download fails
+    echo '{"type": "service_account", "project_id": "placeholder", "private_key_id": "placeholder", "private_key": "-----BEGIN PRIVATE KEY-----\\nPLACEHOLDER_KEY\\n-----END PRIVATE KEY-----\\n", "client_email": "placeholder@placeholder.iam.gserviceaccount.com", "client_id": "placeholder", "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token", "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs", "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/placeholder%40placeholder.iam.gserviceaccount.com"}' > /app/src/api/v1/notification/firebase/firebaseServiceAccount.json
+    echo "Placeholder Firebase service account file created"
 }
 
 echo "Firebase service account file ready"

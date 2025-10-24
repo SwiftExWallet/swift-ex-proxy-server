@@ -12,9 +12,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Create placeholder Firebase service account file for build
+# Create placeholder Firebase service account file for build (will be replaced at runtime)
 RUN mkdir -p src/api/v1/notification/firebase && \
-    echo '{"type": "service_account", "project_id": "placeholder", "private_key": "placeholder"}' > src/api/v1/notification/firebase/firebaseServiceAccount.json
+    echo '{"type": "service_account", "project_id": "placeholder", "private_key_id": "placeholder", "private_key": "-----BEGIN PRIVATE KEY-----\\nPLACEHOLDER_KEY\\n-----END PRIVATE KEY-----\\n", "client_email": "placeholder@placeholder.iam.gserviceaccount.com", "client_id": "placeholder", "auth_uri": "https://accounts.google.com/o/oauth2/auth", "token_uri": "https://oauth2.googleapis.com/token", "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs", "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/placeholder%40placeholder.iam.gserviceaccount.com"}' > src/api/v1/notification/firebase/firebaseServiceAccount.json
 
 RUN yarn run build
 
