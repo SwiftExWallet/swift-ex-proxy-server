@@ -54,6 +54,10 @@ export class AppModule {
       .apply(DeviceAuthTokenMiddleware)
       .exclude(
         {
+          path: '/',
+          method: RequestMethod.GET,
+        },
+        {
           path: 'health',
           method: RequestMethod.GET,
         },
