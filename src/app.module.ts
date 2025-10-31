@@ -54,6 +54,10 @@ export class AppModule {
       .apply(DeviceAuthTokenMiddleware)
       .exclude(
         {
+          path: 'health',
+          method: RequestMethod.GET,
+        },
+        {
           path: 'api/v1/webhook/stellar-transactions',
           method: RequestMethod.POST,
         },
