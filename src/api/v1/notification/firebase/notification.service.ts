@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { NotificationDto } from '../dto/notification.dto';
 import * as firebaseAccount from './firebaseServiceAccount.json';
+
 @Injectable()
 export class FirebaseNotificationService {
   onModuleInit() {
@@ -11,6 +12,7 @@ export class FirebaseNotificationService {
           firebaseAccount as admin.ServiceAccount,
         ),
       });
+      console.log('Firebase Admin SDK initialized successfully');
     }
   }
 
