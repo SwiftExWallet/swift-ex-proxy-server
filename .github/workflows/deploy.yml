@@ -2,7 +2,11 @@ name: Build and Deploy Proxy Server
 
 on:
   push:
+    branches:
+      - main  # Only trigger on main branch
   pull_request:
+    branches:
+      - main  # Only trigger on PRs targeting main
   workflow_dispatch:
     inputs:
       branch:
