@@ -57,6 +57,137 @@ $ yarn run test:e2e
 $ yarn run test:cov
 ```
 
+## AWS SSM Parameter Management
+
+This project uses AWS Systems Manager (SSM) Parameter Store to manage environment variables. Parameters are fetched at runtime by the container.
+
+### Configuration Files
+
+- **`constants.sh`** - Defines environment configuration (environment name, component name, AWS region, etc.)
+- **`ssmvalues.json`** - Contains parameter values to be set in SSM Parameter Store
+- **`setssmparameter.sh`** - Script to set/update SSM parameters from local JSON file
+
+### Setting SSM Parameters
+
+#### 1. Update `constants.sh` (if needed)
+
+The default values are:
+```bash
+ENVIRONMENT_NAME=dev
+COMPONENT_NAME=swiftx
+PART_NAME=proxy
+AWS_REGION=ap-south-1
+```
+
+You can override these by setting environment variables:
+```bash
+export ENVIRONMENT_NAME=prod
+export AWS_REGION=us-east-1
+```
+
+#### 2. Create/Update `ssmvalues.json`
+
+Edit `ssmvalues.json` with your parameter values:
+
+```json
+{
+  "REDIS_HOST": {
+    "value": "your-redis-host",
+    "type": "String"
+  },
+  "REDIS_PWD": {
+    "value": "your-secure-password",
+    "type": "SecureString"
+  },
+  "PROVIDER_RPC_ETH": {
+    "value": "https://eth-sepolia.g.alchemy.com/v2/your_api_key",
+    "type": "String"
+  }
+}
+```
+
+**Parameter Types:**
+- `String` - Regular string value
+- `SecureString` - Encrypted value (recommended for secrets)
+
+#### 3. Run the Script
+
+```bash
+# With AWS profile
+./setssmparameter.sh -p swiftx-dev
+
+# With custom JSON file
+./setssmparameter.sh -p swiftx-dev -f custom-values.json
+
+# Show help
+./setssmparameter.sh --help
+```
+
+#### How It Works
+
+- **SSM Path Pattern**: `/${ENVIRONMENT_NAME}/${COMPONENT_NAME}/${PART_NAME}/${VARIABLE_NAME}`
+- **Example**: `/dev/swiftx/proxy/REDIS_HOST`
+- The script will:
+  - ✅ Create new parameters if they don't exist
+  - ✅ Update existing parameters if they exist (using `--overwrite`)
+  - ✅ Show summary of created/updated parameters
+
+#### Prerequisites
+
+- AWS CLI installed and configured
+- `jq` installed (`brew install jq` on macOS, `apt-get install jq` on Linux)
+- AWS credentials with SSM permissions
+- `ssmvalues.json` file in the project root
+
+#### Important Notes
+
+- ⚠️ **Never commit `ssmvalues.json` to git** - Add it to `.gitignore`
+- 🔒 Use `SecureString` type for sensitive values (passwords, API keys, etc.)
+- 📝 The script uses `--overwrite` flag, so existing parameters will be updated
+- 🌍 Parameters are fetched at runtime by `start.sh` in the container
+
+### Fetching SSM Parameters (Local Development)
+
+To fetch SSM parameters and create a local `.env` file:
+
+```bash
+# Fetch all parameters and create .env file
+./fetch-ssm.sh -p swiftx-dev
+
+# Fetch to a custom file
+./fetch-ssm.sh -p swiftx-dev -o .env.local
+```
+
+### Local Development Setup
+
+The `setup.sh` script automates the complete local development workflow:
+
+```bash
+# Full setup: fetch SSM, build image, push to ECR
+./setup.sh -p swiftx-dev
+
+# Build with custom tag
+./setup.sh -p swiftx-dev -t v1.0.0
+
+# Skip build (only fetch and push existing image)
+./setup.sh -p swiftx-dev --skip-build
+
+# Skip push (only fetch and build, don't push)
+./setup.sh -p swiftx-dev --skip-push
+```
+
+**What `setup.sh` does:**
+1. ✅ Fetches SSM parameters and creates `.env` file
+2. ✅ Builds Docker image locally
+3. ✅ Logs into ECR
+4. ✅ Tags image for ECR
+5. ✅ Pushes image to ECR repository
+
+**ECR Repository Format:**
+- Repository Name: `${ENVIRONMENT_NAME}-${COMPONENT_NAME}-${PART_NAME}-ecr`
+- Example: `dev-swiftx-proxy-ecr`
+- Full URI: `${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/dev-swiftx-proxy-ecr:latest`
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
