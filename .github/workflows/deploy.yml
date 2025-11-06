@@ -69,7 +69,7 @@ jobs:
         # Force new deployment of ECS service
         aws ecs update-service \
           --cluster dev-swiftx-engines-cluster \
-          --service dev-swiftx-proxy-service \
+          --service dev-swiftx-proxy-ecs-service \
           --force-new-deployment \
           --region ${{ env.AWS_REGION }}
 
@@ -80,6 +80,6 @@ jobs:
         echo "Waiting for ECS service to stabilize..."
         aws ecs wait services-stable \
           --cluster dev-swiftx-engines-cluster \
-          --services dev-swiftx-proxy-service \
+          --services dev-swiftx-proxy-ecs-service \
           --region ${{ env.AWS_REGION }}
         echo "Deployment completed successfully!"
