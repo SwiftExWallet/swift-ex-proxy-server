@@ -69,7 +69,21 @@ This project uses AWS Systems Manager (SSM) Parameter Store to manage environmen
 
 ### Setting SSM Parameters
 
-#### 1. Update `constants.sh` (if needed)
+#### 1. Create `ssmvalues.json` file
+
+Since `ssmvalues.json` is gitignored (contains sensitive data), you need to create it manually:
+
+```bash
+# Create the file from the template
+cp ssmvalues.json.example ssmvalues.json
+
+# OR create it manually
+touch ssmvalues.json
+```
+
+Then edit it with your actual values (see step 3 below for the structure).
+
+#### 2. Update `constants.sh` (if needed)
 
 The default values are:
 ```bash
@@ -85,9 +99,9 @@ export ENVIRONMENT_NAME=prod
 export AWS_REGION=us-east-1
 ```
 
-#### 2. Create/Update `ssmvalues.json`
+#### 3. Edit `ssmvalues.json` with your values
 
-Edit `ssmvalues.json` with your parameter values:
+Add your parameter values to the JSON file:
 
 ```json
 {
@@ -110,7 +124,9 @@ Edit `ssmvalues.json` with your parameter values:
 - `String` - Regular string value
 - `SecureString` - Encrypted value (recommended for secrets)
 
-#### 3. Run the Script
+**Note:** A template file `ssmvalues.json.example` is provided in the repository with placeholder values. Copy it to `ssmvalues.json` and update with your actual values.
+
+#### 4. Run the Script
 
 ```bash
 # With AWS profile
