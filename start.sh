@@ -1,14 +1,20 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
-# Default values
-ENVIRONMENT_NAME="${ENVIRONMENT_NAME:-dev}"
-COMPONENT_NAME="${COMPONENT_NAME:-swiftx}"
-PART_NAME="${PART_NAME:-proxy}"
-AWS_REGION="${AWS_REGION:-ap-south-1}"
+# Source constants file for consistent configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${SCRIPT_DIR}/constants.sh" ]; then
+    source "${SCRIPT_DIR}/constants.sh"
+else
+    # Fallback to defaults if constants.sh not found
+    export ENVIRONMENT_NAME="${ENVIRONMENT_NAME:-dev}"
+    export COMPONENT_NAME="${COMPONENT_NAME:-swiftx}"
+    export PART_NAME="${PART_NAME:-proxy}"
+    export AWS_REGION="${AWS_REGION:-ap-south-1}"
+fi
 
-# Base path for parameters
-PARAM_BASE_PATH="/${ENVIRONMENT_NAME}/${COMPONENT_NAME}/${PART_NAME}"
+# Use SSM_BASE_PATH from constants.sh, fallback to computed value
+PARAM_BASE_PATH="${SSM_BASE_PATH:-/${ENVIRONMENT_NAME}/${COMPONENT_NAME}/${PART_NAME}}"
 
 echo "Fetching environment variables from Parameter Store at runtime..."
 echo "Base path: ${PARAM_BASE_PATH}"
