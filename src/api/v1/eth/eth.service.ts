@@ -1,13 +1,12 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
-  ethers,
   FeeData,
   formatUnits,
   Interface,
   parseEther,
-  parseUnits,
   TransactionReceipt,
   TransactionResponse,
+  ZeroAddress,
 } from 'ethers';
 import { JsonRpcProvider, Contract } from 'ethers';
 import {
@@ -36,9 +35,9 @@ import { ProviderService } from '../provider/provider.service';
 import { ChainEnum } from '../common/enums/chain.enum';
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 import {
+  ExecutedTransaction,
   QuotedOutput,
   SwapQuote,
-  SwapTransaction,
   SwapTx,
 } from '../common/interface/swap.interface';
 import { FullTransaction } from '../common/interface/transaction.interface';
@@ -51,6 +50,7 @@ import {
 } from '../common/helpers/contractUtilityMethod';
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 import { UniSwapService } from './uniSwap/eth.uniswap.service';
+import { EthTestnetSwapService } from './eth.testnet.service';
 @Injectable()
 export class EthService {
   private readonly logger = new Logger(EthService.name);
@@ -59,7 +59,11 @@ export class EthService {
   factoryContract: Contract;
   quoterContract: Contract;
   swapRouterContract: Contract;
-  constructor(private readonly providerService: ProviderService,private readonly uniSwapService:UniSwapService) {
+  constructor(
+    private readonly providerService: ProviderService,
+    private readonly uniSwapService: UniSwapService,
+    private readonly ethTestnetSwapService: EthTestnetSwapService
+  ) {
     const factoryAddress = process.env.POOL_FACTORY_CONTRACT_ADDRESS;
     const quoterAddress = process.env.QUOTER_CONTRACT_ADDRESS;
     const swapRouterAddress = process.env.SWAP_ROUTER_ADDRESS;
@@ -84,7 +88,7 @@ export class EthService {
   }
 
   async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
-    return await this.uniSwapService.getQuote(swapQuoteDto)
+    return process.env.ENVIRONMENT==="dev"?await this.ethTestnetSwapService.getQuote(swapQuoteDto):await this.uniSwapService.getQuote(swapQuoteDto);
   }
 
   async prepareUsdtSwapTransaction(
@@ -106,7 +110,7 @@ export class EthService {
 
       this.logger.log('==== poolAddress ===', { poolAddress });
 
-      if (!poolAddress || poolAddress === ethers.ZeroAddress) {
+      if (!poolAddress || poolAddress === ZeroAddress) {
         throw new Error('Pool not found for token pair');
       }
 
@@ -180,11 +184,12 @@ export class EthService {
   ): Promise<{ txHash: string; receipt: TransactionReceipt | null }> {
     try {
       const { signedTx } = broadcastTransactionDto;
-      const txResponse: TransactionResponse = await this.provider.broadcastTransaction(signedTx);
+      const txResponse: TransactionResponse =
+        await this.provider.broadcastTransaction(signedTx);
       this.logger.log(`Broadcasted Tx: ${txResponse.hash}`);
       const receipt: TransactionReceipt | null = await txResponse.wait();
       this.logger.log(`Receipt: ${JSON.stringify(receipt)}`);
-  
+
       return {
         txHash: txResponse.hash,
         receipt,
@@ -194,7 +199,6 @@ export class EthService {
       throw error;
     }
   }
-  
 
   async estimateGas(
     to: string,
@@ -229,26 +233,25 @@ export class EthService {
     }
   }
 
-  async prepareSwapTransaction(
-    swapPrepareDto:SwapQuoteDto,
-  ): Promise<any> {
-   return await this.uniSwapService.buildSwapTx(swapPrepareDto)
+  async prepareSwapTransaction(dto: SwapPrepareDto | SwapQuoteDto): Promise<any> {
+    return this.buildSwapTransaction(dto);
   }
 
   async executeSwapTransactions(
-    txs: string[],   // array of signed tx strings
-  ): Promise<any> {
-    const txHashes: string[] = [];
+    txs: string[],
+  ): Promise<ExecutedTransaction[]> {
+    const txResponses: ExecutedTransaction[] = [];
   
     for (const signedTx of txs) {
-      const txResponse = await this.provider.broadcastTransaction(signedTx);
-      txHashes.push(txResponse.hash);
-      await txResponse.wait();
+      const txResponse: TransactionResponse = await this.provider.broadcastTransaction(signedTx);      
+      const receipt = await txResponse.wait();
+      if (!receipt) {
+        throw new Error(`Transaction ${txResponse.hash} failed or not mined`);
+      }
+      txResponses.push({ txResponse, receipt });
     }
-  
-    return { txHashes };
+    return txResponses;
   }
-  
 
   async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
     const { addresses, walletAddress } = getTokenInfoDto;
@@ -309,5 +312,12 @@ export class EthService {
   getBalance(walletAddressDto: WalletAddressDto): Promise<bigint> {
     const { walletAddress } = walletAddressDto;
     return getNativeCurrencyBalance(walletAddress, this.provider);
+  }
+
+  private async buildSwapTransaction(dto: SwapPrepareDto | SwapQuoteDto): Promise<any> {
+    if (process.env.ENVIRONMENT === "dev") {
+      return this.ethTestnetSwapService.prepareSwapTransaction(dto as SwapPrepareDto);
+    }
+    return this.uniSwapService.buildSwapTx(dto as SwapQuoteDto);
   }
 }

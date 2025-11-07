@@ -18,8 +18,14 @@ import {
 import { ValidWalletType } from '../../common/enums/all-bridge.enum';
 import { AllBridgeSwapADto } from './dto/all-bridge-swap.dto';
 import { AllBridgeQuotesDto } from './dto/all-bridge-swap-quotes.dto';
-import { getEstimateGas, getFeeData, getNetwork, getTransactionCount } from '../../common/helpers/blockchainUtilityMethods';
+import {
+  getEstimateGas,
+  getFeeData,
+  getNetwork,
+  getTransactionCount,
+} from '../../common/helpers/blockchainUtilityMethods';
 import { JsonRpcProvider } from 'ethers';
+import { ProviderService } from '../../provider/provider.service';
 
 @Injectable()
 export class AllBridgeService {
@@ -27,14 +33,10 @@ export class AllBridgeService {
   provider: JsonRpcProvider;
 
   private sdk: AllbridgeCoreSdk;
-  constructor() {
-    this.provider = new JsonRpcProvider(process.env.PROVIDER_RPC_ETH || '');
-    this.sdk = new AllbridgeCoreSdk({
-      ETH: process.env.PROVIDER_RPC_ETH as string,
-    });
-  }
+  constructor(private readonly providerService: ProviderService) {}
 
   private async fetchTokens(sourceToken: string, walletType?: ValidWalletType) {
+    this.updateSdkRpc();
     if (!walletType) {
       const stellarUsdcToken: TokenWithChainDetails = {
         symbol: 'USDC',
@@ -94,6 +96,7 @@ export class AllBridgeService {
   }
 
   async prepareTransaction(swapDto: AllBridgeSwapADto) {
+    this.updateSdkRpc();
     try {
       const {
         fromAddress,
@@ -179,7 +182,7 @@ export class AllBridgeService {
 
       return {
         transaction,
-         txMeta,
+        txMeta,
         type: 'transfer',
       };
     } catch (error) {
@@ -194,6 +197,7 @@ export class AllBridgeService {
     slippageTolerance: string;
   }> {
     try {
+      this.updateSdkRpc();
       const chains = await this.sdk.chainDetailsMap();
       const { chainType, amount } = allBridgeQuotes;
 
@@ -245,5 +249,13 @@ export class AllBridgeService {
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  private updateSdkRpc() {
+    const rpcUrl = this.providerService.getRpcUrl();
+    this.provider = new JsonRpcProvider(rpcUrl);
+    this.sdk = new AllbridgeCoreSdk({
+      ETH: rpcUrl,
+    });
   }
 }

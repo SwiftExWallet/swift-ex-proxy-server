@@ -4,10 +4,11 @@ import { EthController } from './eth.controller';
 import { UsdtController } from './usdt.controller';
 import { ProviderModule } from '../provider/provider.module';
 import { UniSwapService } from './uniSwap/eth.uniswap.service';
+import { EthTestnetSwapService } from './eth.testnet.service';
 
 @Module({
   imports: [ProviderModule],
-  providers: [EthService,UniSwapService],
+  providers: [EthService,UniSwapService,EthTestnetSwapService],
   controllers: [EthController, UsdtController],
 })
 export class EthModule {}
