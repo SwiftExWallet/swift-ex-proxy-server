@@ -1,0 +1,33 @@
+{
+  "REDIS_HOST": {
+    "value": "your-redis-host",
+    "type": "String",
+    "description": "Redis server hostname or IP address"
+  },
+  "REDIS_PWD": {
+    "value": "your-redis-password",
+    "type": "SecureString",
+    "description": "Redis server password (encrypted)"
+  },
+  "PROVIDER_RPC_ETH": {
+    "value": "https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY",
+    "type": "String",
+    "description": "Ethereum provider RPC URL"
+  },
+  "PROVIDER_RPC_POLY": {
+    "value": "https://polygon-mumbai.g.alchemy.com/v2/YOUR_API_KEY",
+    "type": "String",
+    "description": "Polygon provider RPC URL"
+  },
+  "JWT_SECRET": {
+    "value": "your-super-secret-jwt-key-change-this",
+    "type": "SecureString",
+    "description": "JWT signing secret (encrypted)"
+  },
+  "JWT_EXPIRE": {
+    "value": "7d",
+    "type": "String",
+    "description": "JWT token expiration time"
+  }
+}
+

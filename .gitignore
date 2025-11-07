@@ -42,6 +42,9 @@ lerna-debug.log*
 .env.production.local
 .env.local
 
+# SSM parameter values (contains sensitive data)
+ssmvalues.json
+
 # temp directory
 .temp
 .tmp

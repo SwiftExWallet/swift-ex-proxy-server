@@ -2,14 +2,25 @@ name: Build and Deploy Proxy Server
 
 on:
   push:
-    branches: [ devops, main ]
-  pull_request:
-    branches: [ devops, main ]
+    branches:
+      - main    # Auto-deploy on push to main
+      - devops  # Auto-deploy on push to devops
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy'
+        required: false
+        type: string
 
 env:
   AWS_REGION: ap-south-1
   ECR_REGISTRY: 542005048192.dkr.ecr.ap-south-1.amazonaws.com
   ECR_REPOSITORY: dev-swiftx-proxy-ecr
+
+# Cancel in-progress runs when new commit is pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-deploy:
@@ -22,6 +33,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.inputs.branch || github.ref }}
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
@@ -36,6 +49,7 @@ jobs:
     - name: Build, tag, and push image to Amazon ECR
       id: build-image
       env:
+        AWS_REGION: ${{ env.AWS_REGION }}
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }}
       run: |
@@ -47,24 +61,25 @@ jobs:
         echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
     - name: Update ECS Service
-      if: github.ref == 'refs/heads/dev'
       env:
+        AWS_REGION: ${{ env.AWS_REGION }}
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }}
       run: |
         # Force new deployment of ECS service
         aws ecs update-service \
           --cluster dev-swiftx-engines-cluster \
-          --service dev-swiftx-proxy-service \
+          --service dev-swiftx-proxy-ecs-service \
           --force-new-deployment \
           --region ${{ env.AWS_REGION }}
 
     - name: Wait for deployment
-      if: github.ref == 'refs/heads/dev'
+      env:
+        AWS_REGION: ${{ env.AWS_REGION }}
       run: |
         echo "Waiting for ECS service to stabilize..."
         aws ecs wait services-stable \
           --cluster dev-swiftx-engines-cluster \
-          --services dev-swiftx-proxy-service \
+          --services dev-swiftx-proxy-ecs-service \
           --region ${{ env.AWS_REGION }}
         echo "Deployment completed successfully!"

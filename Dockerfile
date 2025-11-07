@@ -20,7 +20,7 @@ RUN yarn run build
 
 # Stage 3: Runner (Production)
 FROM node:20-alpine AS runner
-RUN apk add --no-cache libc6-compat aws-cli jq
+RUN apk add --no-cache libc6-compat aws-cli jq bash
 WORKDIR /app
 
 # Create non-root user
@@ -32,11 +32,12 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
-# Create startup script that fetches env vars from Parameter Store at RUNTIME
+# Copy startup script and constants file
 COPY start.sh /app/start.sh
+COPY constants.sh /app/constants.sh
 
-# Make startup script executable
-RUN chmod +x /app/start.sh
+# Make startup script executable (constants.sh doesn't need execute permission - it's sourced)
+RUN chmod +x /app/start.sh && chmod 644 /app/constants.sh
 
 # Change ownership
 RUN chown -R nestjs:nodejs /app
