@@ -26,8 +26,8 @@ export class validations_token implements ValidatorConstraintInterface {
     }
 
     if (ValidWalletType[walletType] == ValidWalletType.BNB) {
-      const allowedSourceTokens = ['USDT', 'BNB'];
-      const allowedDestinationTokens = ['BNB', 'aeETH'];
+      const allowedSourceTokens = ['USDT', 'USDC'];
+      const allowedDestinationTokens = ['USDC'];
 
       if (args.property === 'sourceToken') {
         return allowedSourceTokens.includes(token);

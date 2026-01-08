@@ -3,6 +3,7 @@ import {
   ChainDetailsMap,
   ChainSymbol,
   ChainType,
+  FeePaymentMethod,
   Messenger,
   RawTransaction,
   TokenWithChainDetails,
@@ -15,7 +16,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ValidWalletType } from '../../common/enums/all-bridge.enum';
+import { ValidPayFeeType, ValidWalletType } from '../../common/enums/all-bridge.enum';
 import { AllBridgeSwapADto } from './dto/all-bridge-swap.dto';
 import { AllBridgeQuotesDto } from './dto/all-bridge-swap-quotes.dto';
 import {
@@ -105,6 +106,7 @@ export class AllBridgeService {
         sourceToken,
         destinationToken,
         walletType,
+        feePayType
       } = swapDto;
       const sourceTokenCoin = await this.fetchTokens(sourceToken, walletType);
 
@@ -165,6 +167,7 @@ export class AllBridgeService {
           sourceToken: sourceTokenCoin as TokenWithChainDetails,
           destinationToken: destinationTokenCoin as TokenWithChainDetails,
           messenger: Messenger.ALLBRIDGE,
+          gasFeePaymentMethod:feePayType===ValidPayFeeType.WITH_NATIVE_CURRENCY?FeePaymentMethod.WITH_NATIVE_CURRENCY:FeePaymentMethod.WITH_STABLECOIN
         });
       this.logger.log('=== transfer transaction ===', transaction);
       const [nonce, gasLimit, feeData, network] = await Promise.all([
@@ -195,6 +198,8 @@ export class AllBridgeService {
     conversionRate: string;
     minimumAmountOut: string;
     slippageTolerance: string;
+    fee: object;
+    completionTime: number;
   }> {
     try {
       this.updateSdkRpc();
@@ -213,7 +218,7 @@ export class AllBridgeService {
       }
 
       const sourceToken = sourceChain.tokens.find(
-        (token) => token.symbol === 'USDT',
+        (token) => token.symbol === allBridgeQuotes.sourceToken,
       );
       const destinationToken = destinationChain.tokens.find(
         (token) => token.symbol === 'USDC',
@@ -233,6 +238,28 @@ export class AllBridgeService {
       );
       this.logger.log('===minimumReceiveAmount ==', minimumReceiveAmount);
 
+      const { gasFeeOptions } = await this.sdk.getAmountToBeReceivedAndGasFeeOptions(
+        amount,
+        sourceToken,
+        destinationToken,
+        Messenger.ALLBRIDGE,
+      );
+      const feeObj = {
+        native: {
+          amount: gasFeeOptions.native.float,
+          symbol: sourceChain.chainSymbol || "Native"
+        },
+        stablecoin: {
+          amount: gasFeeOptions?.stablecoin?.float,
+          symbol: sourceToken.symbol
+        }
+      };
+      const transferTimeMs = this.sdk.getAverageTransferTime(
+        sourceToken,
+        destinationToken,
+        Messenger.ALLBRIDGE
+      ) ?? 0;
+
       // Calculate conversion rate
       const conversionRate = (
         parseFloat(minimumReceiveAmount) / parseFloat(amount)
@@ -245,6 +272,8 @@ export class AllBridgeService {
         conversionRate,
         minimumAmountOut: minimumReceiveAmount,
         slippageTolerance,
+        fee: feeObj,
+        completionTime: transferTimeMs,
       };
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
@@ -256,6 +285,7 @@ export class AllBridgeService {
     this.provider = new JsonRpcProvider(rpcUrl);
     this.sdk = new AllbridgeCoreSdk({
       ETH: rpcUrl,
+      BSC: process.env.PROVIDER_RPC_BSC as string
     });
   }
 }

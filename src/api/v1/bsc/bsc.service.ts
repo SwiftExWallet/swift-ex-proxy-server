@@ -34,6 +34,7 @@ import { ValidateAddress } from '../common/helpers/utilityMethods';
 import { getErc20ContractInfo } from '../common/helpers/contractUtilityMethod';
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 import { UsdtBalanceDto } from './dto/usdtBalance.dto';
+import { PancakeSwapService } from './pancake/bsc.pancake.service';
 
 @Injectable()
 export class BscService {
@@ -41,7 +42,10 @@ export class BscService {
 
   provider: JsonRpcProvider;
   routerContract: Contract;
-  constructor(private readonly providerService: ProviderService) {
+  constructor(
+    private readonly providerService: ProviderService,
+    private readonly pancakeSwapService:PancakeSwapService,
+    ) {
     const routerAddress = process.env.BSC_ROUTER_ADDRESS;
 
     if (!routerAddress) {
@@ -59,6 +63,9 @@ export class BscService {
 
   async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<string> {
     try {
+      if(process.env.ENVIRONMENT==="prod"){
+        return await this.pancakeSwapService.getSwapQuote(swapQuoteDto);
+      }
       const { tokenIn, tokenOut, amount } = swapQuoteDto;
       const path: [string, string] = [tokenIn.address, tokenOut.address];
 

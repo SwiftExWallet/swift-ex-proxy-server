@@ -6,7 +6,7 @@ import {
   IsEnum,
 } from 'class-validator';
 import { IsTokenValid } from '../../../common/decorator/valid-token.decorator';
-import { ValidWalletType } from '../../../common/enums/all-bridge.enum';
+import { ValidPayFeeType, ValidWalletType } from '../../../common/enums/all-bridge.enum';
 
 export class AllBridgeSwapADto {
   @IsNotEmpty()
@@ -39,4 +39,8 @@ export class AllBridgeSwapADto {
   @IsNotEmpty()
   @IsEnum(ValidWalletType)
   walletType: ValidWalletType;
+
+  @IsNotEmpty()
+  @IsEnum(ValidPayFeeType)
+  feePayType: ValidPayFeeType;
 }

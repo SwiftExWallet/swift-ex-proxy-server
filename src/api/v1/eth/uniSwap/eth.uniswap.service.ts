@@ -31,54 +31,86 @@ export class UniSwapService {
   }
 
   async getQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
-    try {
-      const tokenIn = new Token(
-        1,
-        swapQuoteDto.tokenIn.address,
-        Number(swapQuoteDto.tokenIn.decimals),
-        swapQuoteDto.tokenIn.symbol,
-      );
-      const tokenOut = new Token(
-        1,
-        swapQuoteDto.tokenOut.address,
-        Number(swapQuoteDto.tokenOut.decimals),
-        swapQuoteDto.tokenOut.symbol,
-      );
+  try {
+    const isNativeIn = this.isNativeToken(swapQuoteDto.tokenIn.address);
+    const isNativeOut = this.isNativeToken(swapQuoteDto.tokenOut.address);
+    const WETH_ADDRESS = process.env.WETH_ADDRESS as string;
+    const tokenInAddress = isNativeIn ? WETH_ADDRESS : swapQuoteDto.tokenIn.address;
+    const tokenOutAddress = isNativeOut ? WETH_ADDRESS : swapQuoteDto.tokenOut.address;
+    const tokenIn = new Token(
+      1,
+      tokenInAddress,
+      Number(swapQuoteDto.tokenIn.decimals),
+      swapQuoteDto.tokenIn.symbol,
+    );
+    const tokenOut = new Token(
+      1,
+      tokenOutAddress,
+      Number(swapQuoteDto.tokenOut.decimals),
+      swapQuoteDto.tokenOut.symbol,
+    );
 
-      const quoterContract = new Contract(
-        this.QUOTER_CONTRACT_ADDRESS,
-        this.POOL_ABI,
-        this.provider,
-      );
+    const QUOTER_ABI = this.POOL_ABI;
 
-      const amountInWei = parseUnits(swapQuoteDto.amount, tokenIn.decimals);
+    const quoterContract = new Contract(
+      this.QUOTER_CONTRACT_ADDRESS,
+      QUOTER_ABI,
+      this.provider,
+    );
 
-      const amountOut = await quoterContract.quoteExactInputSingle.staticCall(
-        tokenIn.address,
-        tokenOut.address,
-        process.env.FEE_TIER,
-        amountInWei,
-        0,
-      );
+    const amountInWei = parseUnits(swapQuoteDto.amount, tokenIn.decimals);
 
-      const formattedAmountOut = formatUnits(amountOut, tokenOut.decimals);
+    const FEE_TIERS = [500, 3000, 10000];
+    let amountOut;
+    let selectedFeeTier;
 
-      const pricePerToken =
-        parseFloat(formattedAmountOut) / parseFloat(swapQuoteDto.amount);
-
-      return {
-        inputAmount: swapQuoteDto.amount,
-        inputToken: swapQuoteDto.tokenIn.symbol,
-        outputAmount: formattedAmountOut,
-        outputToken: swapQuoteDto.tokenOut.symbol,
-        pricePerToken: pricePerToken.toString(),
-        fee: process.env.FEE_TIER as string,
-      };
-    } catch (error) {
-      this.logger.error('Quote error:', error.message);
-      throw error;
+    for (const feeTier of FEE_TIERS) {
+      try {
+        amountOut = await quoterContract.quoteExactInputSingle.staticCall(
+          tokenIn.address,
+          tokenOut.address,
+          feeTier,
+          amountInWei,
+          0,
+        );
+        selectedFeeTier = feeTier;
+        this.logger.log(`Quote successful with fee tier: ${feeTier}`);
+        break; 
+      } catch (error) {
+        this.logger.warn(`Fee tier ${feeTier} failed, trying next...`);
+        if (feeTier === FEE_TIERS[FEE_TIERS.length - 1]) {
+          throw new Error('No liquidity pool found for this token pair');
+        }
+      }
     }
+
+    const formattedAmountOut = formatUnits(amountOut, tokenOut.decimals);
+
+    const pricePerToken =
+      parseFloat(formattedAmountOut) / parseFloat(swapQuoteDto.amount);
+
+    return {
+      inputAmount: swapQuoteDto.amount,
+      inputToken: isNativeIn ? 'ETH' : swapQuoteDto.tokenIn.symbol,
+      outputAmount: formattedAmountOut,
+      outputToken: isNativeOut ? 'ETH' : swapQuoteDto.tokenOut.symbol,
+      pricePerToken: pricePerToken.toString(),
+      fee: selectedFeeTier.toString(),
+    };
+  } catch (error) {
+    this.logger.error('Quote error:', error.message);
+    throw error;
   }
+}
+
+private isNativeToken(address: string): boolean {
+  const NATIVE_ADDRESSES = [
+    '0X0000000000000000000000000000000000000000',
+    '0XEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE',
+    'ETH',
+  ];
+  return NATIVE_ADDRESSES.includes(address.toUpperCase());
+}
 
   async buildSwapTx(
     swapQuoteDto: SwapQuoteDto,
