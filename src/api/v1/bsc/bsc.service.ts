@@ -150,7 +150,7 @@ export class BscService {
     const { signedTx } = broadcastTransactionDto;
     const txResponse: TransactionResponse = await broadcastTransactionToNetwork(
       this.provider,
-      signedTx,
+      signedTx as string,
     );
     this.logger.log('Broadcasted Tx:', txResponse.hash);
 

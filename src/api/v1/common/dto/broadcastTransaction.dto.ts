@@ -1,6 +1,14 @@
-import { IsNotEmpty } from 'class-validator';
+import { IsOptional, IsString, IsArray, ValidateIf } from 'class-validator';
 
 export class BroadcastTransactionDto {
-  @IsNotEmpty()
-  signedTx: string;
+  @IsOptional()
+  @IsString()
+  @ValidateIf((o) => !o.signedTransactions)
+  signedTx?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ValidateIf((o) => !o.signedTx)
+  signedTransactions?: string[];
 }

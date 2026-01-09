@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   FeeData,
   formatUnits,
@@ -160,7 +160,12 @@ export class EthService {
 
       return unsignedTx;
     } catch (error: any) {
-      throw new Error(`Failed to get swap quote: ${error.message}`);
+      const message =
+      error.info?.error?.message ||
+      error.shortMessage ||
+      error.message ||
+      'Failed to get swap quotes.';
+      throw new BadRequestException(message);
     }
   }
 
@@ -179,26 +184,76 @@ export class EthService {
     };
   }
 
-  async broadcastTransaction(
-    broadcastTransactionDto: BroadcastTransactionDto,
-  ): Promise<{ txHash: string; receipt: TransactionReceipt | null }> {
-    try {
-      const { signedTx } = broadcastTransactionDto;
-      const txResponse: TransactionResponse =
-        await this.provider.broadcastTransaction(signedTx);
-      this.logger.log(`Broadcasted Tx: ${txResponse.hash}`);
-      const receipt: TransactionReceipt | null = await txResponse.wait();
-      this.logger.log(`Receipt: ${JSON.stringify(receipt)}`);
+ // eth.service.ts or allbridge.service.ts
 
-      return {
-        txHash: txResponse.hash,
-        receipt,
-      };
-    } catch (error) {
-      this.logger.error('Broadcast error:', error);
-      throw error;
+async broadcastTransaction(
+  broadcastTransactionDto: BroadcastTransactionDto,
+): Promise<any> {
+  try {
+    const { signedTx, signedTransactions } = broadcastTransactionDto;
+    
+    const txArray: string[] = signedTransactions 
+      ? signedTransactions 
+      : signedTx 
+        ? [signedTx] 
+        : [];
+    
+    if (txArray.length === 0) {
+      throw new BadRequestException('No signed transaction provided');
     }
+    
+    this.logger.log(`Broadcasting ${txArray.length} transaction(s)`);
+    
+    interface BroadcastResult {
+      transactionHash: string;
+      type: string;
+      status: string;
+    }
+    
+    const results: BroadcastResult[] = [];
+    
+    for (let i = 0; i < txArray.length; i++) {
+      const signedTransaction = txArray[i];
+      
+      this.logger.log(`Broadcasting transaction ${i + 1}/${txArray.length}`);
+      
+      const txResponse: TransactionResponse = 
+        await this.provider.broadcastTransaction(signedTransaction);
+      
+      this.logger.log(`Transaction ${i + 1} broadcasted: ${txResponse.hash}`);
+      
+      results.push({
+        transactionHash: txResponse.hash,
+        type: i === 0 && txArray.length > 1 ? 'approve' : 'transfer',
+        status: 'pending',
+      });
+    }
+    
+    if (signedTx && !signedTransactions) {
+      return {
+        txHash: results[0].transactionHash,
+        receipt: null,
+      };
+    }
+    
+    return {
+      success: true,
+      totalTransactions: txArray.length,
+      results,
+    };
+    
+  } catch (error) {
+    this.logger.error('Broadcast error:', error);
+    
+    const message =
+      error.info?.error?.message ||
+      error.shortMessage ||
+      error.message ||
+      'Transaction broadcast failed';
+    
+    throw new BadRequestException(message);
   }
+}
 
   async estimateGas(
     to: string,
@@ -240,21 +295,32 @@ export class EthService {
   async executeSwapTransactions(
     txs: string[],
   ): Promise<ExecutedTransaction[]> {
-    const txResponses: ExecutedTransaction[] = [];
+    try {
+      const txResponses: ExecutedTransaction[] = [];
   
     for (const signedTx of txs) {
       const txResponse: TransactionResponse = await this.provider.broadcastTransaction(signedTx);      
-      const receipt = await txResponse.wait();
-      if (!receipt) {
-        throw new Error(`Transaction ${txResponse.hash} failed or not mined`);
-      }
-      txResponses.push({ txResponse, receipt });
+      // const receipt = await txResponse.wait();
+      // if (!receipt) {
+      //   throw new Error(`Transaction ${txResponse.hash} failed or not mined`);
+      // }
+      txResponses.push({ txResponse });
     }
     return txResponses;
+    } catch (error) {
+       this.logger.error('execute swap transactions error:', error);
+      const message =
+      error.info?.error?.message ||
+      error.shortMessage ||
+      error.message ||
+      'Failed to execute swap transactions';
+      throw new BadRequestException(message);
+    }
   }
 
   async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
-    const { addresses, walletAddress } = getTokenInfoDto;
+    try {
+      const { addresses, walletAddress } = getTokenInfoDto;
     const validAddresses: string[] = ValidateAddress(addresses);
 
     if (validAddresses.length === 0) {
@@ -286,6 +352,15 @@ export class EthService {
     );
 
     return tokenInfos;
+    } catch (error) {
+      this.logger.error('Get token info error:', error);
+      const message =
+      error.info?.error?.message ||
+      error.shortMessage ||
+      error.message ||
+      'Failed to get token Info';
+      throw new BadRequestException(message);
+    }
   }
 
   async prepareTransaction(

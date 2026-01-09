@@ -118,64 +118,85 @@ export class AllBridgeService {
         );
       }
 
-      this.logger.log('===tokens ==', {
-        sourceTokenCoin,
-        destinationTokenCoin,
+      const needsApproval = !(await this.sdk.bridge.checkAllowance({
+        token: sourceTokenCoin as TokenWithChainDetails,
+        owner: fromAddress,
+        amount: amount,
+      }));
+
+      const transferTransaction: RawTransaction = await this.sdk.bridge.rawTxBuilder.send({
+        amount: amount,
+        fromAccountAddress: fromAddress,
+        toAccountAddress: toAddress,
+        sourceToken: sourceTokenCoin as TokenWithChainDetails,
+        destinationToken: destinationTokenCoin as TokenWithChainDetails,
+        messenger: Messenger.ALLBRIDGE,
+        gasFeePaymentMethod: feePayType === ValidPayFeeType.WITH_NATIVE_CURRENCY
+          ? FeePaymentMethod.WITH_NATIVE_CURRENCY
+          : FeePaymentMethod.WITH_STABLECOIN
       });
 
-      if (
-        !(await this.sdk.bridge.checkAllowance({
+      if (needsApproval) {
+        this.logger.log('=== preparing both approve and transfer transactions ===');
+
+        const approveTransaction: RawTransaction = await this.sdk.bridge.rawTxBuilder.approve({
           token: sourceTokenCoin as TokenWithChainDetails,
           owner: fromAddress,
-          amount: amount,
-        }))
-      ) {
-        this.logger.log('=== preparing approve transaction ===');
+        });
 
-        const transaction: RawTransaction =
-          await this.sdk.bridge.rawTxBuilder.approve({
-            token: sourceTokenCoin as TokenWithChainDetails,
-            owner: fromAddress,
-          });
-        this.logger.log('=== rawTransactionApprove ===', transaction);
-        const [nonce, gasLimit, feeData, network] = await Promise.all([
-          getTransactionCount(this.provider, fromAddress),
-          getEstimateGas(this.provider, fromAddress, transaction),
-          getFeeData(this.provider),
+        const currentNonce = await getTransactionCount(this.provider, fromAddress);
+        const [network, feeData] = await Promise.all([
           getNetwork(this.provider),
+          getFeeData(this.provider),
         ]);
-        const txMeta = {
-          nonce: nonce,
-          gasLimit: gasLimit,
+
+        const [approveGasLimit] = await Promise.all([
+          getEstimateGas(this.provider, fromAddress, approveTransaction),
+        ]);
+
+        const approveTxMeta = {
+          nonce: currentNonce,
+          gasLimit: approveGasLimit,
           feeData: feeData,
           network: network,
         };
+
+        const [transferGasLimit] = await Promise.all([
+          getEstimateGas(this.provider, fromAddress, transferTransaction),
+        ]);
+
+        const transferTxMeta = {
+          nonce: currentNonce + 1,
+          gasLimit: transferGasLimit,
+          feeData: feeData,
+          network: network,
+        };
+
         return {
-          transaction,
-          txMeta,
-          type: 'approve',
+          needsApproval: true,
+          transactions: [
+            {
+              transaction: approveTransaction,
+              txMeta: approveTxMeta,
+              type: 'approve',
+            },
+            {
+              transaction: transferTransaction,
+              txMeta: transferTxMeta,
+              type: 'transfer',
+            }
+          ]
         };
       }
-      this.logger.log('=== preparing transfer transaction ===');
 
-      // Initiate transfer
-      const transaction: RawTransaction =
-        await this.sdk.bridge.rawTxBuilder.send({
-          amount: amount,
-          fromAccountAddress: fromAddress,
-          toAccountAddress: toAddress,
-          sourceToken: sourceTokenCoin as TokenWithChainDetails,
-          destinationToken: destinationTokenCoin as TokenWithChainDetails,
-          messenger: Messenger.ALLBRIDGE,
-          gasFeePaymentMethod:feePayType===ValidPayFeeType.WITH_NATIVE_CURRENCY?FeePaymentMethod.WITH_NATIVE_CURRENCY:FeePaymentMethod.WITH_STABLECOIN
-        });
-      this.logger.log('=== transfer transaction ===', transaction);
+      this.logger.log('=== preparing only transfer transaction ===');
       const [nonce, gasLimit, feeData, network] = await Promise.all([
         getTransactionCount(this.provider, fromAddress),
-        getEstimateGas(this.provider, fromAddress, transaction),
+        getEstimateGas(this.provider, fromAddress, transferTransaction),
         getFeeData(this.provider),
         getNetwork(this.provider),
       ]);
+
       const txMeta = {
         nonce: nonce,
         gasLimit: gasLimit,
@@ -184,13 +205,25 @@ export class AllBridgeService {
       };
 
       return {
-        transaction,
-        txMeta,
-        type: 'transfer',
+        needsApproval: false,
+        transactions: [
+          {
+            transaction: transferTransaction,
+            txMeta: txMeta,
+            type: 'transfer',
+          }
+        ]
       };
+
     } catch (error) {
       console.error('Error in swap prepare:', error);
-      throw new BadRequestException(error.message);
+      const message =
+        error.info?.error?.message ||
+        error.shortMessage ||
+        error.message ||
+        'Transaction preparation failed';
+
+      throw new BadRequestException(message);
     }
   }
 
@@ -276,7 +309,13 @@ export class AllBridgeService {
         completionTime: transferTimeMs,
       };
     } catch (error) {
-      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+        const message =
+        error.info?.error?.message ||
+        error.shortMessage ||
+        error.message ||
+        'Failed to get swap details.';
+
+      throw new BadRequestException(message);
     }
   }
 

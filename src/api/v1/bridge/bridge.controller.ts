@@ -13,9 +13,8 @@ export class BridgeController {
   @Post('swap-transaction/prepare')
   async getSwapQuote(@Res() res, @Body() allBridgeSwapADto: AllBridgeSwapADto) {
     if (allBridgeSwapADto.walletType === "ETH") {
-      const { transaction, txMeta, type } =
-        await this.allBridgeService.prepareTransaction(allBridgeSwapADto);
-      res.status(200).json({ transaction, txMeta, type });
+      const response = await this.allBridgeService.prepareTransaction(allBridgeSwapADto);
+      res.status(200).json(response);
     }
     if(allBridgeSwapADto.walletType==="BNB"){
       const { transaction,txMeta, type } =

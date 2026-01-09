@@ -91,5 +91,5 @@ export interface PancakeUnsignedSwapTransaction {
   
 export interface ExecutedTransaction {
     txResponse: TransactionResponse;
-    receipt: TransactionReceipt;
+    receipt?: TransactionReceipt;
   }

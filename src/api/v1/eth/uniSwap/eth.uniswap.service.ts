@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   JsonRpcProvider,
   Contract,
@@ -98,8 +98,13 @@ export class UniSwapService {
       fee: selectedFeeTier.toString(),
     };
   } catch (error) {
-    this.logger.error('Quote error:', error.message);
-    throw error;
+    this.logger.error('Quote error:', error);
+    const message =
+      error.info?.error?.message ||
+      error.shortMessage ||
+      error.message ||
+      'Failed to get swap quotes.';
+    throw new BadRequestException(message);
   }
 }
 
@@ -118,16 +123,21 @@ private isNativeToken(address: string): boolean {
   ): Promise<TransactionRequest[]> {
     try {
       const quote = await this.getQuote(swapQuoteDto);
+      const isNativeIn = this.isNativeToken(swapQuoteDto.tokenIn.address);
+      const isNativeOut = this.isNativeToken(swapQuoteDto.tokenOut.address);
+      const WETH_ADDRESS = process.env.WETH_ADDRESS as string;
+      const tokenInAddress = isNativeIn ? WETH_ADDRESS : swapQuoteDto.tokenIn.address;
+      const tokenOutAddress = isNativeOut ? WETH_ADDRESS : swapQuoteDto.tokenOut.address;
 
       const tokenIn = new Token(
         1,
-        swapQuoteDto.tokenIn.address,
+        tokenInAddress,
         Number(swapQuoteDto.tokenIn.decimals),
         swapQuoteDto.tokenIn.symbol,
       );
       const tokenOut = new Token(
         1,
-        swapQuoteDto.tokenOut.address,
+        tokenOutAddress,
         Number(swapQuoteDto.tokenOut.decimals),
         swapQuoteDto.tokenOut.symbol,
       );
@@ -144,72 +154,35 @@ private isNativeToken(address: string): boolean {
         (Number(process.env.TX_DEADLINE_SEC) || 600);
 
       const fromAddress = swapQuoteDto.recipient!;
-      const [nonce,feeData]= await Promise.all([
+      const [nonce, feeData, balance] = await Promise.all([
         this.provider.getTransactionCount(fromAddress, "pending"),
-        this.provider.getFeeData()
+        this.provider.getFeeData(),
+        this.provider.getBalance(fromAddress)
       ]);
-      const maxFeePerGas = feeData.maxFeePerGas ?? parseUnits("20", "gwei");
-      const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? parseUnits("1.5", "gwei");
-  
+
+      const maxFeePerGas = feeData.maxFeePerGas ?? parseUnits("15", "gwei");
+      const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? parseUnits("1", "gwei");
+
       const txs: TransactionRequest[] = [];
-      if (tokenIn.symbol === AddressType.WETH) {
-        const wethContract = new Contract(
-          tokenIn.address,
-          WETH_ABI,
-          this.provider,
-        );
 
-        let wrapTx = await wethContract.deposit.populateTransaction({
-          from: fromAddress,
-          value: amountInWei,
-          nonce,
-        });
+      if (isNativeIn) {
+        const estimatedGasForSwap = 180000n;
+        const estimatedGasCost = estimatedGasForSwap * maxFeePerGas;
+        const totalRequired = amountInWei + estimatedGasCost;
 
-        const gasForWrap = await this.provider.estimateGas(wrapTx);
+        if (balance < totalRequired) {
+          const balanceEth = formatUnits(balance, 18);
+          const requiredEth = formatUnits(totalRequired, 18);
+          throw new BadRequestException(
+            `Insufficient ETH balance. Have: ${balanceEth} ETH, Need: ~${requiredEth} ETH (swap + gas)`
+          );
+        }
 
-        Object.assign(wrapTx, {
-          gasLimit: (gasForWrap * 120n) / 100n,
-          chainId: 1n,
-          type: 2,
-          maxFeePerGas,
-          maxPriorityFeePerGas,
-        });
-        
-        txs.push(wrapTx);
         const txData = routerIface.encodeFunctionData("exactInputSingle", [
           {
             tokenIn: tokenIn.address,
             tokenOut: tokenOut.address,
-            fee: process.env.FEE_TIER,
-            recipient: swapQuoteDto.recipient,
-            deadline,
-            amountIn: amountInWei,
-            amountOutMinimum: minAmountOut,
-            sqrtPriceLimitX96: 0,
-          },
-        ]);
-
-        const swapTx: TransactionRequest = {
-          to: this.SWAP_ROUTER_ADDRESS,
-          from: fromAddress,
-          data: txData,
-          chainId: 1,
-          nonce: nonce + 1,
-          type: 2,
-          maxFeePerGas,
-          maxPriorityFeePerGas,
-        };
-
-        const estimatedGas = await this.provider.estimateGas(swapTx);
-        swapTx.gasLimit = (estimatedGas * 120n) / 100n;
-
-        txs.push(swapTx);
-      } else if (tokenIn.symbol === AddressType.ETH) {
-        const txData = routerIface.encodeFunctionData("exactInputSingle", [
-          {
-            tokenIn: tokenIn.address,
-            tokenOut: tokenOut.address,
-            fee: process.env.FEE_TIER,
+            fee: quote.fee,
             recipient: swapQuoteDto.recipient,
             deadline,
             amountIn: amountInWei,
@@ -230,46 +203,123 @@ private isNativeToken(address: string): boolean {
           maxPriorityFeePerGas,
         };
 
-        const estimatedGas = await this.provider.estimateGas(rawTx);
-        rawTx.gasLimit = (estimatedGas * 120n) / 100n;
-
-        txs.push(rawTx);
-      } else {
-        const txData = routerIface.encodeFunctionData("exactInputSingle", [
-          {
-            tokenIn: tokenIn.address,
-            tokenOut: tokenOut.address,
-            fee: process.env.FEE_TIER,
-            recipient: swapQuoteDto.recipient,
-            deadline,
-            amountIn: amountInWei,
-            amountOutMinimum: minAmountOut,
-            sqrtPriceLimitX96: 0,
-          },
-        ]);
-
-        const rawTx: TransactionRequest = {
-          to: this.SWAP_ROUTER_ADDRESS,
-          from: fromAddress,
-          data: txData,
-          chainId: 1,
-          nonce,
-          type: 2,
-          maxFeePerGas,
-          maxPriorityFeePerGas,
-        };
-
-        const estimatedGas = await this.provider.estimateGas(rawTx);
-        rawTx.gasLimit = (estimatedGas * 120n) / 100n;
+        try {
+          const estimatedGas = await this.provider.estimateGas(rawTx);
+          rawTx.gasLimit = (estimatedGas * 110n) / 100n;
+        } catch (gasError) {
+          rawTx.gasLimit = 200000n;
+          this.logger.warn('Gas estimation failed, using default:', gasError.message);
+        }
 
         txs.push(rawTx);
       }
-      await this.checkBalanceVsTxs(fromAddress, txs);
+      else {
+        const estimatedGasForApprove = 50000n;
+        const estimatedGasForSwap = 180000n;
+        const estimatedTotalGas = estimatedGasForApprove + estimatedGasForSwap;
+        const estimatedGasCost = estimatedTotalGas * maxFeePerGas;
+
+        if (balance < estimatedGasCost) {
+          const balanceEth = formatUnits(balance, 18);
+          const requiredEth = formatUnits(estimatedGasCost, 18);
+          throw new BadRequestException(
+            `Insufficient ETH for gas fees. Have: ${balanceEth} ETH, Need: ~${requiredEth} ETH`
+          );
+        }
+
+        const ERC20_ABI = [
+          'function balanceOf(address owner) view returns (uint256)',
+          'function allowance(address owner, address spender) view returns (uint256)',
+          'function approve(address spender, uint256 amount) returns (bool)',
+        ];
+
+        const tokenContract = new Contract(tokenIn.address, ERC20_ABI, this.provider);
+        const [tokenBalance, currentAllowance] = await Promise.all([
+          tokenContract.balanceOf(fromAddress),
+          tokenContract.allowance(fromAddress, this.SWAP_ROUTER_ADDRESS)
+        ]);
+
+        if (tokenBalance < amountInWei) {
+          const balanceFormatted = formatUnits(tokenBalance, tokenIn.decimals);
+          const requiredFormatted = formatUnits(amountInWei, tokenIn.decimals);
+          throw new BadRequestException(
+            `Insufficient ${tokenIn.symbol} balance. Have: ${balanceFormatted}, Need: ${requiredFormatted}`
+          );
+        }
+        let currentNonce = nonce;
+        if (currentAllowance < amountInWei) {
+          const approveData = tokenContract.interface.encodeFunctionData('approve', [
+            this.SWAP_ROUTER_ADDRESS,
+            amountInWei,
+          ]);
+
+          const approveTx: TransactionRequest = {
+            to: tokenIn.address,
+            from: fromAddress,
+            data: approveData,
+            chainId: 1,
+            nonce: currentNonce,
+            type: 2,
+            maxFeePerGas,
+            maxPriorityFeePerGas,
+          };
+
+          try {
+            const approveGas = await this.provider.estimateGas(approveTx);
+            approveTx.gasLimit = (approveGas * 110n) / 100n;
+          } catch (gasError) {
+            approveTx.gasLimit = 60000n;
+            this.logger.warn('Approve gas estimation failed, using default:', gasError.message);
+          }
+
+          txs.push(approveTx);
+          currentNonce += 1;
+        }
+
+        const txData = routerIface.encodeFunctionData("exactInputSingle", [
+          {
+            tokenIn: tokenIn.address,
+            tokenOut: tokenOut.address,
+            fee: quote.fee,
+            recipient: swapQuoteDto.recipient,
+            deadline,
+            amountIn: amountInWei,
+            amountOutMinimum: minAmountOut,
+            sqrtPriceLimitX96: 0,
+          },
+        ]);
+
+        const rawTx: TransactionRequest = {
+          to: this.SWAP_ROUTER_ADDRESS,
+          from: fromAddress,
+          data: txData,
+          chainId: 1,
+          nonce: currentNonce,
+          type: 2,
+          maxFeePerGas,
+          maxPriorityFeePerGas,
+        };
+
+        try {
+          const estimatedGas = await this.provider.estimateGas(rawTx);
+          rawTx.gasLimit = (estimatedGas * 110n) / 100n;
+        } catch (gasError) {
+          rawTx.gasLimit = 200000n;
+          this.logger.warn('Swap gas estimation failed, using default:', gasError.message);
+        }
+
+        txs.push(rawTx);
+      }
 
       return txs;
     } catch (error) {
       this.logger.error("Prepare swap tx error:", error);
-      throw error;
+      const message =
+        error.info?.error?.message ||
+        error.shortMessage ||
+        error.message ||
+        'Failed prepare swap tx';
+      throw new BadRequestException(message);
     }
   }
   
