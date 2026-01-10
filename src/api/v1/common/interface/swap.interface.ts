@@ -27,6 +27,8 @@ export interface SwapQuote {
   pricePerToken: string;
   fee: string;
   poolAddress?: string;
+  isMultiHop?: boolean;
+  path?: string;
 }
 
 export interface QuotedOutput {
