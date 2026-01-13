@@ -17,9 +17,8 @@ export class BridgeController {
       res.status(200).json(response);
     }
     if(allBridgeSwapADto.walletType==="BNB"){
-      const { transaction,txMeta, type } =
-      await this.allBridgeBscService.prepareTransaction(allBridgeSwapADto);
-      res.status(200).json({ transaction,txMeta, type });
+      const response =await this.allBridgeBscService.prepareTransaction(allBridgeSwapADto);
+      res.status(200).json(response);
     }
   }
 
