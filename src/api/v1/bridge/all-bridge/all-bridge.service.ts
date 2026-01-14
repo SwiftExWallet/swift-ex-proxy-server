@@ -112,7 +112,7 @@ export class AllBridgeService {
 
       const destinationTokenCoin = await this.fetchTokens(destinationToken);
 
-      if (!sourceTokenCoin && !destinationTokenCoin) {
+      if (!sourceTokenCoin || !destinationTokenCoin) {
         throw new BadRequestException(
           'Either invalid source or destination token',
         );
@@ -150,9 +150,7 @@ export class AllBridgeService {
           getFeeData(this.provider),
         ]);
 
-        const [approveGasLimit] = await Promise.all([
-          getEstimateGas(this.provider, fromAddress, approveTransaction),
-        ]);
+        const approveGasLimit = await getEstimateGas(this.provider, fromAddress, approveTransaction);
 
         const approveTxMeta = {
           nonce: currentNonce,
@@ -161,9 +159,16 @@ export class AllBridgeService {
           network: network,
         };
 
-        const [transferGasLimit] = await Promise.all([
-          getEstimateGas(this.provider, fromAddress, transferTransaction),
-        ]);
+        let transferGasLimit: bigint;
+        if (walletType === ValidWalletType.ETH) {
+          transferGasLimit = BigInt(350000);
+        } else if (walletType === ValidWalletType.BNB) {
+          transferGasLimit = BigInt(250000);
+        } else {
+          transferGasLimit = BigInt(300000);
+        }
+
+        this.logger.log(`Using fixed gas limit for transfer: ${transferGasLimit}`);
 
         const transferTxMeta = {
           nonce: currentNonce + 1,

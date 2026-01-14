@@ -227,6 +227,12 @@ async broadcastTransaction(
         type: i === 0 && txArray.length > 1 ? 'approve' : 'transfer',
         status: 'pending',
       });
+      
+      // Wait 2 seconds before next broadcast (except for last transaction)
+      if (i < txArray.length - 1) {
+        this.logger.log(`Waiting 2 seconds before broadcasting transaction ${i + 2}...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     }
     
     if (signedTx && !signedTransactions) {
