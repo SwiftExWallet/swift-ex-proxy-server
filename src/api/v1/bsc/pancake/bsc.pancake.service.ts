@@ -13,7 +13,16 @@ export class PancakeSwapService {
     private readonly chainId = ChainId.BSC;
     private readonly ethersProvider: ethers.JsonRpcProvider;
     private readonly viemProvider: any;
-    private readonly WBNB = WETH9[this.chainId];
+    
+    // ✅ CRITICAL FIX: Manually define WBNB instead of using WETH9
+    private readonly WBNB = new Token(
+        ChainId.BSC,
+        '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', // Correct WBNB address
+        18,
+        'WBNB',
+        'Wrapped BNB'
+    );
+    
     private readonly ROUTER_ADDRESS = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
     private readonly BUSD_ADDRESS = '0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56';
     private readonly USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
@@ -24,6 +33,9 @@ export class PancakeSwapService {
             chain: bsc,
             transport: http(process.env.PROVIDER_RPC_BSC as string)
         });
+        
+        // ✅ Verify WBNB address on startup
+        this.logger.log(`✓ WBNB Token initialized: ${this.WBNB.address}`);
     }
 
     private isNativeToken(address: string): boolean {
@@ -33,12 +45,21 @@ export class PancakeSwapService {
             '0XEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE',
             'BNB',
             'NATIVE',
+            '0XBB4CDB9CBD36B01BD1CBAEBF2DE08D9173BC095C' // WBNB address
         ];
         return NATIVE_ADDRESSES.includes(address.toUpperCase());
     }
 
     private async getToken(tokenAddress: string): Promise<Token> {
+        // ✅ Always return WBNB for native token
         if (this.isNativeToken(tokenAddress)) {
+            this.logger.log('Native token detected, using WBNB');
+            return this.WBNB;
+        }
+
+        // ✅ If someone passes WBNB address directly, return WBNB token
+        if (tokenAddress.toLowerCase() === this.WBNB.address.toLowerCase()) {
+            this.logger.log('WBNB address detected, using WBNB token');
             return this.WBNB;
         }
 
@@ -186,50 +207,92 @@ export class PancakeSwapService {
             );
 
             let trade: Trade<Token, Token, TradeType.EXACT_INPUT> | null = null;
-            let isMultiHop = false;
+            let actualPath: string[] = [];
 
+            // ✅ STEP 1: Try Direct Route
             try {
                 const pair = await Fetcher.fetchPairData(fromToken, toToken, this.viemProvider);
                 const route = new Route([pair], fromToken, toToken);
                 trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
+                actualPath = trade.route.path.map(t => t.address);
+                this.logger.log('✓ Direct route found');
             } catch (error) {
-                isMultiHop = true;
+                this.logger.warn('✗ Direct route not available');
             }
 
+            // ✅ STEP 2: Try Multi-hop via WBNB
             if (!trade) {
                 try {
                     const pair1 = await Fetcher.fetchPairData(fromToken, this.WBNB, this.viemProvider);
                     const pair2 = await Fetcher.fetchPairData(this.WBNB, toToken, this.viemProvider);
                     const route = new Route([pair1, pair2], fromToken, toToken);
                     trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
+                    actualPath = trade.route.path.map(t => t.address);
+                    this.logger.log('✓ Multi-hop route via WBNB found');
                 } catch (error) {
-                    try {
-                        const busdToken = await this.getToken(this.BUSD_ADDRESS);
-                        const pair1 = await Fetcher.fetchPairData(fromToken, busdToken, this.viemProvider);
-                        const pair2 = await Fetcher.fetchPairData(busdToken, toToken, this.viemProvider);
-                        const route = new Route([pair1, pair2], fromToken, toToken);
-                        trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
-                    } catch (error) {
-                        const usdtToken = await this.getToken(this.USDT_ADDRESS);
-                        const pair1 = await Fetcher.fetchPairData(fromToken, usdtToken, this.viemProvider);
-                        const pair2 = await Fetcher.fetchPairData(usdtToken, toToken, this.viemProvider);
-                        const route = new Route([pair1, pair2], fromToken, toToken);
-                        trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
-                    }
+                    this.logger.warn('✗ Multi-hop via WBNB failed');
                 }
             }
 
-            if (!trade) {
-                throw new BadRequestException('No route found for this token pair');
+            // ✅ STEP 3: Try Multi-hop via BUSD
+            if (!trade && fromToken.address.toLowerCase() !== this.BUSD_ADDRESS.toLowerCase()) {
+                try {
+                    const busdToken = await this.getToken(this.BUSD_ADDRESS);
+                    const pair1 = await Fetcher.fetchPairData(fromToken, busdToken, this.viemProvider);
+                    const pair2 = await Fetcher.fetchPairData(busdToken, toToken, this.viemProvider);
+                    const route = new Route([pair1, pair2], fromToken, toToken);
+                    trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
+                    actualPath = trade.route.path.map(t => t.address);
+                    this.logger.log('✓ Multi-hop route via BUSD found');
+                } catch (error) {
+                    this.logger.warn('✗ Multi-hop via BUSD failed');
+                }
             }
 
+            // ✅ STEP 4: Try Multi-hop via USDT
+            if (!trade && fromToken.address.toLowerCase() !== this.USDT_ADDRESS.toLowerCase()) {
+                try {
+                    const usdtToken = await this.getToken(this.USDT_ADDRESS);
+                    const pair1 = await Fetcher.fetchPairData(fromToken, usdtToken, this.viemProvider);
+                    const pair2 = await Fetcher.fetchPairData(usdtToken, toToken, this.viemProvider);
+                    const route = new Route([pair1, pair2], fromToken, toToken);
+                    trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
+                    actualPath = trade.route.path.map(t => t.address);
+                    this.logger.log('✓ Multi-hop route via USDT found');
+                } catch (error) {
+                    this.logger.warn('✗ Multi-hop via USDT failed');
+                }
+            }
+
+            if (!trade || actualPath.length === 0) {
+                throw new BadRequestException(
+                    `No liquidity route found for ${tokenIn.symbol} → ${tokenOut.symbol}`
+                );
+            }
+
+            // ✅ Debug Logging
+            this.logger.log('═══════════════════════════════════════');
+            this.logger.log(`From Token: ${fromToken.symbol} (${fromToken.address})`);
+            this.logger.log(`To Token: ${toToken.symbol} (${toToken.address})`);
+            this.logger.log(`WBNB Address: ${this.WBNB.address}`);
+            this.logger.log(`Path Length: ${actualPath.length}`);
+            actualPath.forEach((addr, i) => {
+                const isWBNB = addr.toLowerCase() === this.WBNB.address.toLowerCase();
+                this.logger.log(`  [${i}] ${addr} ${isWBNB ? '(WBNB) ✓' : ''}`);
+            });
+            this.logger.log(`isNativeIn: ${isNativeIn}, isNativeOut: ${isNativeOut}`);
+            this.logger.log('═══════════════════════════════════════');
+
+            // ✅ Calculate slippage & minimum output
             const slippageTolerance = new Percent(Math.floor(slippage * 100), '10000');
             const minimumAmountOut = trade.minimumAmountOut(slippageTolerance);
             
             const routerInterface = new ethers.Interface(BSC_SWAP_PREPARE_ABI);
-            const deadline = Math.floor(Date.now() / 1000) + 60 * 20;
-            const path = trade.route.path.map(token => token.address);
+            const deadline = Math.floor(Date.now() / 1000) + 60 * 20; // 20 minutes
+            const path = actualPath;
+            const isMultiHop = path.length > 2;
 
+            // ✅ Get account info
             const fromAddress = recipient;
             const [nonce, feeData, balance] = await Promise.all([
                 this.ethersProvider.getTransactionCount(fromAddress, 'pending'),
@@ -240,8 +303,11 @@ export class PancakeSwapService {
             const gasPrice = feeData.gasPrice || ethers.parseUnits('5', 'gwei');
             const txs: any[] = [];
 
+            // ═══════════════════════════════════════════════════════════
+            // 🔥 CASE 1: BNB → Token
+            // ═══════════════════════════════════════════════════════════
             if (isNativeIn) {
-                const estimatedGas = isMultiHop ? 350000n : 250000n;
+                const estimatedGas = isMultiHop ? 400000n : 250000n;
                 const estimatedGasCost = estimatedGas * gasPrice;
                 const totalRequired = BigInt(currencyAmount.quotient.toString()) + estimatedGasCost;
 
@@ -249,16 +315,29 @@ export class PancakeSwapService {
                     const balanceEth = ethers.formatUnits(balance, 18);
                     const requiredEth = ethers.formatUnits(totalRequired, 18);
                     throw new BadRequestException(
-                        `Insufficient BNB balance. Have: ${balanceEth} BNB, Need: ~${requiredEth} BNB (swap + gas)`
+                        `Insufficient BNB. Have: ${balanceEth} BNB, Need: ~${requiredEth} BNB (${amount} BNB + gas)`
                     );
                 }
 
-                const data = routerInterface.encodeFunctionData('swapExactETHForTokens', [
-                    minimumAmountOut.quotient.toString(),
-                    path,
-                    recipient,
-                    deadline
-                ]);
+                // ✅ Ensure path starts with WBNB for BNB swaps
+                let swapPath = [...path];
+                if (swapPath[0].toLowerCase() !== this.WBNB.address.toLowerCase()) {
+                    this.logger.warn(`Fixing first address in path to WBNB`);
+                    swapPath[0] = this.WBNB.address;
+                }
+
+                this.logger.log(`BNB → Token | Final Path: ${swapPath.join(' → ')}`);
+
+                // ✅ Use SupportingFeeOnTransfer for safety
+                const data = routerInterface.encodeFunctionData(
+                    'swapExactETHForTokensSupportingFeeOnTransferTokens',
+                    [
+                        minimumAmountOut.quotient.toString(),
+                        swapPath,
+                        recipient,
+                        deadline
+                    ]
+                );
 
                 const swapTx = {
                     to: this.ROUTER_ADDRESS,
@@ -272,17 +351,22 @@ export class PancakeSwapService {
 
                 try {
                     const estimatedGas = await this.ethersProvider.estimateGas(swapTx);
-                    swapTx['gasLimit'] = ((estimatedGas * 110n) / 100n).toString();
+                    swapTx['gasLimit'] = ((estimatedGas * 120n) / 100n).toString();
+                    this.logger.log(`Gas estimated: ${estimatedGas.toString()}`);
                 } catch (gasError) {
-                    swapTx['gasLimit'] = isMultiHop ? '350000' : '250000';
-                    this.logger.warn('Gas estimation failed, using default');
+                    swapTx['gasLimit'] = isMultiHop ? '400000' : '250000';
+                    this.logger.warn(`Gas estimation failed: ${gasError.message}`);
                 }
 
                 txs.push(swapTx);
-
-            } else {
+            }
+            
+            // ═══════════════════════════════════════════════════════════
+            // 🔥 CASE 2 & 3: Token → BNB OR Token → Token
+            // ═══════════════════════════════════════════════════════════
+            else {
                 const estimatedGasForApprove = 60000n;
-                const estimatedGasForSwap = isMultiHop ? 350000n : 250000n;
+                const estimatedGasForSwap = isMultiHop ? 400000n : 250000n;
                 const estimatedTotalGas = estimatedGasForApprove + estimatedGasForSwap;
                 const estimatedGasCost = estimatedTotalGas * gasPrice;
 
@@ -290,23 +374,32 @@ export class PancakeSwapService {
                     const balanceEth = ethers.formatUnits(balance, 18);
                     const requiredEth = ethers.formatUnits(estimatedGasCost, 18);
                     throw new BadRequestException(
-                        `Insufficient BNB for gas fees. Have: ${balanceEth} BNB, Need: ~${requiredEth} BNB`
+                        `Insufficient BNB for gas. Have: ${balanceEth} BNB, Need: ~${requiredEth} BNB`
                     );
                 }
 
-                const tokenContract = new ethers.Contract(fromToken.address, BSC_TOKEN_ABI, this.ethersProvider);
+                // ✅ Check token balance
+                const tokenContract = new ethers.Contract(
+                    fromToken.address,
+                    BSC_TOKEN_ABI,
+                    this.ethersProvider
+                );
                 const tokenBalance = await tokenContract.balanceOf(fromAddress);
 
                 if (tokenBalance < BigInt(currencyAmount.quotient.toString())) {
                     const balanceFormatted = ethers.formatUnits(tokenBalance, fromToken.decimals);
-                    const requiredFormatted = ethers.formatUnits(currencyAmount.quotient.toString(), fromToken.decimals);
+                    const requiredFormatted = ethers.formatUnits(
+                        currencyAmount.quotient.toString(),
+                        fromToken.decimals
+                    );
                     throw new BadRequestException(
-                        `Insufficient ${fromToken.symbol} balance. Have: ${balanceFormatted}, Need: ${requiredFormatted}`
+                        `Insufficient ${fromToken.symbol}. Have: ${balanceFormatted}, Need: ${requiredFormatted}`
                     );
                 }
 
                 let currentNonce = nonce;
 
+                // ✅ Handle Approval
                 const needsApproval = await this.checkApprovalNeeded(
                     fromToken.address,
                     fromAddress,
@@ -314,6 +407,8 @@ export class PancakeSwapService {
                 );
 
                 if (needsApproval) {
+                    this.logger.log('Approval needed, creating approve tx...');
+                    
                     const tokenInterface = new ethers.Interface(BSC_APPROVAL_SUBMIT_ABI);
                     const approveData = tokenInterface.encodeFunctionData('approve', [
                         this.ROUTER_ADDRESS,
@@ -332,7 +427,7 @@ export class PancakeSwapService {
 
                     try {
                         const approveGas = await this.ethersProvider.estimateGas(approveTx);
-                        approveTx['gasLimit'] = ((approveGas * 110n) / 100n).toString();
+                        approveTx['gasLimit'] = ((approveGas * 120n) / 100n).toString();
                     } catch (gasError) {
                         approveTx['gasLimit'] = '60000';
                         this.logger.warn('Approve gas estimation failed, using default');
@@ -340,13 +435,38 @@ export class PancakeSwapService {
 
                     txs.push(approveTx);
                     currentNonce += 1;
+                } else {
+                    this.logger.log('Approval already exists, skipping...');
                 }
 
-                const functionName = isNativeOut ? 'swapExactTokensForETH' : 'swapExactTokensForTokens';
+                // ✅ Determine correct swap function and path
+                let functionName: string;
+                let swapPath: string[] = [...path]; // Copy path
+                
+                if (isNativeOut) {
+                    // Token → BNB
+                    functionName = 'swapExactTokensForETHSupportingFeeOnTransferTokens';
+                    
+                    // ✅ CRITICAL: Last address MUST be WBNB for ETH swaps
+                    const lastAddress = swapPath[swapPath.length - 1].toLowerCase();
+                    const wbnbAddress = this.WBNB.address.toLowerCase();
+                    
+                    if (lastAddress !== wbnbAddress) {
+                        this.logger.warn(`Fixing path: last token ${lastAddress.slice(0, 6)} → WBNB ${wbnbAddress.slice(0, 6)}`);
+                        swapPath[swapPath.length - 1] = this.WBNB.address;
+                    }
+                    
+                    this.logger.log(`Token → BNB | Final Path: ${swapPath.join(' → ')}`);
+                } else {
+                    // Token → Token
+                    functionName = 'swapExactTokensForTokensSupportingFeeOnTransferTokens';
+                    this.logger.log(`Token → Token | Final Path: ${swapPath.join(' → ')}`);
+                }
+
                 const data = routerInterface.encodeFunctionData(functionName, [
                     currencyAmount.quotient.toString(),
                     minimumAmountOut.quotient.toString(),
-                    path,
+                    swapPath, // ✅ Use fixed path
                     recipient,
                     deadline
                 ]);
@@ -363,24 +483,26 @@ export class PancakeSwapService {
 
                 try {
                     const estimatedGas = await this.ethersProvider.estimateGas(swapTx);
-                    swapTx['gasLimit'] = ((estimatedGas * 110n) / 100n).toString();
+                    swapTx['gasLimit'] = ((estimatedGas * 120n) / 100n).toString();
+                    this.logger.log(`Swap gas estimated: ${estimatedGas.toString()}`);
                 } catch (gasError) {
-                    swapTx['gasLimit'] = isMultiHop ? '350000' : '250000';
-                    this.logger.warn('Swap gas estimation failed, using default');
+                    swapTx['gasLimit'] = isMultiHop ? '400000' : '250000';
+                    this.logger.warn(`Swap gas estimation failed: ${gasError.message}`);
                 }
 
                 txs.push(swapTx);
             }
 
+            this.logger.log(`✓ Created ${txs.length} transaction(s)`);
             return txs;
 
         } catch (error) {
-            this.logger.error('Prepare swap tx error:', error);
+            this.logger.error('❌ Transaction preparation failed:', error);
             const message =
                 error.info?.error?.message ||
                 error.shortMessage ||
                 error.message ||
-                'Failed prepare swap tx';
+                'Failed to prepare swap transaction';
             throw new BadRequestException(message);
         }
     }
