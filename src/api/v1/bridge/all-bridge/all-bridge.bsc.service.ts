@@ -85,6 +85,7 @@ export class AllBridgeBscService {
     const chainMap: Record<ValidWalletType, ChainSymbol> = {
       [ValidWalletType.ETH]: ChainSymbol.ETH,
       [ValidWalletType.BNB]: ChainSymbol.BSC,
+      [ValidWalletType.SRB]: ChainSymbol.SRB,
     };
 
     const chainSymbol = chainMap[walletType];
@@ -105,10 +106,11 @@ export class AllBridgeBscService {
         destinationToken,
         walletType,
         feePayType,
+        destinationWalletType
       } = swapDto;
 
       const sourceTokenCoin = await this.fetchTokens(sourceToken, walletType);
-      const destinationTokenCoin = await this.fetchTokens(destinationToken);
+      const destinationTokenCoin = await this.fetchTokens(destinationToken,destinationWalletType);
 
       if (!sourceTokenCoin || !destinationTokenCoin) {
         throw new BadRequestException(

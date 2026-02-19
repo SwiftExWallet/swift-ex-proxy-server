@@ -14,7 +14,7 @@ export class validations_token implements ValidatorConstraintInterface {
 
     if (ValidWalletType[walletType] == ValidWalletType.ETH) {
       const allowedSourceTokens = ['USDT', 'USDC'];
-      const allowedDestinationTokens = ['USDC', 'aeETH'];
+      const allowedDestinationTokens = ['USDT', 'USDC'];
 
       if (args.property === 'sourceToken') {
         return allowedSourceTokens.includes(token);
@@ -27,7 +27,7 @@ export class validations_token implements ValidatorConstraintInterface {
 
     if (ValidWalletType[walletType] == ValidWalletType.BNB) {
       const allowedSourceTokens = ['USDT', 'USDC'];
-      const allowedDestinationTokens = ['USDC'];
+      const allowedDestinationTokens = ['USDT', 'USDC'];
 
       if (args.property === 'sourceToken') {
         return allowedSourceTokens.includes(token);
@@ -48,7 +48,7 @@ export class validations_token implements ValidatorConstraintInterface {
         return `SourceToken must be either USDT or USDC for Ethereum walletType.`;
       }
       if (args.property === 'destinationToken') {
-        return `DestinationToken must be either USDC or aeETH for Ethereum walletType.`;
+        return `DestinationToken must be either USDC or USDT for Ethereum walletType.`;
       }
     }
     if (ValidWalletType[walletType] == ValidWalletType.BNB) {
@@ -56,7 +56,7 @@ export class validations_token implements ValidatorConstraintInterface {
         return `SourceToken must be either USDT or BNB for BNB walletType.`;
       }
       if (args.property === 'destinationToken') {
-        return `DestinationToken must be either BNB or aeETH for BNB walletType.`;
+        return `DestinationToken must be either BNB or ETH for BNB walletType.`;
       }
     }
     return `Invalid token.`;
