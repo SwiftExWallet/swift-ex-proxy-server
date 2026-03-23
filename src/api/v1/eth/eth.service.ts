@@ -18,7 +18,6 @@ import {
 import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import {
-  broadcastTransactionToNetwork,
   getEstimateGas,
   getFeeData,
   getNativeCurrencyBalance,
@@ -26,7 +25,6 @@ import {
   getTransactionCount,
 } from '../common/helpers/blockchainUtilityMethods';
 import { SwapPrepareDto } from './dto/swapPrepare.dto';
-import { EthSwapEnum } from '../common/enums/ethSwap.enum';
 
 import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
 import { TokenInfo } from '../common/interface/tokenInfo.interface';
@@ -62,7 +60,7 @@ export class EthService {
   constructor(
     private readonly providerService: ProviderService,
     private readonly uniSwapService: UniSwapService,
-    private readonly ethTestnetSwapService: EthTestnetSwapService
+    private readonly ethTestnetSwapService: EthTestnetSwapService,
   ) {
     const factoryAddress = process.env.POOL_FACTORY_CONTRACT_ADDRESS;
     const quoterAddress = process.env.QUOTER_CONTRACT_ADDRESS;
@@ -88,7 +86,9 @@ export class EthService {
   }
 
   async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
-    return process.env.ENVIRONMENT==="dev"?await this.ethTestnetSwapService.getQuote(swapQuoteDto):await this.uniSwapService.getQuote(swapQuoteDto);
+    return process.env.ENVIRONMENT === 'dev'
+      ? await this.ethTestnetSwapService.getQuote(swapQuoteDto)
+      : await this.uniSwapService.getQuote(swapQuoteDto);
   }
 
   async prepareUsdtSwapTransaction(
@@ -233,17 +233,18 @@ export class EthService {
     }
   }
 
-  async prepareSwapTransaction(dto: SwapPrepareDto | SwapQuoteDto): Promise<any> {
+  async prepareSwapTransaction(
+    dto: SwapPrepareDto | SwapQuoteDto,
+  ): Promise<any> {
     return this.buildSwapTransaction(dto);
   }
 
-  async executeSwapTransactions(
-    txs: string[],
-  ): Promise<ExecutedTransaction[]> {
+  async executeSwapTransactions(txs: string[]): Promise<ExecutedTransaction[]> {
     const txResponses: ExecutedTransaction[] = [];
-  
+
     for (const signedTx of txs) {
-      const txResponse: TransactionResponse = await this.provider.broadcastTransaction(signedTx);      
+      const txResponse: TransactionResponse =
+        await this.provider.broadcastTransaction(signedTx);
       const receipt = await txResponse.wait();
       if (!receipt) {
         throw new Error(`Transaction ${txResponse.hash} failed or not mined`);
@@ -314,9 +315,13 @@ export class EthService {
     return getNativeCurrencyBalance(walletAddress, this.provider);
   }
 
-  private async buildSwapTransaction(dto: SwapPrepareDto | SwapQuoteDto): Promise<any> {
-    if (process.env.ENVIRONMENT === "dev") {
-      return this.ethTestnetSwapService.prepareSwapTransaction(dto as SwapPrepareDto);
+  private async buildSwapTransaction(
+    dto: SwapPrepareDto | SwapQuoteDto,
+  ): Promise<any> {
+    if (process.env.ENVIRONMENT === 'dev') {
+      return this.ethTestnetSwapService.prepareSwapTransaction(
+        dto as SwapPrepareDto,
+      );
     }
     return this.uniSwapService.buildSwapTx(dto as SwapQuoteDto);
   }

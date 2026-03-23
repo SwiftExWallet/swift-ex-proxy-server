@@ -41,9 +41,7 @@ export class PancakeSwapService {
   private readonly WBNB = WETH9[this.chainId];
   private readonly ROUTER_ADDRESS = process.env.BSC_SWAP_ROUTER_ADD as string;
 
-  constructor(
-    private readonly providerService: ProviderService,
-  ) {
+  constructor(private readonly providerService: ProviderService) {
     const rpcUrl = providerService.getRpcUrl();
     this.ethersProvider = new JsonRpcProvider(rpcUrl);
     this.viemProvider = createPublicClient({
@@ -100,7 +98,7 @@ export class PancakeSwapService {
 
   async getSwapQuote(params: SwapQuoteDto): Promise<any> {
     try {
-      const { tokenIn, tokenOut, amount} = params;
+      const { tokenIn, tokenOut, amount } = params;
       const fromToken = await this.getToken(tokenIn.address);
       const toToken = await this.getToken(tokenOut.address);
 
@@ -135,7 +133,9 @@ export class PancakeSwapService {
     }
   }
 
-  async createUnsignedSwapTransaction(params: SwapQuoteDto): Promise<PancakeUnsignedSwapTransaction> {
+  async createUnsignedSwapTransaction(
+    params: SwapQuoteDto,
+  ): Promise<PancakeUnsignedSwapTransaction> {
     try {
       const { tokenIn, tokenOut, amount, slippage = 1 } = params;
       const [quote, fromToken, toToken] = await Promise.all([
@@ -143,21 +143,21 @@ export class PancakeSwapService {
         this.getToken(tokenIn.address),
         this.getToken(tokenOut.address),
       ]);
-  
+
       const currencyAmount = CurrencyAmount.fromRawAmount(
         fromToken,
         parseUnits(amount, fromToken.decimals).toString(),
       );
-  
+
       const [pair, nonce, feeData] = await Promise.all([
         Fetcher.fetchPairData(fromToken, toToken, this.viemProvider),
         this.ethersProvider.getTransactionCount(fromToken.address),
         this.ethersProvider.getFeeData(),
       ]);
-  
+
       const route = new Route([pair], fromToken, toToken);
       const trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
-  
+
       const slippageTolerance = new Percent(
         Math.floor(slippage * 100),
         process.env.PANCAKE_SLIPPAGE as string,
@@ -169,20 +169,24 @@ export class PancakeSwapService {
       const deadline = Math.floor(Date.now() / 1000) + 60 * 20;
       const path = trade.route.path.map((token) => token.address);
       const gasPrice =
-     feeData.gasPrice || parseUnits(process.env.BSC_SLIPPAGE as string, 'gwei');
+        feeData.gasPrice ||
+        parseUnits(process.env.BSC_SLIPPAGE as string, 'gwei');
 
       let swapTransaction: PancakeUnsignedSwapTransaction['transaction'];
-      let approvalTransaction: PancakeUnsignedSwapTransaction['approvalTransaction'] =null;
+      let approvalTransaction: PancakeUnsignedSwapTransaction['approvalTransaction'] =
+        null;
 
       if (fromToken.address === this.WBNB.address) {
         // ETH → Token
-        const data = routerInterface.encodeFunctionData('swapExactETHForTokens', [
-          minimumAmountOut.quotient.toString(),
-          path,
-          fromToken.address,
-          deadline,
-        ],
-      );
+        const data = routerInterface.encodeFunctionData(
+          'swapExactETHForTokens',
+          [
+            minimumAmountOut.quotient.toString(),
+            path,
+            fromToken.address,
+            deadline,
+          ],
+        );
 
         swapTransaction = {
           to: this.ROUTER_ADDRESS,
@@ -208,14 +212,17 @@ export class PancakeSwapService {
           );
         }
 
-        const data = routerInterface.encodeFunctionData('swapExactTokensForETH', [
-          currencyAmount.quotient.toString(),
-          minimumAmountOut.quotient.toString(),
-          path,
-          fromToken.address,
-          deadline,
-        ]);
-        
+        const data = routerInterface.encodeFunctionData(
+          'swapExactTokensForETH',
+          [
+            currencyAmount.quotient.toString(),
+            minimumAmountOut.quotient.toString(),
+            path,
+            fromToken.address,
+            deadline,
+          ],
+        );
+
         swapTransaction = {
           to: this.ROUTER_ADDRESS,
           value: '0',
@@ -232,14 +239,14 @@ export class PancakeSwapService {
           fromToken.address,
           currencyAmount.quotient.toString(),
         );
-  
+
         if (needsApproval) {
           approvalTransaction = await this.createApprovalTransaction(
             fromToken.address,
             nonce,
           );
         }
-  
+
         const data = routerInterface.encodeFunctionData(
           'swapExactTokensForTokens',
           [
@@ -250,7 +257,7 @@ export class PancakeSwapService {
             deadline,
           ],
         );
-  
+
         swapTransaction = {
           to: this.ROUTER_ADDRESS,
           value: '0',
@@ -261,7 +268,7 @@ export class PancakeSwapService {
           chainId: this.chainId,
         };
       }
-  
+
       return {
         transaction: swapTransaction,
         approvalTransaction,
@@ -275,7 +282,6 @@ export class PancakeSwapService {
       );
     }
   }
-  
 
   async broadcastTransaction(
     signedTx: string,
@@ -327,7 +333,9 @@ export class PancakeSwapService {
     ]);
 
     const feeData = await this.ethersProvider.getFeeData();
-    const gasPrice = feeData.gasPrice || parseUnits(process.env.BSC_SLIPPAGE as string, 'gwei');
+    const gasPrice =
+      feeData.gasPrice ||
+      parseUnits(process.env.BSC_SLIPPAGE as string, 'gwei');
 
     return {
       to: tokenAddress,
