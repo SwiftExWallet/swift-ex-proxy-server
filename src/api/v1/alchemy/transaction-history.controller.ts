@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Res } from '@nestjs/common';
+import { Controller, Get, Param, Query, Res } from '@nestjs/common';
 import { TransactionHistoryService } from './transaction-history.service';
 import { ChainEnum } from '../common/enums/chain.enum';
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
@@ -13,11 +13,13 @@ export class TransactionHistoryController {
   async getEthWalletHistory(
     @Res() res,
     @Param()
-    walletAddress: WalletAddressDto,
+    walletAddressDto: WalletAddressDto,
+    @Query('sentPageKey') sentPageKey?: string,
+    @Query('receivedPageKey') receivedPageKey?: string,
   ) {
     const data =
       await this.transactionHistoryService.getWalletTransactionHistory(
-        walletAddress,
+        { ...walletAddressDto, sentPageKey, receivedPageKey },
         ChainEnum.ETH,
       );
     res.status(200).json(data);
@@ -28,10 +30,12 @@ export class TransactionHistoryController {
     @Res() res,
     @Param()
     walletAddressDto: WalletAddressDto,
+    @Query('sentPageKey') sentPageKey?: string,
+    @Query('receivedPageKey') receivedPageKey?: string,
   ) {
     const data =
       await this.transactionHistoryService.getWalletTransactionHistory(
-        walletAddressDto,
+        { ...walletAddressDto, sentPageKey, receivedPageKey },
         ChainEnum.BSC,
       );
     res.status(200).json(data);

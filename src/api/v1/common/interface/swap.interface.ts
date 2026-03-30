@@ -29,6 +29,8 @@ export interface SwapQuote {
   poolAddress?: string;
   isMultiHop?: boolean;
   path?: string;
+  isWethUnwrap?: boolean;
+  networkFee?: number;
 }
 
 export interface QuotedOutput {

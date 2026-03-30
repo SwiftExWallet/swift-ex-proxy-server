@@ -121,6 +121,23 @@ export class UniSwapService {
       
       const tokenInAddress = isNativeIn ? this.WETH_ADDRESS : swapQuoteDto.tokenIn.address;
       const tokenOutAddress = isNativeOut ? this.WETH_ADDRESS : swapQuoteDto.tokenOut.address;
+
+      if (
+        tokenInAddress.toLowerCase() === this.WETH_ADDRESS.toLowerCase() &&
+        isNativeOut
+      ) {
+        return {
+          inputAmount: swapQuoteDto.amount,
+          inputToken: swapQuoteDto.tokenIn.symbol,
+          outputAmount: swapQuoteDto.amount,
+          outputToken: 'ETH',
+          pricePerToken: '1',
+          fee: '0',
+          isMultiHop: false,
+          path: undefined,
+          isWethUnwrap: true,
+        };
+      }
       
       const tokenIn = new Token(
         1,
@@ -202,7 +219,10 @@ export class UniSwapService {
         parseFloat(formattedAmountOut) / parseFloat(swapQuoteDto.amount);
 
       this.logger.log(`Quote result: ${formattedAmountOut} ${tokenOut.symbol} (price: ${pricePerToken} per token)`);
-
+      const feeData = await this.provider.getFeeData();
+      const gasPriceWei = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+      const estimatedGasUnits = isMultiHop ? 300000n : 150000n;
+      const networkFeeEth = parseFloat(formatUnits(estimatedGasUnits * gasPriceWei, 18));
       return {
         inputAmount: swapQuoteDto.amount,
         inputToken: isNativeIn ? 'ETH' : swapQuoteDto.tokenIn.symbol,
@@ -212,6 +232,7 @@ export class UniSwapService {
         fee: selectedFeeTier.toString(),
         isMultiHop,
         path: multiHopPath,
+        networkFee:networkFeeEth
       };
     } catch (error) {
       this.logger.error('Quote error:', error);
@@ -281,6 +302,45 @@ export class UniSwapService {
       const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? parseUnits("1", "gwei");
 
       const txs: TransactionRequest[] = [];
+
+      // WETH to ETH using withdraw
+      if (quote.isWethUnwrap) {
+        const amountInWei = parseUnits(swapQuoteDto.amount, 18);
+        const ERC20_ABI = ['function balanceOf(address) view returns (uint256)'];
+        const wethContract = new Contract(this.WETH_ADDRESS, ERC20_ABI, this.provider);
+        const wethBalance = await wethContract.balanceOf(fromAddress);
+
+        if (wethBalance < amountInWei) {
+          throw new BadRequestException(
+            `Insufficient WETH balance. Have: ${formatUnits(wethBalance, 18)}, Need: ${swapQuoteDto.amount}`
+          );
+        }
+
+        const wethIface = new Interface(WETH_ABI);
+        const withdrawData = wethIface.encodeFunctionData('withdraw', [amountInWei]);
+
+        const rawTx: TransactionRequest = {
+          to: this.WETH_ADDRESS,
+          from: fromAddress,
+          data: withdrawData,
+          value: 0n,
+          chainId: 1,
+          nonce,
+          type: 2,
+          maxFeePerGas,
+          maxPriorityFeePerGas,
+        };
+
+        try {
+          const estimatedGas = await this.provider.estimateGas(rawTx);
+          rawTx.gasLimit = (estimatedGas * 110n) / 100n;
+        } catch {
+          rawTx.gasLimit = 50000n;
+        }
+
+        txs.push(rawTx);
+        return txs;
+      }
 
       if (isNativeIn) {
         const estimatedGasForSwap = quote.isMultiHop ? 250000n : 180000n;

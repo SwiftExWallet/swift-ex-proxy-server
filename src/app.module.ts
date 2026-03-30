@@ -17,6 +17,7 @@ import { DeviceModule } from './api/v1/device/device.module';
 import { AllBridgeModule } from './api/v1/bridge/all-bridge/all-bridge.module';
 import { BridgeModule } from './api/v1/bridge/bridge.module';
 import { RedisModule } from './api/v1/redis/redis.module';
+import { SwapModule } from './api/v1/swap/swap.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { RedisModule } from './api/v1/redis/redis.module';
     AllBridgeModule,
     BridgeModule,
     RedisModule,
+    SwapModule,
   ],
   controllers: [AppController],
   providers: [AppService],
@@ -53,6 +55,14 @@ export class AppModule {
     consumer
       .apply(DeviceAuthTokenMiddleware)
       .exclude(
+        {
+          path: '/',
+          method: RequestMethod.GET,
+        },
+        {
+          path: 'health',
+          method: RequestMethod.GET,
+        },
         {
           path: 'api/v1/webhook/stellar-transactions',
           method: RequestMethod.POST,

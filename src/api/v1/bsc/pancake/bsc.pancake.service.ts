@@ -167,6 +167,12 @@ export class PancakeSwapService {
             const formattedAmountOut = trade.outputAmount.toExact();
             const pricePerToken = trade.executionPrice.invert();
 
+            const feeData = await this.ethersProvider.getFeeData();
+            const gasPriceWei = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
+            const estimatedGasUnits = routePath === 'direct' ? 150000n : 300000n;
+            const networkFeeBnb = parseFloat(
+                ethers.formatUnits(estimatedGasUnits * gasPriceWei, 18)
+            );
             return {
                 inputAmount: amount,
                 inputToken: isNativeIn ? 'BNB' : tokenIn.symbol,
@@ -176,6 +182,7 @@ export class PancakeSwapService {
                 fee: '3000',
                 route: routePath,
                 path: trade.route.path.map(t => t.symbol).join(' -> '),
+                networkFee:networkFeeBnb
             };
         } catch (error) {
             this.logger.error('Quote error:', error);

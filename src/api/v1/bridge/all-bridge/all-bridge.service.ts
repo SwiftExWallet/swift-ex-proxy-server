@@ -146,6 +146,8 @@ export class AllBridgeService {
           owner: fromAddress,
         });
 
+         await this.simulateTransaction(fromAddress, approveTransaction, 'approve');
+
         const currentNonce = await getTransactionCount(this.provider, fromAddress);
         const [network, feeData] = await Promise.all([
           getNetwork(this.provider),
@@ -197,6 +199,7 @@ export class AllBridgeService {
       }
 
       this.logger.log('=== preparing only transfer transaction ===');
+      await this.simulateTransaction(fromAddress, transferTransaction, 'transfer');
       const [nonce, gasLimit, feeData, network] = await Promise.all([
         getTransactionCount(this.provider, fromAddress),
         getEstimateGas(this.provider, fromAddress, transferTransaction),
@@ -334,4 +337,32 @@ export class AllBridgeService {
       BSC: process.env.PROVIDER_RPC_BSC as string
     });
   }
+
+  private async simulateTransaction(
+  fromAddress: string,
+  rawTx: RawTransaction,
+  label: string = 'transaction'
+): Promise<void> {
+  try {
+    this.logger.log(`=== Simulating ${label} ===`);
+    await this.provider.call({
+      from: fromAddress,
+      to: (rawTx as any).to,
+      data: (rawTx as any).data,
+      value: (rawTx as any).value ?? 0n,
+    });
+    this.logger.log(`=== ${label} simulation passed ===`);
+  } catch (error) {
+    const revertReason =
+      error?.revert?.args?.[0] ||
+      error?.reason ||
+      error?.info?.error?.message ||
+      error?.shortMessage ||
+      error?.message ||
+      `${label} simulation failed`;
+
+    this.logger.error(`=== ${label} simulation FAILED: ${revertReason} ===`);
+    throw new BadRequestException(revertReason);
+  }
+}
 }

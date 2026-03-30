@@ -7,6 +7,7 @@ import {
 } from 'alchemy-sdk';
 import { ChainEnum, TxChainEnum } from '../common/enums/chain.enum';
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
+import { TransactionHistoryDto } from './dto/transaction-history.dto';
 
 @Injectable()
 export class TransactionHistoryService {
@@ -89,26 +90,26 @@ export class TransactionHistoryService {
   }
 
   async getWalletTransactionHistory(
-    walletAddressDto: WalletAddressDto,
+    walletAddressDto: TransactionHistoryDto,
     chain: ChainEnum,
   ) {
-    const { walletAddress } = walletAddressDto;
+    const { walletAddress, sentPageKey, receivedPageKey } = walletAddressDto;
     const alchemy = this.getAlchemyClient(chain);
     const categories = this.getTransferCategories();
-    const maxCount = Number(process.env.ALCHEMY_HISTORY_RECORD_COUNT || '100');
-
     const [sent, received] = await Promise.all([
       alchemy.core.getAssetTransfers({
         fromAddress: walletAddress,
         category: categories,
         order: SortingOrder.DESCENDING,
-        maxCount,
+        maxCount: 10,
+        pageKey: sentPageKey ?? undefined,
       }),
       alchemy.core.getAssetTransfers({
         toAddress: walletAddress,
         category: categories,
         order: SortingOrder.DESCENDING,
-        maxCount,
+        maxCount: 10,
+        pageKey: receivedPageKey ?? undefined,
       }),
     ]);
 
@@ -120,7 +121,6 @@ export class TransactionHistoryService {
         return bBlock - aBlock;
       });
 
-    // STEP 1: Collect unique ERC-20 contract addresses
     const tokenContracts = new Set<string>();
     for (const tx of combined) {
       if (tx.category === 'erc20' && tx.rawContract?.address) {
@@ -128,21 +128,17 @@ export class TransactionHistoryService {
       }
     }
 
-    // STEP 2: Fetch metadata for each contract in parallel
-    const metadataMap: Record<string, { symbol: string; decimals: number }> =
-      {};
+    const metadataMap: Record<string, { symbol: string; decimals: number }> = {};
     await Promise.all(
       Array.from(tokenContracts).map(async (address) => {
         metadataMap[address] = await this.getTokenMetadata(alchemy, address);
       }),
     );
 
-    // STEP 3: Patch each transfer with metadata + formatted value
     for (const tx of combined) {
       if (tx.category === 'erc20' && tx.rawContract?.address) {
         const addr = tx.rawContract.address.toLowerCase();
         const meta = metadataMap[addr];
-
         const decimals = Number(tx.rawContract.decimal || meta?.decimals || 18);
         tx.asset = tx.asset || meta?.symbol || 'UNKNOWN';
         tx.rawContract.decimal = decimals.toString();
@@ -151,7 +147,6 @@ export class TransactionHistoryService {
           decimals,
         );
       } else if (tx.category === 'external') {
-        // Native chain token transfer
         tx.asset = chain === ChainEnum.BSC ? TxChainEnum.BSC : TxChainEnum.ETH;
         tx.rawContract.decimal = '18';
         (tx as any).formattedAmount = this.formatTokenAmount(
@@ -161,6 +156,16 @@ export class TransactionHistoryService {
       }
     }
 
-    return combined;
+    return {
+      data: combined,
+      pagination: {
+        nextSentPageKey: sent.pageKey ?? null,
+        nextReceivedPageKey: received.pageKey ?? null,
+        hasSentNextPage: !!sent.pageKey,
+        hasReceivedNextPage: !!received.pageKey,
+        hasNextPage: !!(sent.pageKey || received.pageKey),
+      },
+    };
   }
+
 }
