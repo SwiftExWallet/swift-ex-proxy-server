@@ -18,6 +18,7 @@ import { AllBridgeModule } from './api/v1/bridge/all-bridge/all-bridge.module';
 import { BridgeModule } from './api/v1/bridge/bridge.module';
 import { RedisModule } from './api/v1/redis/redis.module';
 import { SwapModule } from './api/v1/swap/swap.module';
+import { QuoterModule } from './api/v1/uniswap/quoter/quoter.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { SwapModule } from './api/v1/swap/swap.module';
     BridgeModule,
     RedisModule,
     SwapModule,
+    QuoterModule
   ],
   controllers: [AppController],
   providers: [AppService],

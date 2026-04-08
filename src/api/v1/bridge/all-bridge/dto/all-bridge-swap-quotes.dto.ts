@@ -9,10 +9,19 @@ export class AllBridgeQuotesDto {
 
   @IsNotEmpty()
   @IsEnum(ValidWalletType)
-  chainType: ValidWalletType;
+  sourceChain: ValidWalletType;
 
   @IsNotEmpty()
   @IsString()
-  @IsTokenValid({ message: 'Invalid sourceToken for the given walletType.' })
+  @IsTokenValid()
   sourceToken: string;
+
+  @IsNotEmpty()
+  @IsEnum(ValidWalletType)
+  destinationChain: ValidWalletType;
+
+  @IsNotEmpty()
+  @IsString()
+  @IsTokenValid()
+  destinationToken: ValidWalletType;
 }

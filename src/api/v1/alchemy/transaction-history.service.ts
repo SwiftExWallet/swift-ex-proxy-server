@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   Alchemy,
   AssetTransfersCategory,
@@ -6,43 +6,44 @@ import {
   SortingOrder,
 } from 'alchemy-sdk';
 import { ChainEnum, TxChainEnum } from '../common/enums/chain.enum';
-import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 import { TransactionHistoryDto } from './dto/transaction-history.dto';
 
 @Injectable()
 export class TransactionHistoryService {
-  private readonly ethAlchemy: Alchemy;
-  private readonly bscAlchemy: Alchemy;
+  private readonly logger = new Logger(TransactionHistoryService.name);
+  private readonly clientAlchemy: Partial<Record<ChainEnum, Alchemy>>;
 
   constructor() {
-    const ethNetworkKey = process.env
-      .ALCHEMY_ETH_NETWORK as keyof typeof Network;
-    const bscNetworkKey = process.env
-      .ALCHEMY_BSC_NETWORK as keyof typeof Network;
+    const networkMap: Partial<Record<ChainEnum, keyof typeof Network>> = {
+      [ChainEnum.ETH]: process.env.ALCHEMY_ETH_NETWORK as keyof typeof Network,
+      [ChainEnum.BSC]: process.env.ALCHEMY_BSC_NETWORK as keyof typeof Network,
+      [ChainEnum.POL]: process.env.ALCHEMY_POL_NETWORK as keyof typeof Network,
+      [ChainEnum.ARB]: process.env.ALCHEMY_ARB_NETWORK as keyof typeof Network,
+      [ChainEnum.BASE]: process.env.ALCHEMY_BAS_NETWORK as keyof typeof Network,
+      [ChainEnum.AVAX]: process.env.ALCHEMY_AVA_NETWORK as keyof typeof Network,
+      [ChainEnum.OP]: process.env.ALCHEMY_OPT_NETWORK as keyof typeof Network,
+    };
+    this.clientAlchemy = {};
 
-    if (
-      !ethNetworkKey ||
-      !bscNetworkKey ||
-      !(ethNetworkKey in Network) ||
-      !(bscNetworkKey in Network)
-    ) {
-      throw new Error(
-        `Invalid ALCHEMY_ETH_NETWORK value: ${process.env.ALCHEMY_ETH_NETWORK}`,
-      );
+    for (const [chain, networkKey] of Object.entries(networkMap)) {
+      if (!networkKey || !(networkKey in Network)) {
+        this.logger.warn(`unable to porvide ${chain}`);
+        continue;
+      }
+
+      this.clientAlchemy[chain as ChainEnum] = new Alchemy({
+        apiKey: process.env.ALCHEMY_API_KEY,
+        network: Network[networkKey],
+      });
     }
-    this.ethAlchemy = new Alchemy({
-      apiKey: process.env.ALCHEMY_API_KEY,
-      network: Network[ethNetworkKey],
-    });
-
-    this.bscAlchemy = new Alchemy({
-      apiKey: process.env.ALCHEMY_API_KEY,
-      network: Network[bscNetworkKey],
-    });
   }
 
   private getAlchemyClient(chain: ChainEnum): Alchemy {
-    return chain === ChainEnum.ETH ? this.ethAlchemy : this.bscAlchemy;
+    const alchemyClient = this.clientAlchemy[chain];
+    if (!alchemyClient) {
+      throw new BadRequestException(`Unable to porvide ${chain} wallet transaction history.`);
+    }
+    return alchemyClient;
   }
 
   private getTransferCategories(): AssetTransfersCategory[] {
@@ -89,11 +90,8 @@ export class TransactionHistoryService {
     }
   }
 
-  async getWalletTransactionHistory(
-    walletAddressDto: TransactionHistoryDto,
-    chain: ChainEnum,
-  ) {
-    const { walletAddress, sentPageKey, receivedPageKey } = walletAddressDto;
+  async getWalletTransactionHistory(walletAddressDto: TransactionHistoryDto) {
+    const { walletAddress, sentPageKey, receivedPageKey, chain } = walletAddressDto;
     const alchemy = this.getAlchemyClient(chain);
     const categories = this.getTransferCategories();
     const [sent, received] = await Promise.all([
@@ -103,6 +101,7 @@ export class TransactionHistoryService {
         order: SortingOrder.DESCENDING,
         maxCount: 10,
         pageKey: sentPageKey ?? undefined,
+        withMetadata:true
       }),
       alchemy.core.getAssetTransfers({
         toAddress: walletAddress,
@@ -110,6 +109,7 @@ export class TransactionHistoryService {
         order: SortingOrder.DESCENDING,
         maxCount: 10,
         pageKey: receivedPageKey ?? undefined,
+        withMetadata:true
       }),
     ]);
 
@@ -167,5 +167,4 @@ export class TransactionHistoryService {
       },
     };
   }
-
 }

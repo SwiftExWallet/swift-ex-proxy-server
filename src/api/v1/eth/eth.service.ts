@@ -55,7 +55,9 @@ import { EthTestnetSwapService } from './eth.testnet.service';
 export class EthService {
   private readonly logger = new Logger(EthService.name);
 
-  provider: JsonRpcProvider;
+  provider(chain: ChainEnum = ChainEnum.ETH): JsonRpcProvider {
+    return this.providerService.getProvider(chain);
+  }
   factoryContract: Contract;
   quoterContract: Contract;
   swapRouterContract: Contract;
@@ -72,7 +74,7 @@ export class EthService {
       throw new Error('Missing contract address in environment variables');
     }
 
-    this.provider = this.providerService.getProvider(ChainEnum.ETH);
+
 
     this.factoryContract = this.providerService.getContract(
       factoryAddress,
@@ -174,8 +176,8 @@ export class EthService {
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
     const { walletAddress } = walletAddressDto;
     const [transactionCount, gasFeeData] = await Promise.all([
-      getTransactionCount(this.provider, walletAddress),
-      getFeeData(this.provider),
+      getTransactionCount(this.provider(), walletAddress),
+      getFeeData(this.provider()),
     ]);
 
     return {
@@ -190,7 +192,7 @@ async broadcastTransaction(
   broadcastTransactionDto: BroadcastTransactionDto,
 ): Promise<any> {
   try {
-    const { signedTx, signedTransactions } = broadcastTransactionDto;
+    const { signedTx, signedTransactions, broadcastChain } = broadcastTransactionDto;
     
     const txArray: string[] = signedTransactions 
       ? signedTransactions 
@@ -218,7 +220,7 @@ async broadcastTransaction(
       this.logger.log(`Broadcasting transaction ${i + 1}/${txArray.length}`);
       
       const txResponse: TransactionResponse = 
-        await this.provider.broadcastTransaction(signedTransaction);
+        await this.provider(ChainEnum[broadcastChain]).broadcastTransaction(signedTransaction);
       
       this.logger.log(`Transaction ${i + 1} broadcasted: ${txResponse.hash}`);
       
@@ -273,7 +275,7 @@ async broadcastTransaction(
           ? BigInt(txValue)
           : txValue
         : 0n;
-      const estimated = await this.provider.estimateGas({
+      const estimated = await this.provider().estimateGas({
         to,
         data,
         value: valueInBigInt,
@@ -300,18 +302,16 @@ async broadcastTransaction(
 
   async executeSwapTransactions(
     txs: string[],
+    broadcastChain:string
   ): Promise<ExecutedTransaction[]> {
     try {
       const txResponses: ExecutedTransaction[] = [];
   
     for (const signedTx of txs) {
-      const txResponse: TransactionResponse = await this.provider.broadcastTransaction(signedTx);      
-      // const receipt = await txResponse.wait();
-      // if (!receipt) {
-      //   throw new Error(`Transaction ${txResponse.hash} failed or not mined`);
-      // }
+      const txResponse: TransactionResponse =  await this.provider(ChainEnum[broadcastChain]).broadcastTransaction(signedTx);      
       txResponses.push({ txResponse });
     }
+    console.info(txResponses)
     return txResponses;
     } catch (error) {
        this.logger.error('execute swap transactions error:', error);
@@ -374,10 +374,10 @@ async broadcastTransaction(
   ): Promise<FullTransaction> {
     const { unsignedTx, walletAddress } = prepareTransactionDto;
     const [nonce, gasLimit, feeData, network] = await Promise.all([
-      getTransactionCount(this.provider, walletAddress),
-      getEstimateGas(this.provider, walletAddress, unsignedTx),
-      getFeeData(this.provider),
-      getNetwork(this.provider),
+      getTransactionCount(this.provider(), walletAddress),
+      getEstimateGas(this.provider(), walletAddress, unsignedTx),
+      getFeeData(this.provider()),
+      getNetwork(this.provider()),
     ]);
 
     const transaction: FullTransaction = {
@@ -392,7 +392,7 @@ async broadcastTransaction(
 
   getBalance(walletAddressDto: WalletAddressDto): Promise<bigint> {
     const { walletAddress } = walletAddressDto;
-    return getNativeCurrencyBalance(walletAddress, this.provider);
+    return getNativeCurrencyBalance(walletAddress, this.provider());
   }
 
   private async buildSwapTransaction(dto: SwapPrepareDto | SwapQuoteDto): Promise<any> {

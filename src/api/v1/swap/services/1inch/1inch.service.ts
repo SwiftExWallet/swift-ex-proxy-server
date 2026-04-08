@@ -106,7 +106,7 @@ export class InchService {
       extension,
     };
     const response = await axios.post(
-      `${process.env.QUOTER_BASE}/${ChainId[chain]}/order/submit`,
+      `${process.env.INCH_SUBMIT_BASE}/${ChainId[chain]}/order/submit`,
       body,
       config,
     );

@@ -29,14 +29,14 @@ export class AllBridgeSwapADto {
 
   @IsNotEmpty()
   @IsString()
-  @IsTokenValid({ message: 'Invalid sourceToken for the given walletType.' })
+  // @IsTokenValid({ message: 'Invalid sourceToken for the given walletType.' })
   sourceToken: string;
 
   @IsNotEmpty()
   @IsString()
-  @IsTokenValid({
-    message: 'Invalid destinationToken for the given walletType.',
-  })
+  // @IsTokenValid({
+  //   message: 'Invalid destinationToken for the given walletType.',
+  // })
   destinationToken: string;
 
   @IsNotEmpty()

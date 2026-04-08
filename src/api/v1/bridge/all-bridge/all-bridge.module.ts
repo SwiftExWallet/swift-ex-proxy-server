@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { AllBridgeService } from './all-bridge.service';
 import { ProviderModule } from '../../provider/provider.module';
-import { AllBridgeBscService } from './all-bridge.bsc.service';
+import { AllBridgeService } from './all-bridge.service';
+import { ProviderService } from '../../provider/provider.service';
 
 @Module({
   imports: [ProviderModule],
-  providers: [AllBridgeService,AllBridgeBscService],
-  exports: [AllBridgeService,AllBridgeBscService],
+  providers: [AllBridgeService,ProviderService],
+  exports: [AllBridgeService],
 })
 export class AllBridgeModule {}
