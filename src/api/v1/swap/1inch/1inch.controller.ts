@@ -1,11 +1,11 @@
-import { Body, Controller, Post } from '@nestjs/common';
-import { SwapQuoteDto } from './dto/swapQuote';
-import { InchService } from './services/1inch/1inch.service';
-import { FusionOrderDto } from './dto/fusionOrder';
-import { SubmitOrderDto } from './dto/submitOrder';
+import { Body, Controller, Post, Get } from '@nestjs/common';
+import { SwapQuoteDto } from '../dto/swapQuote';
+import { InchService } from './1inch.service';
+import { FusionOrderDto } from '../dto/fusionOrder';
+import { SubmitOrderDto } from '../dto/submitOrder';
 
 @Controller('api/v1/swap/1inch')
-export class SwapController {
+export class inchController {
   constructor(private readonly inchService: InchService) {}
 
   @Post('/getSwapQuote')

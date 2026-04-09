@@ -1,9 +1,8 @@
 import { Module } from '@nestjs/common';
-import { InchService } from './services/1inch/1inch.service';
-import { SwapController } from './swap.controller';
+import { RangoModule } from './rango/rango.module';
+import { InchModule } from './1inch/1inch.module';
 
 @Module({
-  providers: [InchService],
-  controllers: [SwapController],
+  imports: [RangoModule, InchModule],
 })
 export class SwapModule {}

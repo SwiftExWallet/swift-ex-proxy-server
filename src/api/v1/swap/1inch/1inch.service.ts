@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { SwapQuoteDto } from '../../dto/swapQuote';
-import { ChainId } from '../../../common/enums/chain.enum';
+import { SwapQuoteDto } from '../dto/swapQuote';
+import { ChainId } from '../../common/enums/chain.enum';
 import axios, { AxiosRequestConfig } from 'axios';
-import { FusionOrderDto } from '../../dto/fusionOrder';
-import { SubmitOrderDto } from '../../dto/submitOrder';
+import { FusionOrderDto } from '../dto/fusionOrder';
+import { SubmitOrderDto } from '../dto/submitOrder';
 
 @Injectable()
 export class InchService {
