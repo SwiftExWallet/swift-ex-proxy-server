@@ -1,4 +1,3 @@
-// src/guards/rate-limit.guard.ts
 import {
   Injectable,
   CanActivate,
