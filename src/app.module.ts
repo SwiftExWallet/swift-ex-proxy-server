@@ -18,6 +18,8 @@ import { AllBridgeModule } from './api/v1/bridge/all-bridge/all-bridge.module';
 import { BridgeModule } from './api/v1/bridge/bridge.module';
 import { RedisModule } from './api/v1/redis/redis.module';
 import { SwapModule } from './api/v1/swap/swap.module';
+import { APP_GUARD } from '@nestjs/core';
+import { RateLimitGuard } from './api/v1/common/guard/rate-limit.guard';
 
 @Module({
   imports: [
@@ -48,38 +50,38 @@ import { SwapModule } from './api/v1/swap/swap.module';
     SwapModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, { provide: APP_GUARD, useClass: RateLimitGuard }],
 })
 export class AppModule {
-  configure(consumer: MiddlewareConsumer): any {
-    consumer
-      .apply(DeviceAuthTokenMiddleware)
-      .exclude(
-        {
-          path: '/',
-          method: RequestMethod.GET,
-        },
-        {
-          path: 'health',
-          method: RequestMethod.GET,
-        },
-        {
-          path: 'api/v1/webhook/stellar-transactions',
-          method: RequestMethod.POST,
-        },
-        {
-          path: '/api/v1/webhook/moralis-transactions',
-          method: RequestMethod.POST,
-        },
-        {
-          path: '/api/v1/webhook/alchemy-on-ramp',
-          method: RequestMethod.POST,
-        },
-        {
-          path: '/api/v1/webhook/alchemy-off-ramp',
-          method: RequestMethod.POST,
-        },
-      )
-      .forRoutes('*');
-  }
+  // configure(consumer: MiddlewareConsumer): any {
+  //   consumer
+  //     .apply(DeviceAuthTokenMiddleware)
+  //     .exclude(
+  //       {
+  //         path: '/',
+  //         method: RequestMethod.GET,
+  //       },
+  //       {
+  //         path: 'health',
+  //         method: RequestMethod.GET,
+  //       },
+  //       {
+  //         path: 'api/v1/webhook/stellar-transactions',
+  //         method: RequestMethod.POST,
+  //       },
+  //       {
+  //         path: '/api/v1/webhook/moralis-transactions',
+  //         method: RequestMethod.POST,
+  //       },
+  //       {
+  //         path: '/api/v1/webhook/alchemy-on-ramp',
+  //         method: RequestMethod.POST,
+  //       },
+  //       {
+  //         path: '/api/v1/webhook/alchemy-off-ramp',
+  //         method: RequestMethod.POST,
+  //       },
+  //     )
+  //     .forRoutes('*');
+  // }
 }

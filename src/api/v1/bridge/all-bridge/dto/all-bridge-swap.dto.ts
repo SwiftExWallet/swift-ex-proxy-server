@@ -5,7 +5,7 @@ import {
   Matches,
   IsEnum,
 } from 'class-validator';
-import { IsTokenValid } from '../../../common/decorator/valid-token.decorator';
+import { IsTokenValid } from '../../../common/decorators/valid-token.decorator';
 import { ValidWalletType } from '../../../common/enums/all-bridge.enum';
 
 export class AllBridgeSwapADto {
