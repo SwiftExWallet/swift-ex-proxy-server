@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   Alchemy,
   AssetTransfersCategory,
@@ -6,42 +6,44 @@ import {
   SortingOrder,
 } from 'alchemy-sdk';
 import { ChainEnum, TxChainEnum } from '../common/enums/chain.enum';
-import { WalletAddressDto } from '../common/dto/walletAddress.dto';
+import { TransactionHistoryDto } from './dto/transaction-history.dto';
 
 @Injectable()
 export class TransactionHistoryService {
-  private readonly ethAlchemy: Alchemy;
-  private readonly bscAlchemy: Alchemy;
+  private readonly logger = new Logger(TransactionHistoryService.name);
+  private readonly clientAlchemy: Partial<Record<ChainEnum, Alchemy>>;
 
   constructor() {
-    const ethNetworkKey = process.env
-      .ALCHEMY_ETH_NETWORK as keyof typeof Network;
-    const bscNetworkKey = process.env
-      .ALCHEMY_BSC_NETWORK as keyof typeof Network;
+    const networkMap: Partial<Record<ChainEnum, keyof typeof Network>> = {
+      [ChainEnum.ETH]: process.env.ALCHEMY_ETH_NETWORK as keyof typeof Network,
+      [ChainEnum.BSC]: process.env.ALCHEMY_BSC_NETWORK as keyof typeof Network,
+      [ChainEnum.POL]: process.env.ALCHEMY_POL_NETWORK as keyof typeof Network,
+      [ChainEnum.ARB]: process.env.ALCHEMY_ARB_NETWORK as keyof typeof Network,
+      [ChainEnum.BASE]: process.env.ALCHEMY_BAS_NETWORK as keyof typeof Network,
+      [ChainEnum.AVAX]: process.env.ALCHEMY_AVA_NETWORK as keyof typeof Network,
+      [ChainEnum.OP]: process.env.ALCHEMY_OPT_NETWORK as keyof typeof Network,
+    };
+    this.clientAlchemy = {};
 
-    if (
-      !ethNetworkKey ||
-      !bscNetworkKey ||
-      !(ethNetworkKey in Network) ||
-      !(bscNetworkKey in Network)
-    ) {
-      throw new Error(
-        `Invalid ALCHEMY_ETH_NETWORK value: ${process.env.ALCHEMY_ETH_NETWORK}`,
-      );
+    for (const [chain, networkKey] of Object.entries(networkMap)) {
+      if (!networkKey || !(networkKey in Network)) {
+        this.logger.warn(`unable to porvide ${chain}`);
+        continue;
+      }
+
+      this.clientAlchemy[chain as ChainEnum] = new Alchemy({
+        apiKey: process.env.ALCHEMY_API_KEY,
+        network: Network[networkKey],
+      });
     }
-    this.ethAlchemy = new Alchemy({
-      apiKey: process.env.ALCHEMY_API_KEY,
-      network: Network[ethNetworkKey],
-    });
-
-    this.bscAlchemy = new Alchemy({
-      apiKey: process.env.ALCHEMY_API_KEY,
-      network: Network[bscNetworkKey],
-    });
   }
 
   private getAlchemyClient(chain: ChainEnum): Alchemy {
-    return chain === ChainEnum.ETH ? this.ethAlchemy : this.bscAlchemy;
+    const alchemyClient = this.clientAlchemy[chain];
+    if (!alchemyClient) {
+      throw new BadRequestException(`Unable to porvide ${chain} wallet transaction history.`);
+    }
+    return alchemyClient;
   }
 
   private getTransferCategories(): AssetTransfersCategory[] {
@@ -88,27 +90,26 @@ export class TransactionHistoryService {
     }
   }
 
-  async getWalletTransactionHistory(
-    walletAddressDto: WalletAddressDto,
-    chain: ChainEnum,
-  ) {
-    const { walletAddress } = walletAddressDto;
+  async getWalletTransactionHistory(walletAddressDto: TransactionHistoryDto) {
+    const { walletAddress, sentPageKey, receivedPageKey, chain } = walletAddressDto;
     const alchemy = this.getAlchemyClient(chain);
     const categories = this.getTransferCategories();
-    const maxCount = Number(process.env.ALCHEMY_HISTORY_RECORD_COUNT || '100');
-
     const [sent, received] = await Promise.all([
       alchemy.core.getAssetTransfers({
         fromAddress: walletAddress,
         category: categories,
         order: SortingOrder.DESCENDING,
-        maxCount,
+        maxCount: 10,
+        pageKey: sentPageKey ?? undefined,
+        withMetadata:true
       }),
       alchemy.core.getAssetTransfers({
         toAddress: walletAddress,
         category: categories,
         order: SortingOrder.DESCENDING,
-        maxCount,
+        maxCount: 10,
+        pageKey: receivedPageKey ?? undefined,
+        withMetadata:true
       }),
     ]);
 
@@ -120,7 +121,6 @@ export class TransactionHistoryService {
         return bBlock - aBlock;
       });
 
-    // STEP 1: Collect unique ERC-20 contract addresses
     const tokenContracts = new Set<string>();
     for (const tx of combined) {
       if (tx.category === 'erc20' && tx.rawContract?.address) {
@@ -128,21 +128,17 @@ export class TransactionHistoryService {
       }
     }
 
-    // STEP 2: Fetch metadata for each contract in parallel
-    const metadataMap: Record<string, { symbol: string; decimals: number }> =
-      {};
+    const metadataMap: Record<string, { symbol: string; decimals: number }> = {};
     await Promise.all(
       Array.from(tokenContracts).map(async (address) => {
         metadataMap[address] = await this.getTokenMetadata(alchemy, address);
       }),
     );
 
-    // STEP 3: Patch each transfer with metadata + formatted value
     for (const tx of combined) {
       if (tx.category === 'erc20' && tx.rawContract?.address) {
         const addr = tx.rawContract.address.toLowerCase();
         const meta = metadataMap[addr];
-
         const decimals = Number(tx.rawContract.decimal || meta?.decimals || 18);
         tx.asset = tx.asset || meta?.symbol || 'UNKNOWN';
         tx.rawContract.decimal = decimals.toString();
@@ -151,7 +147,6 @@ export class TransactionHistoryService {
           decimals,
         );
       } else if (tx.category === 'external') {
-        // Native chain token transfer
         tx.asset = chain === ChainEnum.BSC ? TxChainEnum.BSC : TxChainEnum.ETH;
         tx.rawContract.decimal = '18';
         (tx as any).formattedAmount = this.formatTokenAmount(
@@ -161,6 +156,15 @@ export class TransactionHistoryService {
       }
     }
 
-    return combined;
+    return {
+      data: combined,
+      pagination: {
+        nextSentPageKey: sent.pageKey ?? null,
+        nextReceivedPageKey: received.pageKey ?? null,
+        hasSentNextPage: !!sent.pageKey,
+        hasReceivedNextPage: !!received.pageKey,
+        hasNextPage: !!(sent.pageKey || received.pageKey),
+      },
+    };
   }
 }

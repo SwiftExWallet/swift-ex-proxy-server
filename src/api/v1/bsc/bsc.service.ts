@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   FeeData,
   formatUnits,
@@ -34,6 +34,7 @@ import { ValidateAddress } from '../common/helpers/utilityMethods';
 import { getErc20ContractInfo } from '../common/helpers/contractUtilityMethod';
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 import { UsdtBalanceDto } from './dto/usdtBalance.dto';
+import { PancakeSwapService } from './pancake/bsc.pancake.service';
 
 @Injectable()
 export class BscService {
@@ -41,7 +42,10 @@ export class BscService {
 
   provider: JsonRpcProvider;
   routerContract: Contract;
-  constructor(private readonly providerService: ProviderService) {
+  constructor(
+    private readonly providerService: ProviderService,
+    private readonly pancakeSwapService:PancakeSwapService,
+    ) {
     const routerAddress = process.env.BSC_ROUTER_ADDRESS;
 
     if (!routerAddress) {
@@ -59,6 +63,9 @@ export class BscService {
 
   async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<string> {
     try {
+      if(process.env.ENVIRONMENT==="prod"){
+        return await this.pancakeSwapService.getSwapQuote(swapQuoteDto);
+      }
       const { tokenIn, tokenOut, amount } = swapQuoteDto;
       const path: [string, string] = [tokenIn.address, tokenOut.address];
 
@@ -76,16 +83,19 @@ export class BscService {
     }
   }
 
-  async prepareSwapTransaction(
-    prepareSwapTransactionDto: PrepareSwapTransactionDto,
-  ): Promise<TransactionRequest> {
-    const { address, tokenIn, tokenOut, bnbAmount } = prepareSwapTransactionDto;
+  async prepareSwapTransaction(prepareSwapTransactionDto: SwapQuoteDto): Promise<any> {
+
+    if(process.env.ENVIRONMENT==="prod"){
+        return await this.pancakeSwapService.createUnsignedSwapTransaction(prepareSwapTransactionDto);
+     }
+
+    const { recipient, tokenIn, tokenOut, amount } = prepareSwapTransactionDto;
     const path: [string, string] = [
       getAddress(tokenIn.address),
       getAddress(tokenOut.address),
     ];
 
-    const amountIn: bigint = parseEther(bnbAmount);
+    const amountIn: bigint = parseEther(amount);
     this.logger.log('====== amountIn =====', { amountIn });
 
     const amountsOut: bigint[] = (await this.routerContract.getAmountsOut(
@@ -106,12 +116,12 @@ export class BscService {
     const data = iface.encodeFunctionData('swapExactETHForTokens', [
       minOut,
       path,
-      address,
+      recipient,
       deadline,
     ]);
     this.logger.log('====== IfaceData =====', { data });
 
-    const nonce: number = await getTransactionCount(this.provider, address);
+    const nonce: number = await getTransactionCount(this.provider, recipient as string);
     const { chainId } = await getNetwork(this.provider);
 
     const { maxFeePerGas, maxPriorityFeePerGas } = await getFeeData(
@@ -139,20 +149,71 @@ export class BscService {
 
   async broadcastTransaction(
     broadcastTransactionDto: BroadcastTransactionDto,
-  ): Promise<{ txHash: string; receipt: TransactionReceipt | null }> {
-    const { signedTx } = broadcastTransactionDto;
-    const txResponse: TransactionResponse = await broadcastTransactionToNetwork(
-      this.provider,
-      signedTx,
-    );
-    this.logger.log('Broadcasted Tx:', txResponse.hash);
+  ): Promise<any> {
+    try {
+      const { signedTx, signedTransactions } = broadcastTransactionDto;
 
-    const receipt: TransactionReceipt | null = await txResponse.wait(); // Wait for confirmation
-    this.logger.log('Receipt:', receipt);
-    return {
-      txHash: txResponse.hash,
-      receipt,
-    };
+      const txArray: string[] = signedTransactions
+        ? signedTransactions
+        : signedTx
+          ? [signedTx]
+          : [];
+
+      if (txArray.length === 0) {
+        throw new BadRequestException('No signed transaction provided');
+      }
+
+      this.logger.log(`Broadcasting ${txArray.length} transaction(s)`);
+
+      interface BroadcastResult {
+        transactionHash: string;
+        type: string;
+        status: string;
+      }
+
+      const results: BroadcastResult[] = [];
+
+      for (let i = 0; i < txArray.length; i++) {
+        const signedTransaction = txArray[i];
+
+        this.logger.log(`Broadcasting transaction ${i + 1}/${txArray.length}`);
+
+        const txResponse: TransactionResponse =
+          await this.provider.broadcastTransaction(signedTransaction);
+
+        this.logger.log(`Transaction ${i + 1} broadcasted: ${txResponse.hash}`);
+
+        results.push({
+          transactionHash: txResponse.hash,
+          type: i === 0 && txArray.length > 1 ? 'approve' : 'transfer',
+          status: 'pending',
+        });
+      }
+
+      if (signedTx && !signedTransactions) {
+        return {
+          txHash: results[0].transactionHash,
+          receipt: null,
+        };
+      }
+
+      return {
+        success: true,
+        totalTransactions: txArray.length,
+        results,
+      };
+
+    } catch (error) {
+      this.logger.error('Broadcast error:', error);
+
+      const message =
+        error.info?.error?.message ||
+        error.shortMessage ||
+        error.message ||
+        'Transaction broadcast failed';
+
+      throw new BadRequestException(message);
+    }
   }
 
   async getUsdtTokenBalance(

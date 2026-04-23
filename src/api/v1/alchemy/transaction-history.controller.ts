@@ -1,39 +1,20 @@
-import { Controller, Get, Param, Res } from '@nestjs/common';
+import { Body, Controller, Post, Res } from '@nestjs/common';
 import { TransactionHistoryService } from './transaction-history.service';
-import { ChainEnum } from '../common/enums/chain.enum';
-import { WalletAddressDto } from '../common/dto/walletAddress.dto';
+import { TransactionHistoryDto } from './dto/transaction-history.dto';
 
 @Controller('api/v1/transaction-history')
 export class TransactionHistoryController {
   constructor(
     private readonly transactionHistoryService: TransactionHistoryService,
-  ) {}
+  ) { }
 
-  @Get(':walletAddress/eth')
-  async getEthWalletHistory(
-    @Res() res,
-    @Param()
-    walletAddress: WalletAddressDto,
+  @Post()
+  async getWalletHistory(
+    @Res() res: any,
+    @Body() transactionHistoryDto: TransactionHistoryDto,
   ) {
     const data =
-      await this.transactionHistoryService.getWalletTransactionHistory(
-        walletAddress,
-        ChainEnum.ETH,
-      );
-    res.status(200).json(data);
-  }
-
-  @Get(':walletAddress/bsc')
-  async getBscWalletHistory(
-    @Res() res,
-    @Param()
-    walletAddressDto: WalletAddressDto,
-  ) {
-    const data =
-      await this.transactionHistoryService.getWalletTransactionHistory(
-        walletAddressDto,
-        ChainEnum.BSC,
-      );
+      await this.transactionHistoryService.getWalletTransactionHistory(transactionHistoryDto);
     res.status(200).json(data);
   }
 }

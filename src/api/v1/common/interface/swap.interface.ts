@@ -27,6 +27,12 @@ export interface SwapQuote {
   pricePerToken: string;
   fee: string;
   poolAddress?: string;
+  isMultiHop?: boolean;
+  path?: string;
+  isWethUnwrap?: boolean;
+  networkFee?: number;
+  minimumReceived?: string;
+  networkFeeUsd?: string;
 }
 
 export interface QuotedOutput {
@@ -91,5 +97,5 @@ export interface PancakeUnsignedSwapTransaction {
   
 export interface ExecutedTransaction {
     txResponse: TransactionResponse;
-    receipt: TransactionReceipt;
+    receipt?: TransactionReceipt;
   }

@@ -33,7 +33,7 @@ export class BscController {
   @Post('swap-transaction/prepare')
   async swapPrepare(
     @Res() res,
-    @Body() prepareSwapTransactionDto: PrepareSwapTransactionDto,
+    @Body() prepareSwapTransactionDto: SwapQuoteDto,
   ) {
     const data = await this.bscService.prepareSwapTransaction(
       prepareSwapTransactionDto,

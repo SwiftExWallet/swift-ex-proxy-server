@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   FeeData,
   formatUnits,
@@ -55,7 +55,9 @@ import { EthTestnetSwapService } from './eth.testnet.service';
 export class EthService {
   private readonly logger = new Logger(EthService.name);
 
-  provider: JsonRpcProvider;
+  provider(chain: ChainEnum = ChainEnum.ETH): JsonRpcProvider {
+    return this.providerService.getProvider(chain);
+  }
   factoryContract: Contract;
   quoterContract: Contract;
   swapRouterContract: Contract;
@@ -72,7 +74,7 @@ export class EthService {
       throw new Error('Missing contract address in environment variables');
     }
 
-    this.provider = this.providerService.getProvider(ChainEnum.ETH);
+
 
     this.factoryContract = this.providerService.getContract(
       factoryAddress,
@@ -160,7 +162,12 @@ export class EthService {
 
       return unsignedTx;
     } catch (error: any) {
-      throw new Error(`Failed to get swap quote: ${error.message}`);
+      const message =
+      error.info?.error?.message ||
+      error.shortMessage ||
+      error.message ||
+      'Failed to get swap quotes.';
+      throw new BadRequestException(message);
     }
   }
 
@@ -169,8 +176,8 @@ export class EthService {
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
     const { walletAddress } = walletAddressDto;
     const [transactionCount, gasFeeData] = await Promise.all([
-      getTransactionCount(this.provider, walletAddress),
-      getFeeData(this.provider),
+      getTransactionCount(this.provider(), walletAddress),
+      getFeeData(this.provider()),
     ]);
 
     return {
@@ -179,26 +186,82 @@ export class EthService {
     };
   }
 
-  async broadcastTransaction(
-    broadcastTransactionDto: BroadcastTransactionDto,
-  ): Promise<{ txHash: string; receipt: TransactionReceipt | null }> {
-    try {
-      const { signedTx } = broadcastTransactionDto;
-      const txResponse: TransactionResponse =
-        await this.provider.broadcastTransaction(signedTx);
-      this.logger.log(`Broadcasted Tx: ${txResponse.hash}`);
-      const receipt: TransactionReceipt | null = await txResponse.wait();
-      this.logger.log(`Receipt: ${JSON.stringify(receipt)}`);
+ // eth.service.ts or allbridge.service.ts
 
-      return {
-        txHash: txResponse.hash,
-        receipt,
-      };
-    } catch (error) {
-      this.logger.error('Broadcast error:', error);
-      throw error;
+async broadcastTransaction(
+  broadcastTransactionDto: BroadcastTransactionDto,
+): Promise<any> {
+  try {
+    const { signedTx, signedTransactions, broadcastChain } = broadcastTransactionDto;
+    
+    const txArray: string[] = signedTransactions 
+      ? signedTransactions 
+      : signedTx 
+        ? [signedTx] 
+        : [];
+    
+    if (txArray.length === 0) {
+      throw new BadRequestException('No signed transaction provided');
     }
+    
+    this.logger.log(`Broadcasting ${txArray.length} transaction(s)`);
+    
+    interface BroadcastResult {
+      transactionHash: string;
+      type: string;
+      status: string;
+    }
+    
+    const results: BroadcastResult[] = [];
+    
+    for (let i = 0; i < txArray.length; i++) {
+      const signedTransaction = txArray[i];
+      
+      this.logger.log(`Broadcasting transaction ${i + 1}/${txArray.length}`);
+      
+      const txResponse: TransactionResponse = 
+        await this.provider(ChainEnum[broadcastChain]).broadcastTransaction(signedTransaction);
+      
+      this.logger.log(`Transaction ${i + 1} broadcasted: ${txResponse.hash}`);
+      
+      results.push({
+        transactionHash: txResponse.hash,
+        type: i === 0 && txArray.length > 1 ? 'approve' : 'transfer',
+        status: 'pending',
+      });
+      
+      // Wait 2 seconds before next broadcast (except for last transaction)
+      if (i < txArray.length - 1) {
+        this.logger.log(`Waiting 2 seconds before broadcasting transaction ${i + 2}...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+    
+    if (signedTx && !signedTransactions) {
+      return {
+        txHash: results[0].transactionHash,
+        receipt: null,
+      };
+    }
+    
+    return {
+      success: true,
+      totalTransactions: txArray.length,
+      results,
+    };
+    
+  } catch (error) {
+    this.logger.error('Broadcast error:', error);
+    
+    const message =
+      error.info?.error?.message ||
+      error.shortMessage ||
+      error.message ||
+      'Transaction broadcast failed';
+    
+    throw new BadRequestException(message);
   }
+}
 
   async estimateGas(
     to: string,
@@ -212,7 +275,7 @@ export class EthService {
           ? BigInt(txValue)
           : txValue
         : 0n;
-      const estimated = await this.provider.estimateGas({
+      const estimated = await this.provider().estimateGas({
         to,
         data,
         value: valueInBigInt,
@@ -239,22 +302,31 @@ export class EthService {
 
   async executeSwapTransactions(
     txs: string[],
+    broadcastChain:string
   ): Promise<ExecutedTransaction[]> {
-    const txResponses: ExecutedTransaction[] = [];
+    try {
+      const txResponses: ExecutedTransaction[] = [];
   
     for (const signedTx of txs) {
-      const txResponse: TransactionResponse = await this.provider.broadcastTransaction(signedTx);      
-      const receipt = await txResponse.wait();
-      if (!receipt) {
-        throw new Error(`Transaction ${txResponse.hash} failed or not mined`);
-      }
-      txResponses.push({ txResponse, receipt });
+      const txResponse: TransactionResponse =  await this.provider(ChainEnum[broadcastChain]).broadcastTransaction(signedTx);      
+      txResponses.push({ txResponse });
     }
+    console.info(txResponses)
     return txResponses;
+    } catch (error) {
+       this.logger.error('execute swap transactions error:', error);
+      const message =
+      error.info?.error?.message ||
+      error.shortMessage ||
+      error.message ||
+      'Failed to execute swap transactions';
+      throw new BadRequestException(message);
+    }
   }
 
   async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
-    const { addresses, walletAddress } = getTokenInfoDto;
+    try {
+      const { addresses, walletAddress } = getTokenInfoDto;
     const validAddresses: string[] = ValidateAddress(addresses);
 
     if (validAddresses.length === 0) {
@@ -286,6 +358,15 @@ export class EthService {
     );
 
     return tokenInfos;
+    } catch (error) {
+      this.logger.error('Get token info error:', error);
+      const message =
+      error.info?.error?.message ||
+      error.shortMessage ||
+      error.message ||
+      'Failed to get token Info';
+      throw new BadRequestException(message);
+    }
   }
 
   async prepareTransaction(
@@ -293,10 +374,10 @@ export class EthService {
   ): Promise<FullTransaction> {
     const { unsignedTx, walletAddress } = prepareTransactionDto;
     const [nonce, gasLimit, feeData, network] = await Promise.all([
-      getTransactionCount(this.provider, walletAddress),
-      getEstimateGas(this.provider, walletAddress, unsignedTx),
-      getFeeData(this.provider),
-      getNetwork(this.provider),
+      getTransactionCount(this.provider(), walletAddress),
+      getEstimateGas(this.provider(), walletAddress, unsignedTx),
+      getFeeData(this.provider()),
+      getNetwork(this.provider()),
     ]);
 
     const transaction: FullTransaction = {
@@ -311,7 +392,7 @@ export class EthService {
 
   getBalance(walletAddressDto: WalletAddressDto): Promise<bigint> {
     const { walletAddress } = walletAddressDto;
-    return getNativeCurrencyBalance(walletAddress, this.provider);
+    return getNativeCurrencyBalance(walletAddress, this.provider());
   }
 
   private async buildSwapTransaction(dto: SwapPrepareDto | SwapQuoteDto): Promise<any> {

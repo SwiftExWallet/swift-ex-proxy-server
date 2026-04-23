@@ -10,53 +10,63 @@ import { ValidWalletType } from '../enums/all-bridge.enum';
 @ValidatorConstraint({ async: false })
 export class validations_token implements ValidatorConstraintInterface {
   validate(token: string, args: ValidationArguments) {
-    const walletType = (args.object as any).walletType as keyof ValidWalletType;
+    const walletType = (args.object as any).sourceChain as keyof ValidWalletType;
+    if (ValidWalletType[walletType] == ValidWalletType.BAS) {
+      const allowedSourceTokens = ['USDC'];
+      const allowedDestinationTokens = ['USDC'];
+      if (args.property === 'sourceToken') {
+        return allowedSourceTokens.includes(token);
+      }
+      if (args.property === 'destinationToken') {
+        return allowedDestinationTokens.includes(token);
+      }
+    }
 
-    if (ValidWalletType[walletType] == ValidWalletType.ETH) {
+    if (ValidWalletType[walletType] == ValidWalletType.ETH || ValidWalletType[walletType] == ValidWalletType.ARB) {
+      const allowedSourceTokens = ['USDT', 'USDC', 'USDe'];
+      const allowedDestinationTokens = ['USDT', 'USDC', 'USDe'];
+      if (args.property === 'sourceToken') {
+        return allowedSourceTokens.includes(token);
+      }
+      if (args.property === 'destinationToken') {
+        return allowedDestinationTokens.includes(token);
+      }
+    }
+
+    if (ValidWalletType[walletType] == ValidWalletType.BNB || ValidWalletType[walletType] == ValidWalletType.BSC) {
       const allowedSourceTokens = ['USDT', 'USDC'];
-      const allowedDestinationTokens = ['USDC', 'aeETH'];
-
+      const allowedDestinationTokens = ['USDT', 'USDC'];
       if (args.property === 'sourceToken') {
         return allowedSourceTokens.includes(token);
       }
-
       if (args.property === 'destinationToken') {
         return allowedDestinationTokens.includes(token);
       }
     }
 
-    if (ValidWalletType[walletType] == ValidWalletType.BNB) {
-      const allowedSourceTokens = ['USDT', 'BNB'];
-      const allowedDestinationTokens = ['BNB', 'aeETH'];
-
+    if (ValidWalletType[walletType] == ValidWalletType.POL || ValidWalletType[walletType] == ValidWalletType.OPT || ValidWalletType[walletType] == ValidWalletType.AVA) {
+      const allowedSourceTokens = ['USDT', 'USDC'];
+      const allowedDestinationTokens = ['USDT', 'USDC'];
       if (args.property === 'sourceToken') {
         return allowedSourceTokens.includes(token);
       }
-
       if (args.property === 'destinationToken') {
         return allowedDestinationTokens.includes(token);
       }
     }
-
-    return true;
+    return false;
   }
 
   defaultMessage(args: ValidationArguments) {
-    const walletType = (args.object as any).walletType as string;
-    if (ValidWalletType[walletType] == ValidWalletType.ETH) {
+    console.info(args)
+    const walletType = (args.object as any).sourceChain as string;
+    const destinationChain = (args.object as any).destinationChain as string;
+    if (ValidWalletType[walletType] == ValidWalletType[walletType]) {
       if (args.property === 'sourceToken') {
-        return `SourceToken must be either USDT or USDC for Ethereum walletType.`;
+        return `Source Token not support for ${walletType}.`;
       }
       if (args.property === 'destinationToken') {
-        return `DestinationToken must be either USDC or aeETH for Ethereum walletType.`;
-      }
-    }
-    if (ValidWalletType[walletType] == ValidWalletType.BNB) {
-      if (args.property === 'sourceToken') {
-        return `SourceToken must be either USDT or BNB for BNB walletType.`;
-      }
-      if (args.property === 'destinationToken') {
-        return `DestinationToken must be either BNB or aeETH for BNB walletType.`;
+        return `Destination Token not support for ${destinationChain}.`;
       }
     }
     return `Invalid token.`;

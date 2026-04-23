@@ -34,8 +34,8 @@ export class EthController {
   }
 
   @Post('swap-transaction/execute')
-  async swapExecute(@Res() res, @Body('txs') txs: string[]) {
-    const data = await this.ethService.executeSwapTransactions(txs);
+  async swapExecute(@Res() res, @Body('txs') txs: string[],@Body('broadcastChain') broadcastChain: string) {
+    const data = await this.ethService.executeSwapTransactions(txs,broadcastChain);
     res.status(200).json(data);
   }
 
