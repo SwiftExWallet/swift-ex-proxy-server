@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { SwapQuoteDto } from '../dto/swapQuote';
 import { ChainId } from '../../common/enums/chain.enum';
 import axios, { AxiosRequestConfig } from 'axios';
@@ -53,7 +53,11 @@ export class InchService {
       //   };
     } catch (error) {
       this.logger.error(error);
-      throw error;
+      const message =
+        error.response.data.description ||
+        error.response.data ||
+        'unable to get swap quote';
+      throw new BadRequestException(message);
     }
   }
 
@@ -89,6 +93,7 @@ export class InchService {
   }
 
   async submitOrder(submitOrderDto: SubmitOrderDto) {
+  try {
     const { order, signature, extension, quoteId, chain } = submitOrderDto;
     const config: AxiosRequestConfig = {
       headers: {
@@ -112,5 +117,13 @@ export class InchService {
     );
 
     return response.data; // { orderHash: '0x...' }
+  } catch (error) {
+      this.logger.error(error);
+      const message =
+        error.response.data.description ||
+        error.response.data ||
+        'unable to submit order';
+      throw new BadRequestException(message);
+  }
   }
 }

@@ -33,6 +33,10 @@ export class ProviderService {
         process.env.PROVIDER_RPC_BSC,
       ].filter(Boolean) as string[],
 
+      [ChainEnum.BNB]: [
+        process.env.PROVIDER_RPC_BSC,
+      ].filter(Boolean) as string[],
+
       [ChainEnum.POL]: [
         process.env.PROVIDER_RPC_POL_1,
         process.env.PROVIDER_RPC_POL_2,

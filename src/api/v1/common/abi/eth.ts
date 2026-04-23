@@ -141,12 +141,13 @@ export const ETH_FACTORY_ABI = [
   },
 ];
 export const ETH_PREPARE_ABI = [
-  // Single-hop swap
-  'function exactInputSingle((address tokenIn,address tokenOut,uint24 fee,address recipient,uint256 deadline,uint256 amountIn,uint256 amountOutMinimum,uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)',
-  
-  // Multi-hop swap - ADD THIS
-  'function exactInput((bytes path,address recipient,uint256 deadline,uint256 amountIn,uint256 amountOutMinimum)) external payable returns (uint256 amountOut)'
-]
+    // Single-hop swap
+    'function exactInputSingle((address tokenIn,address tokenOut,uint24 fee,address recipient,uint256 deadline,uint256 amountIn,uint256 amountOutMinimum,uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)',
+    // Multi-hop swap
+    "function quoteExactInputSingle(tuple(address tokenIn,address tokenOut,uint256 amountIn,uint24 fee,uint160 sqrtPriceLimitX96) params) external returns (uint256 amountOut,uint160 sqrtPriceX96After,uint32 initializedTicksCrossed,uint256 gasEstimate)",
+    'function multicall(bytes[] calldata data) external payable returns (bytes[] memory results)',
+    'function unwrapWETH9(uint256 amountMinimum,address recipient) external payable',
+];
 
 export const ETH_UNI_POOL_ABI = ['function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)'];
 export const ETH_POOL_ABI = [

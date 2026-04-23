@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosRequestConfig } from 'axios';
 import { RangoRouteDto } from '../dto/rangoRoute';
 import { ConfirmRouteDto } from '../dto/confirmRoute';
@@ -22,61 +22,86 @@ export class RangoService {
   }
 
   async bestRoute(rangoRouteDto: RangoRouteDto) {
-    const url = `${process.env.RANGO_BASE_URL}/routing/best`;
-    const config: AxiosRequestConfig = {
-      params: {
-        apiKey: process.env.RANGO_API_KEY,
-        headers: { 'content-type': 'application/json' },
-      },
-    };
-    console.log(config);
-    const response = await axios.post(url, rangoRouteDto, config);
-    return response.data;
+    try {
+      const url = `${process.env.RANGO_BASE_URL}/routing/best`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apiKey': process.env.RANGO_API_KEY as string
+        },
+        body: JSON.stringify(rangoRouteDto)
+      })
+      return await response.json();
+    } catch (error) {
+      this.logger.error(error);
+      const message =
+        error.response.data.description ||
+        error.response.data ||
+        'unable to get swap quote';
+      throw new BadRequestException(message);
+    }
   }
 
   async routes(rangoRouteDto: RangoRouteDto) {
-    const url = `${process.env.RANGO_BASE_URL}/routing/bests`;
-    const config: AxiosRequestConfig = {
-      params: {
-        apiKey: process.env.RANGO_API_KEY,
-        headers: { 'content-type': 'application/json' },
-      },
-    };
-    console.log(config);
-    const response = await axios.post(url, rangoRouteDto, config);
-    return response.data;
+    try {
+      const url = `${process.env.RANGO_BASE_URL}/routing/bests`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apiKey': process.env.RANGO_API_KEY as string
+        },
+        body: JSON.stringify(rangoRouteDto)
+      })
+      return await response.json();
+    } catch (error) {
+      this.logger.error(error);
+      const message =
+        error.response.data.description ||
+        error.response.data ||
+        'unable to get swap quote';
+      throw new BadRequestException(message);
+    }
   }
 
   async confirmRoute(confirmRouteDto: ConfirmRouteDto) {
-    const url = `${process.env.RANGO_BASE_URL}/routing/confirm`;
-    const { requestId, toAddress, fromAddress, sourceChain, destinationChain } =
-      confirmRouteDto;
-    const data = {
-      requestId,
-      selectedWallets: {
-        [sourceChain]: fromAddress,
-        [destinationChain]: toAddress,
-      },
-    };
-    const config: AxiosRequestConfig = {
-      params: {
-        apiKey: process.env.RANGO_API_KEY,
-        headers: { 'content-type': 'application/json' },
-      },
-    };
-    const response = await axios.post(url, data, config);
-    return response.data;
+    try {
+      const url = `${process.env.RANGO_BASE_URL}/routing/confirm`;
+      const { requestId, toAddress, fromAddress, sourceChain, destinationChain } =
+        confirmRouteDto;
+      const data = {
+        requestId,
+        selectedWallets: {
+          [sourceChain]: fromAddress,
+          [destinationChain]: toAddress,
+        },
+      };
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apiKey': process.env.RANGO_API_KEY as string
+        },
+        body: JSON.stringify(data)
+      })
+      return await response.json();
+    } catch (error) {
+      this.logger.error(error);
+      const message =
+        error.response.data.description ||
+        error.response.data ||
+        'unable to get swap quote';
+      throw new BadRequestException(message);
+    }
   }
 
   async prepareTx(prepareTxDto: PrepareTxDto) {
-    const url = `${process.env.RANGO_BASE_URL}/tx/create`;
+   try {
+     const url = `${process.env.RANGO_BASE_URL}/tx/create`;
     const { requestId, swaps } = prepareTxDto;
-    const config: AxiosRequestConfig = {
-      params: {
-        apiKey: process.env.RANGO_API_KEY,
-        headers: { 'content-type': 'application/json' },
-      },
-    };
+   
     const txs: any[] = [];
     for (let i = 1; i <= swaps; i++) {
       const data = {
@@ -85,27 +110,53 @@ export class RangoService {
         userSettings: { slippage: 1, infiniteApprove: false },
         validations: { balance: true, fee: true, approve: true },
       };
-      const response = await axios.post(url, data, config);
-      txs.push(response.data);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apiKey': process.env.RANGO_API_KEY as string
+        },
+        body: JSON.stringify(data)
+      })
+      const result= await response.json();
+      txs.push(result);
     }
 
     return txs;
+   } catch (error) {
+    this.logger.error(error);
+      const message =
+        error.response.data.description ||
+        error.response.data ||
+        'unable to get swap quote';
+      throw new BadRequestException(message);
+   }
   }
 
   async checkApprovalTransactionStatus(
     checkTransactionApprovalDto: CheckTransactionApprovalDto,
   ) {
-    const { requestId, txId } = checkTransactionApprovalDto;
-    const url = `${process.env.RANGO_BASE_URL}/tx/${requestId}/check-approval`;
+    try {
+      const { requestId, txId } = checkTransactionApprovalDto;
+      const prepareUrl = `${process.env.RANGO_BASE_URL}/tx/${requestId}/check-approval`;
+      const url = new URL(prepareUrl);
+      url.searchParams.append('apiKey', process.env.RANGO_API_KEY as string);
+      url.searchParams.append('txId', txId);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    const config: AxiosRequestConfig = {
-      params: {
-        apiKey: process.env.RANGO_API_KEY,
-        txId,
-        headers: { 'content-type': 'application/json' },
-      },
-    };
-    const response = await axios.get(url, config);
-    return response.data;
+      return  await response.json();
+    } catch (error) { 
+      this.logger.error(error);
+      const message =
+      error.response.data.description ||
+      error.response.data ||
+      'unable to get swap quote';
+      throw new BadRequestException(message);
+    }
   }
 }

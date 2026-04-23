@@ -13,6 +13,7 @@ import { QuoterService } from './quoter.service';
 import { GetQuoteDto, SupportedChain, TradeType } from './dto/quoter.dto';
 import { SwapService } from './swaping/swap.service';
 import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
+import { CHAIN_CONFIGS } from './constants/quoter.chain.config';
 
 @Controller('api/v1/quoter')
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
@@ -24,8 +25,8 @@ export class QuoterController {
 
   @Post('quote')
   @HttpCode(HttpStatus.OK)
-  async getQuote(@Body() dto: GetQuoteDto) {
-    const quote = await this.quoterService.getQuote(dto);
+  async getQuote(@Body() dto: SwapQuoteDto) {
+    const quote = await this.swapService.getQuote(dto);
     return {
       success: true,
       data: quote,
@@ -35,7 +36,6 @@ export class QuoterController {
   @Get('chains')
   @HttpCode(HttpStatus.OK)
   getSupportedChains() {
-    const { CHAIN_CONFIGS } = require('./constants/chain.config');
     return {
       success: true,
       data: Object.entries(CHAIN_CONFIGS).map(([key, cfg]: [string, any]) => ({

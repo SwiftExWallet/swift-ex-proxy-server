@@ -31,6 +31,8 @@ export interface SwapQuote {
   path?: string;
   isWethUnwrap?: boolean;
   networkFee?: number;
+  minimumReceived?: string;
+  networkFeeUsd?: string;
 }
 
 export interface QuotedOutput {
