@@ -12,7 +12,10 @@ import {
   RateLimiterRedis,
   RateLimiterRes,
 } from 'rate-limiter-flexible';
-import { RATE_LIMIT_KEY } from '../decorators/rate-limit.decorator';
+import {
+  RATE_LIMIT_KEY,
+  RateLimitConfig,
+} from '../decorators/rate-limit.decorator';
 import Redis from 'ioredis';
 
 function createLimiter(
@@ -55,41 +58,68 @@ export class RateLimitGuard implements CanActivate {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    console.log('ENVIRONMENT', process.env.ENVIRONMENT);
-    const config = this.reflector.getAllAndOverride<{
-      points: number;
-      duration: number;
-    }>(RATE_LIMIT_KEY, [context.getHandler(), context.getClass()]);
-
-    console.log('===== config ===', config);
+    const configs = this.reflector.getAllAndOverride<RateLimitConfig[]>(
+      RATE_LIMIT_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
     const ip = context.switchToHttp().getRequest().ip ?? 'unknown';
-    const limiter = config
-      ? this.getRouteLimiter(config)
-      : this.getGlobalLimiter();
 
-    try {
-      await limiter.consume(ip);
-      return true;
-    } catch (err) {
-      const retryAfter = Math.ceil((err as RateLimiterRes).msBeforeNext / 1000);
-      throw new HttpException(
-        { message: 'Too Many Requests', retryAfter },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+    // no decorator → use global limiter
+    if (!configs || configs.length === 0) {
+      try {
+        await this.getGlobalLimiter().consume(ip);
+        return true;
+      } catch (err) {
+        const retryAfter = Math.ceil(
+          (err as RateLimiterRes).msBeforeNext / 1000,
+        );
+        throw new HttpException(
+          { message: 'Too Many Requests', retryAfter },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
     }
+
+    // ✅ run ALL limiters — all must pass
+    for (const config of configs) {
+      const label = config.key ?? `${config.points}_${config.duration}`;
+      const limiter = this.getRouteLimiter(
+        config.points,
+        config.duration,
+        label,
+      );
+      try {
+        await limiter.consume(ip);
+      } catch (err) {
+        const retryAfter = Math.ceil(
+          (err as RateLimiterRes).msBeforeNext / 1000,
+        );
+        throw new HttpException(
+          {
+            message: 'Too Many Requests',
+            limit: label, // tells you which limit was hit
+            retryAfter,
+          },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    }
+
+    return true;
   }
 
-  private getRouteLimiter({
-    points,
-    duration,
-  }: {
-    points: number;
-    duration: number;
-  }): RateLimiterMemory {
-    const key = `${points}_${duration}`;
+  private getRouteLimiter(
+    points: number,
+    duration: number,
+    label: string,
+  ): RateLimiterAbstract {
+    const key = `${label}_${points}_${duration}`;
     if (!routeLimiters.has(key)) {
-      routeLimiters.set(key, new RateLimiterMemory({ points, duration }));
+      routeLimiters.set(
+        key,
+        createLimiter(points, duration, `rl_route_${key}`),
+      );
     }
     return routeLimiters.get(key)!;
   }
