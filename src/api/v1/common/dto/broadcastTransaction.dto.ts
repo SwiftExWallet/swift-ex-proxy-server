@@ -1,6 +1,19 @@
-import { IsNotEmpty } from 'class-validator';
+import { IsOptional, IsString, IsArray, ValidateIf } from 'class-validator';
+import { ValidWalletType } from '../enums/all-bridge.enum';
 
 export class BroadcastTransactionDto {
-  @IsNotEmpty()
-  signedTx: string;
+  @IsOptional()
+  @IsString()
+  @ValidateIf((o) => !o.signedTransactions)
+  signedTx?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ValidateIf((o) => !o.signedTx)
+  signedTransactions?: string[];
+
+  @IsOptional()
+  @IsString()
+  broadcastChain: ValidWalletType;
 }

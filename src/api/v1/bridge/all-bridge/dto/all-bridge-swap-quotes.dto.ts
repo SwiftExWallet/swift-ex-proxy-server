@@ -8,5 +8,17 @@ export class AllBridgeQuotesDto {
 
   @IsNotEmpty()
   @IsEnum(ValidWalletType)
-  chainType: ValidWalletType;
+  sourceChain: ValidWalletType;
+
+  @IsNotEmpty()
+  @IsString()
+  sourceToken: string; // ToDO: add validation using all bridge sdk
+
+  @IsNotEmpty()
+  @IsEnum(ValidWalletType)
+  destinationChain: ValidWalletType;
+
+  @IsNotEmpty()
+  @IsString()
+  destinationToken: ValidWalletType; // ToDO: add validation using all bridge sdk
 }

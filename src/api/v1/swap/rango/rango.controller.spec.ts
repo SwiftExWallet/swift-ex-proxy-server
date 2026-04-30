@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { RangoController } from '../../rango/rango.controller';
+import { RangoController } from '../rango/rango.controller';
 
 describe('RangoController', () => {
   let controller: RangoController;

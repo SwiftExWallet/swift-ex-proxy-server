@@ -25,9 +25,12 @@ export class SwapQuoteDto {
   @IsNotEmpty()
   amount: string;
 
-  @IsOptional()
-  recipient?:string;
+  @IsNotEmpty()
+  recipient:string;
 
   @IsOptional()
   slippage?:number
+
+  @IsNotEmpty()
+  chainId: string;
 }

@@ -1,22 +1,26 @@
 import {
   IsNotEmpty,
   IsString,
-  IsEthereumAddress,
   Matches,
   IsEnum,
+  IsOptional,
 } from 'class-validator';
-import { IsTokenValid } from '../../../common/decorators/valid-token.decorator';
-import { ValidWalletType } from '../../../common/enums/all-bridge.enum';
+import {
+  ValidPayFeeType,
+  ValidWalletType,
+} from '../../../common/enums/all-bridge.enum';
 
-export class AllBridgeSwapADto {
+export class AllBridgeSwapDto {
   @IsNotEmpty()
-  @IsEthereumAddress()
+  @Matches(/^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$/, {
+    message: 'Invalid public key format',
+  })
   fromAddress: string;
 
   @IsNotEmpty()
   @IsString()
-  @Matches(/^G[A-Z0-9]{55}$/, {
-    message: 'Invalid Stellar public key format',
+  @Matches(/^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$/, {
+    message: 'Invalid public key format',
   })
   toAddress: string;
 
@@ -26,17 +30,22 @@ export class AllBridgeSwapADto {
 
   @IsNotEmpty()
   @IsString()
-  @IsTokenValid({ message: 'Invalid sourceToken for the given walletType.' })
-  sourceToken: string;
+  sourceToken: string; // ToDO: add validation using all bridge sdk
 
   @IsNotEmpty()
   @IsString()
-  @IsTokenValid({
-    message: 'Invalid destinationToken for the given walletType.',
-  })
-  destinationToken: string;
+  destinationToken: string; // TODo:  add validation using all bridge sdk
 
   @IsNotEmpty()
   @IsEnum(ValidWalletType)
   walletType: ValidWalletType;
+
+  @IsNotEmpty()
+  @IsEnum(ValidPayFeeType)
+  feePayType: ValidPayFeeType;
+
+  @IsOptional()
+  @IsNotEmpty()
+  @IsEnum(ValidWalletType)
+  destinationWalletType: ValidWalletType;
 }

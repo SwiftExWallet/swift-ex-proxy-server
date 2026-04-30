@@ -1,0 +1,183 @@
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { AlphaRouter, SwapType } from '@uniswap/smart-order-router';
+import {
+  Token,
+  CurrencyAmount,
+  TradeType,
+  Ether,
+  Percent,
+} from '@uniswap/sdk-core';
+import { ethers, parseUnits, TransactionRequest, ZeroAddress } from 'ethers';
+import { JsonRpcProvider } from '@ethersproject/providers';
+import { ProviderService } from '../../provider/provider.service';
+import { CHAIN_CONFIGS } from './constants/quoter.chain.config';
+import { SwapQuoteDto, TokenInfoDto } from '../../common/dto/swapQuote.dto';
+import { SwapQuote } from '../../common/interface/swap.interface';
+import { ChainId } from '../../common/enums/chain.enum';
+
+@Injectable()
+export class QuoterService {
+  private readonly logger = new Logger(QuoterService.name);
+  constructor(private readonly rpcService: ProviderService) {}
+
+  private isZeroAddress(value: string): boolean {
+    const list = [
+      '0X0000000000000000000000000000000000000000',
+      '0XEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE',
+      'ETH',
+      'BNB',
+      'MATIC',
+      'POL',
+      'AVAX',
+    ];
+    return list.includes(value.toUpperCase());
+  }
+
+  private buildToken(token: TokenInfoDto, chainId: number) {
+    const native = this.isZeroAddress(token.address);
+    if (native) {
+      return Ether.onChain(chainId);
+    }
+
+    return new Token(
+      chainId,
+      token.address,
+      Number(token.decimals),
+      token.symbol,
+    );
+  }
+
+  async getQuote(
+    swapQuote: SwapQuoteDto,
+    internalCall: Boolean = false,
+  ): Promise<SwapQuote | any> {
+    try {
+      const { tokenIn, tokenOut, amount, chainId, recipient } = swapQuote;
+      const provider = new JsonRpcProvider(
+        this.rpcService.getChainRpcUrl(chainId.toLowerCase() as any),
+      );
+      const router = new AlphaRouter({
+        chainId: ChainId[chainId],
+        provider: provider as any,
+      });
+      const isNativeIn = tokenIn.address === ZeroAddress;
+      const isNativeOut = tokenOut.address === ZeroAddress;
+      const tokenInput = isNativeIn
+        ? Ether.onChain(ChainId[chainId])
+        : this.buildToken(tokenIn, ChainId[chainId]);
+      const tokenOutput = isNativeOut
+        ? Ether.onChain(ChainId[chainId])
+        : this.buildToken(tokenOut, ChainId[chainId]);
+      const rawAmount = parseUnits(amount, tokenIn.decimals);
+      const amountIn = CurrencyAmount.fromRawAmount(
+        tokenInput,
+        rawAmount.toString(),
+      );
+      const route = await router.route(
+        amountIn,
+        tokenOutput,
+        TradeType.EXACT_INPUT,
+        {
+          recipient: recipient,
+          slippageTolerance: new Percent('50', '10000'), // 0.5%
+          deadline: Math.floor(Date.now() / 1000) + 1800,
+          type: SwapType.SWAP_ROUTER_02,
+        },
+      );
+      if (!route) {
+        this.logger.error('No route found');
+        throw new BadRequestException('No route found');
+      }
+      const outputSwapAmt = route.quote.toExact();
+      const slippage = 0.5;
+      const minimumReceived = (Number(outputSwapAmt) * (1 - slippage)).toFixed(
+        Number(tokenOut.decimals),
+      );
+      const gasCostWei =
+        BigInt(route.estimatedGasUsed.toString()) *
+        BigInt(route.gasPriceWei.toString());
+      const networkFee = ethers.formatEther(gasCostWei);
+      const tokenPath = route.route[0].tokenPath.map((t) => t.symbol);
+      const isMultiHop = tokenPath.length > 2;
+      let fee = 'N/A';
+      const firstRoute: any = route.route[0];
+      try {
+        fee = firstRoute.pools?.[0]?.fee?.toString() || 'N/A';
+      } catch {}
+      return internalCall
+        ? route
+        : {
+            inputAmount: amount,
+            inputToken: tokenIn.symbol,
+            outputAmount: outputSwapAmt,
+            outputToken: tokenOut.symbol,
+            pricePerToken: (Number(outputSwapAmt) / Number(amount)).toString(),
+            fee: fee,
+            isMultiHop: isMultiHop,
+            minimumReceived: minimumReceived,
+            networkFee: Number(networkFee),
+          };
+    } catch (e) {
+      this.logger.error('error', e);
+      throw new BadRequestException(e.message);
+    }
+  }
+
+  async buildSwapTx(
+    swapQuote: SwapQuoteDto,
+    slippageBps = 100,
+  ): Promise<TransactionRequest[]> {
+    try {
+      const { tokenIn, chainId, recipient } = swapQuote;
+      const txs: TransactionRequest[] = [];
+      const route = await this.getQuote(swapQuote, true);
+      if (!route || !route.methodParameters) {
+        throw new BadRequestException('Failed build tx');
+      }
+      const provider = new JsonRpcProvider(
+        this.rpcService.getChainRpcUrl(
+          CHAIN_CONFIGS[chainId.toLowerCase()].nativeSymbol.toLowerCase(),
+        ),
+      );
+      const nonce = await provider.getTransactionCount(recipient, 'pending');
+      const feeData = await provider.getFeeData();
+      const isNativeIn = this.isZeroAddress(tokenIn.address);
+      const erc20Interface = new ethers.Interface([
+        'function approve(address spender,uint256 amount)',
+      ]);
+      //  APPROVE TX
+      if (!isNativeIn) {
+        txs.push({
+          to: tokenIn.address,
+          from: recipient,
+          data: erc20Interface.encodeFunctionData('approve', [
+            route.methodParameters.to,
+            ethers.MaxUint256,
+          ]),
+          nonce: nonce,
+          chainId: CHAIN_CONFIGS[chainId.toLowerCase()].chainId,
+          type: 2,
+          maxFeePerGas: feeData.maxFeePerGas?.toString(),
+          maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
+          gasLimit: '76056',
+        });
+      }
+      //SWAP TX
+      txs.push({
+        to: route.methodParameters.to,
+        from: recipient,
+        data: route.methodParameters.calldata,
+        value: route.methodParameters.value,
+        nonce: isNativeIn ? nonce : nonce + 1,
+        chainId: CHAIN_CONFIGS[chainId.toLowerCase()].chainId,
+        type: 2,
+        maxFeePerGas: feeData.maxFeePerGas?.toString(),
+        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
+        gasLimit: '220000',
+      });
+      return txs;
+    } catch (error) {
+      throw new BadRequestException(error.message);
+    }
+  }
+}
