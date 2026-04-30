@@ -58,3 +58,9 @@ export enum ChainId {
   UNI = 130,
   SOL = 501,
 }
+
+export enum swapProvider {
+  RANGO = 'RANGO',
+  UNISWAP = 'UNISWAP',
+  ONEINCH = 'ONEINCH',
+}

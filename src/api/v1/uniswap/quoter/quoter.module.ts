@@ -2,12 +2,13 @@ import { Module } from '@nestjs/common';
 import { QuoterController } from './quoter.controller';
 import { QuoterService } from './quoter.service';
 import { ProviderService } from '../../provider/provider.service';
-import { SwapService } from './swaping/swap.service';
+import { InchService } from '../../swap/1inch/1inch.service';
+import { RangoService } from '../../swap/rango/rango.service';
 
 
 @Module({
   controllers: [QuoterController],
-  providers: [QuoterService,ProviderService,SwapService],
+  providers: [QuoterService,ProviderService,InchService,RangoService],
   exports: [QuoterService],
 })
 export class QuoterModule { }

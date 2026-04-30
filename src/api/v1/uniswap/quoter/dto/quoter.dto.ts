@@ -1,4 +1,5 @@
 import { IsEnum, IsNotEmpty, IsNumberString, IsString, IsOptional } from 'class-validator';
+import { swapProvider } from 'src/api/v1/common/enums/chain.enum';
 
 export enum SupportedChain {
   ETH = 'eth',
@@ -16,25 +17,10 @@ export enum TradeType {
 }
 
 export class GetQuoteDto {
-  @IsEnum(SupportedChain)
-  chain: SupportedChain;
-
-  @IsString()
   @IsNotEmpty()
-  tokenIn: string;
+  @IsEnum(swapProvider)
+  provider: swapProvider;
 
-  @IsString()
   @IsNotEmpty()
-  tokenOut: string;
-
-  @IsNumberString()
-  amount: string;
-
-  @IsEnum(TradeType)
-  @IsOptional()
-  tradeType?: TradeType = TradeType.EXACT_IN;
-
-  @IsOptional()
-  @IsNumberString()
-  slippage?: string;
+  data: any;
 }
