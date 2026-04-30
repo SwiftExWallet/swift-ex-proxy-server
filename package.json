@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@allbridge/bridge-core-sdk": "3.17.0",
+    "@ethersproject/providers": "^5.8.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.1",
@@ -31,6 +32,7 @@
     "@pancakeswap/sdk": "^5.8.16",
     "@pancakeswap/tokens": "^0.7.8",
     "@uniswap/sdk-core": "^7.7.2",
+    "@uniswap/smart-order-router": "^4.31.10",
     "@uniswap/v3-sdk": "^3.25.2",
     "alchemy-sdk": "^3.6.1",
     "axios": "^1.13.6",

@@ -81,6 +81,10 @@ export class AppModule {
           path: '/api/v1/webhook/alchemy-off-ramp',
           method: RequestMethod.POST,
         },
+        {
+          path: '/api/v1/quoter/quote',
+          method: RequestMethod.POST,
+        },
       )
       .forRoutes('*');
   }

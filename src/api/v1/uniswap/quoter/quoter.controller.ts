@@ -26,43 +26,17 @@ export class QuoterController {
   @Post('quote')
   @HttpCode(HttpStatus.OK)
   async getQuote(@Body() dto: SwapQuoteDto) {
-    const quote = await this.swapService.getQuote(dto);
+    const quote = await this.quoterService.getQuote(dto);
     return {
       success: true,
       data: quote,
     };
   }
 
-  @Get('chains')
-  @HttpCode(HttpStatus.OK)
-  getSupportedChains() {
-    return {
-      success: true,
-      data: Object.entries(CHAIN_CONFIGS).map(([key, cfg]: [string, any]) => ({
-        key,
-        chainId: cfg.chainId,
-        name: cfg.name,
-        nativeSymbol: cfg.nativeSymbol,
-        wrappedNative: cfg.wrappedNative,
-        quoterV2: cfg.uniswapV3QuoterV2,
-      })),
-    };
-  }
-
-  @Post('token-info')
-  @HttpCode(HttpStatus.OK)
-  async getTokenInfo(
-    @Body() chain: SupportedChain,
-    @Body() address: string,
-  ) {
-    const info = await this.quoterService.getTokenInfo(chain, address);
-    return { success: true, data: info };
-  }
-
   @Post('swap')
   @HttpCode(HttpStatus.OK)
   async swapBuild(@Body() dto: SwapQuoteDto) {
-    const quote = await this.swapService.buildSwapTx(dto);
+    const quote = await this.quoterService.buildSwapTx(dto);
     return {
       success: true,
       data: quote,

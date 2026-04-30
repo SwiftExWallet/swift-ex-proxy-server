@@ -42,6 +42,11 @@ export class ProviderService {
         process.env.PROVIDER_RPC_POL_2,
         process.env.PROVIDER_RPC_POL_3,
       ].filter(Boolean) as string[],
+      [ChainEnum.MATIC]: [
+        process.env.PROVIDER_RPC_POL_1,
+        process.env.PROVIDER_RPC_POL_2,
+        process.env.PROVIDER_RPC_POL_3,
+      ].filter(Boolean) as string[],
 
       [ChainEnum.ARB]: [
         process.env.PROVIDER_RPC_ARB_1,

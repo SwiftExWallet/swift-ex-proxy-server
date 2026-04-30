@@ -1,4 +1,4 @@
-import { IsEthereumAddress, IsNotEmpty, IsString } from 'class-validator';
+import { IsEthereumAddress, IsNotEmpty, IsString, Matches } from 'class-validator';
 
 export class ConfirmRouteDto {
   @IsString()
@@ -6,11 +6,15 @@ export class ConfirmRouteDto {
   requestId: string;
 
   @IsNotEmpty()
-  @IsEthereumAddress()
+  @Matches(/^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$/, {
+      message: 'Invalid public key format',
+    })
   toAddress: string;
 
   @IsNotEmpty()
-  @IsEthereumAddress()
+  @Matches(/^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$/, {
+      message: 'Invalid public key format',
+    })
   fromAddress: string;
 
   @IsNotEmpty()
