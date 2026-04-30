@@ -20,13 +20,9 @@ function createLimiter(
   duration: number,
   keyPrefix: string,
 ): RateLimiterAbstract {
-  console.log('==== env ===', process.env.ENVIRONMENT);
-
   if (process.env.ENVIRONMENT === 'dev') {
-    console.log('===== global ===');
     return new RateLimiterMemory({ points, duration });
   }
-  console.log('===== redis ===');
 
   const redisClient = new Redis({
     host: process.env.REDIS_HOST,

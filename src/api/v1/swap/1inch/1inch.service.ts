@@ -4,6 +4,7 @@ import { ChainId } from '../../common/enums/chain.enum';
 import axios, { AxiosRequestConfig } from 'axios';
 import { FusionOrderDto } from '../dto/fusionOrder';
 import { SubmitOrderDto } from '../dto/submitOrder';
+import { FusionPlusSwapQuoteDto } from '../dto/fusionPlusSwapQuote';
 
 @Injectable()
 export class InchService {
@@ -22,6 +23,7 @@ export class InchService {
         toTokenAddress: tokenOut,
         fromTokenAddress: tokenIn,
         enableEstimate: true,
+        isPermit2: true,
       },
       paramsSerializer: {
         indexes: null,
@@ -30,27 +32,45 @@ export class InchService {
 
     try {
       const response = await axios.get(url, config);
-      const data = response.data;
-      return data;
-      //   return {
-      //     fromToken: {
-      //       address: data.fromToken.address,
-      //       symbol: data.fromToken.symbol,
-      //       decimals: data.fromToken.decimals,
-      //     },
-      //     toToken: {
-      //       address: data.toToken.address,
-      //       symbol: data.toToken.symbol,
-      //       decimals: data.toToken.decimals,
-      //     },
-      //     fromAmount: data.fromTokenAmount, // amount you're swapping
-      //     toAmount: data.toTokenAmount, // estimated amount you'll receive
-      //     quoteId: data.quoteId, // needed to place order later
-      //     recommendedPreset: data.recommendedPreset, // fast | medium | slow
-      //     presets: data.presets, // auction settings per preset
-      //     prices: data.prices, // token prices
-      //     volume: data.volume, // swap volume in USD
-      //   };
+      return response.data;
+    } catch (error) {
+      this.logger.error(error);
+      throw error;
+    }
+  }
+
+  async getFusionPlusSwapQuote(fusionPlusSwapQuote: FusionPlusSwapQuoteDto) {
+    const {
+      srcChain,
+      dstChain,
+      srcTokenAddress,
+      dstTokenAddress,
+      amount,
+      walletAddress,
+    } = fusionPlusSwapQuote;
+    const url = `${process.env.FUSION_PLUS_QUOTER_BASE}/quote/receive`;
+    const config: AxiosRequestConfig = {
+      headers: {
+        Authorization: `Bearer ${process.env.INCH_API_KEY}`,
+      },
+      params: {
+        walletAddress,
+        amount,
+        srcChain,
+        dstChain,
+        srcTokenAddress,
+        dstTokenAddress,
+        enableEstimate: true,
+        isPermit2: true,
+      },
+      paramsSerializer: {
+        indexes: null,
+      },
+    };
+
+    try {
+      const response = await axios.get(url, config);
+      return response.data;
     } catch (error) {
       this.logger.error(error);
       throw error;

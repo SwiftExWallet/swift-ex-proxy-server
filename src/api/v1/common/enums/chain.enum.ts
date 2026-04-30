@@ -10,6 +10,17 @@ export enum TxChainEnum {
 export enum SwapNetwork {
   ETH = 'ETH',
   BSC = 'BSC',
+  MATIC = 'MATIC',
+  ARB = 'ARB',
+  OP = 'OP',
+  AVAX = 'AVAX',
+  BASE = 'BASE',
+  GNO = 'GNO',
+  ZK = 'ZK',
+  LINEA = 'LINEA',
+  SONIC = 'SONIC',
+  UNI = 'UNI',
+  SOL = 'SOL',
 }
 
 export enum ChainId {
