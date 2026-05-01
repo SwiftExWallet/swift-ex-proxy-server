@@ -1,13 +1,20 @@
-import { IsEthereumAddress, IsNotEmpty, IsOptional, ValidateNested } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, Matches, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ChainId } from '../enums/chain.enum';
 
 export class TokenInfoDto {
-  @IsNotEmpty()
-  @IsEthereumAddress()
+  @Matches(
+    /^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$|^[A-Z0-9]{1,12}-G[A-Z0-9]{55}$/,
+    { message: 'Invalid public key format' }
+  )
   address: string;
 
   @IsNotEmpty()
   symbol: string;
+
+  @IsNotEmpty()
+  @IsEnum(ChainId)
+  chainId: number;
 
   @IsNotEmpty()
   decimals: string;
@@ -30,7 +37,4 @@ export class SwapQuoteDto {
 
   @IsOptional()
   slippage?:number
-
-  @IsNotEmpty()
-  chainId: string;
 }

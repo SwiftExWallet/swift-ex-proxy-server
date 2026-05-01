@@ -7,7 +7,7 @@ import { ProviderService } from '../../provider/provider.service';
 import { CHAIN_CONFIGS } from './constants/quoter.chain.config';
 import { SwapQuoteDto, TokenInfoDto } from '../../common/dto/swapQuote.dto';
 import { SwapQuote } from '../../common/interface/swap.interface';
-import { ChainId } from '../../common/enums/chain.enum';
+import { ChainEnum, ChainId } from '../../common/enums/chain.enum';
 
 
 @Injectable()
@@ -47,13 +47,13 @@ export class QuoterService {
 
   async getQuote(swapQuote: SwapQuoteDto, internalCall: Boolean = false): Promise<SwapQuote | any> {
     try {
-      const { tokenIn, tokenOut, amount, chainId, recipient } = swapQuote;
-      const provider = new JsonRpcProvider(this.rpcService.getChainRpcUrl(chainId.toLowerCase() as any));
-      const router = new AlphaRouter({ chainId: ChainId[chainId], provider: provider as any });
+      const { tokenIn, tokenOut, amount, recipient } = swapQuote;
+      const provider = new JsonRpcProvider(this.rpcService.getChainRpcUrl(ChainEnum[ChainId[tokenIn.chainId]]));
+      const router = new AlphaRouter({ chainId: tokenIn.chainId, provider: provider as any });
       const isNativeIn = tokenIn.address === ZeroAddress;
       const isNativeOut = tokenOut.address === ZeroAddress;
-      const tokenInput = isNativeIn ? Ether.onChain(ChainId[chainId]) : this.buildToken(tokenIn, ChainId[chainId]);
-      const tokenOutput = isNativeOut ? Ether.onChain(ChainId[chainId]) : this.buildToken(tokenOut, ChainId[chainId]);
+      const tokenInput = isNativeIn ? Ether.onChain(tokenIn.chainId) : this.buildToken(tokenIn, tokenIn.chainId);
+      const tokenOutput = isNativeOut ? Ether.onChain(tokenOut.chainId) : this.buildToken(tokenOut, tokenOut.chainId);
       const rawAmount = parseUnits(amount, tokenIn.decimals);
       const amountIn = CurrencyAmount.fromRawAmount(tokenInput, rawAmount.toString());
       const route = await router.route(
@@ -100,13 +100,13 @@ export class QuoterService {
 
   async buildSwapTx(swapQuote: SwapQuoteDto, slippageBps = 100): Promise<TransactionRequest[]> {
     try {
-      const { tokenIn, chainId, recipient } = swapQuote;
+      const { tokenIn, recipient } = swapQuote;
       const txs: TransactionRequest[] = [];
       const route = await this.getQuote(swapQuote, true);
       if (!route || !route.methodParameters) {
         throw new BadRequestException('Failed build tx');
       }
-      const provider = new JsonRpcProvider(this.rpcService.getChainRpcUrl(CHAIN_CONFIGS[chainId.toLowerCase()].nativeSymbol.toLowerCase()));
+      const provider = new JsonRpcProvider(this.rpcService.getChainRpcUrl(ChainEnum[ChainId[tokenIn.chainId]]));
       const nonce = await provider.getTransactionCount(recipient, 'pending');
       const feeData = await provider.getFeeData();
       const isNativeIn = this.isZeroAddress(tokenIn.address);
@@ -118,7 +118,7 @@ export class QuoterService {
           from: recipient,
           data: erc20Interface.encodeFunctionData('approve', [route.methodParameters.to, ethers.MaxUint256,]),
           nonce: nonce,
-          chainId: CHAIN_CONFIGS[chainId.toLowerCase()].chainId,
+          chainId: tokenIn.chainId,
           type: 2,
           maxFeePerGas: feeData.maxFeePerGas?.toString(),
           maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
@@ -132,7 +132,7 @@ export class QuoterService {
         data: route.methodParameters.calldata,
         value: route.methodParameters.value,
         nonce: isNativeIn ? nonce : nonce + 1,
-        chainId: CHAIN_CONFIGS[chainId.toLowerCase()].chainId,
+        chainId: tokenIn.chainId,
         type: 2,
         maxFeePerGas: feeData.maxFeePerGas?.toString(),
         maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),

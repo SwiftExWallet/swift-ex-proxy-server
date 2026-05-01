@@ -11,7 +11,6 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { QuoterService } from './quoter.service';
-import { GetQuoteDto } from './dto/quoter.dto';
 import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
 import { RangoService } from '../../swap/rango/rango.service';
 import { InchService } from '../../swap/1inch/1inch.service';
@@ -19,6 +18,7 @@ import { swapProvider } from '../../common/enums/chain.enum';
 import { plainToInstance } from 'class-transformer';
 import { RangoRouteDto } from '../../swap/dto/rangoRoute';
 import { validate, validateOrReject } from 'class-validator';
+import { SwapProviderResolver } from './dto/swap-provider.resolver';
 
 @Controller('api/v1/quoter')
 @UsePipes(new ValidationPipe({ transform: true, whitelist: true }))
@@ -28,6 +28,7 @@ export class QuoterController {
     private readonly quoterService: QuoterService,
     private readonly inchService: InchService,
     private readonly rangoService: RangoService,
+    private readonly swapProviderResolver: SwapProviderResolver,
   ) { }
   private async handleValidationAndRun(
   dtoClass: any,
@@ -70,26 +71,28 @@ private extractErrors(errors: any[]): string[] {
 
   @Post('quote')
   @HttpCode(HttpStatus.OK)
-  async getQuote(@Body() body: GetQuoteDto) {
-    switch (body.provider) {
+  async getQuote(@Body() body: SwapQuoteDto) {
+  const { provider, transformed } = this.swapProviderResolver.resolve(body);
+
+   switch (provider) {
     case swapProvider.RANGO:
-      return this.handleValidationAndRun(
+      return await this.handleValidationAndRun(
         RangoRouteDto,
-        body.data,
+        transformed,
         this.rangoService.bestRoute.bind(this.rangoService),
       );
 
     case swapProvider.UNISWAP:
-      return this.handleValidationAndRun(
+      return await this.handleValidationAndRun(
         SwapQuoteDto,
-        body.data,
+        transformed,
         this.quoterService.getQuote.bind(this.quoterService),
       );
 
     case swapProvider.ONEINCH:
-      return this.handleValidationAndRun(
+      return await this.handleValidationAndRun(
         SwapQuoteDto,
-        body.data,
+        transformed,
         this.inchService.getSwapQuote.bind(this.inchService),
       );
 
