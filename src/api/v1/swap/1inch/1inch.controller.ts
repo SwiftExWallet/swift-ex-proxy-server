@@ -3,32 +3,52 @@ import { SwapQuoteDto } from '../dto/swapQuote';
 import { InchService } from './1inch.service';
 import { FusionOrderDto } from '../dto/fusionOrder';
 import { SubmitOrderDto } from '../dto/submitOrder';
+import { RateLimit } from '../../common/decorators/rate-limit.decorator';
+import { FusionPlusSwapQuoteDto } from '../dto/fusionPlusSwapQuote';
+import { FusionPlusOrderDto } from '../dto/fusionPlusOrder';
 
 @Controller('api/v1/swap/1inch')
 export class inchController {
   constructor(private readonly inchService: InchService) {}
 
+  @RateLimit(
+    { points: 5, duration: 60, key: 'per-minute' }, // max 5 per minute
+    { points: 20, duration: 3600, key: 'per-hour' }, // max 20 per hour
+    { points: 100, duration: 86400, key: 'per-day' }, // max 100 per day
+  )
   @Post('/getSwapQuote')
   async getQuote(@Body() swapQuote: SwapQuoteDto) {
     const data = await this.inchService.getSwapQuote(swapQuote);
-    console.log('===== data =====');
-    console.log(data);
+    return data;
+  }
+
+  @Post('/fusion-plus/getSwapQuote')
+  async getFusionPlusQuote(@Body() swapQuote: FusionPlusSwapQuoteDto) {
+    const data = await this.inchService.getFusionPlusSwapQuote(swapQuote);
     return data;
   }
 
   @Post('/buildFusionOrder')
   async createFusionOrder(@Body() fusionOrder: FusionOrderDto) {
     const data = await this.inchService.buildFusionOrder(fusionOrder);
-    console.log('===== data =====');
-    console.log(data);
+    return data;
+  }
+
+  @Post('/buildFusionPlusOrder')
+  async createFusionPlusOrder(@Body() fusionPlusOrder: FusionPlusOrderDto) {
+    const data = await this.inchService.buildFusionPlusOrder(fusionPlusOrder);
     return data;
   }
 
   @Post('/submitOrder')
   async submitOrder(@Body() submitOrderDto: SubmitOrderDto) {
     const data = await this.inchService.submitOrder(submitOrderDto);
-    console.log('===== data =====');
-    console.log(data);
+    return data;
+  }
+
+  @Post('/submitFusionPlusOrder')
+  async submitFusionPlusOrder(@Body() submitOrderDto: SubmitOrderDto) {
+    const data = await this.inchService.submitFusionPlusOrder(submitOrderDto);
     return data;
   }
 }

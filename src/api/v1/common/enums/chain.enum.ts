@@ -36,6 +36,12 @@ export enum SwapNetwork {
   AVA = 'AVAX',
   BASE = 'BASE',
   BAS = 'BASE',
+  GNO = 'GNO',
+  ZK = 'ZK',
+  LINEA = 'LINEA',
+  SONIC = 'SONIC',
+  UNI = 'UNI',
+  SOL = 'SOL',
 }
 
 export enum ChainId {

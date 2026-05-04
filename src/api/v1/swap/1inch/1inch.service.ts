@@ -4,6 +4,11 @@ import { ChainId } from '../../common/enums/chain.enum';
 import axios, { AxiosRequestConfig } from 'axios';
 import { FusionOrderDto } from '../dto/fusionOrder';
 import { SubmitOrderDto } from '../dto/submitOrder';
+import { FusionPlusSwapQuoteDto } from '../dto/fusionPlusSwapQuote';
+import { FusionPlusOrderDto } from '../dto/fusionPlusOrder';
+import { ethers } from 'ethers';
+import { HashLock, MerkleLeaf } from '@1inch/cross-chain-sdk';
+import { randomBytes } from 'node:crypto';
 
 @Injectable()
 export class InchService {
@@ -22,6 +27,7 @@ export class InchService {
         toTokenAddress: tokenOut,
         fromTokenAddress: tokenIn,
         enableEstimate: true,
+        isPermit2: true,
       },
       paramsSerializer: {
         indexes: null,
@@ -30,34 +36,48 @@ export class InchService {
 
     try {
       const response = await axios.get(url, config);
-      const data = response.data;
-      return data;
-      //   return {
-      //     fromToken: {
-      //       address: data.fromToken.address,
-      //       symbol: data.fromToken.symbol,
-      //       decimals: data.fromToken.decimals,
-      //     },
-      //     toToken: {
-      //       address: data.toToken.address,
-      //       symbol: data.toToken.symbol,
-      //       decimals: data.toToken.decimals,
-      //     },
-      //     fromAmount: data.fromTokenAmount, // amount you're swapping
-      //     toAmount: data.toTokenAmount, // estimated amount you'll receive
-      //     quoteId: data.quoteId, // needed to place order later
-      //     recommendedPreset: data.recommendedPreset, // fast | medium | slow
-      //     presets: data.presets, // auction settings per preset
-      //     prices: data.prices, // token prices
-      //     volume: data.volume, // swap volume in USD
-      //   };
+      return response.data;
     } catch (error) {
       this.logger.error(error);
-      const message =
-        error.response.data.description ||
-        error.response.data ||
-        'unable to get swap quote';
-      throw new BadRequestException(message);
+      throw error;
+    }
+  }
+
+  async getFusionPlusSwapQuote(fusionPlusSwapQuote: FusionPlusSwapQuoteDto) {
+    const {
+      srcChain,
+      dstChain,
+      srcTokenAddress,
+      dstTokenAddress,
+      amount,
+      walletAddress,
+    } = fusionPlusSwapQuote;
+    const url = `${process.env.FUSION_PLUS_QUOTER_BASE}/quote/receive`;
+    const config: AxiosRequestConfig = {
+      headers: {
+        Authorization: `Bearer ${process.env.INCH_API_KEY}`,
+      },
+      params: {
+        walletAddress,
+        amount,
+        srcChain: ChainId[srcChain],
+        dstChain: ChainId[dstChain],
+        srcTokenAddress,
+        dstTokenAddress,
+        enableEstimate: true,
+        isPermit2: true,
+      },
+      paramsSerializer: {
+        indexes: null,
+      },
+    };
+
+    try {
+      const response = await axios.get(url, config);
+      return response.data;
+    } catch (error) {
+      this.logger.error(error);
+      throw error;
     }
   }
 
@@ -92,38 +112,160 @@ export class InchService {
     return response.data; // returns order struct + typedData for signing
   }
 
-  async submitOrder(submitOrderDto: SubmitOrderDto) {
-  try {
-    const { order, signature, extension, quoteId, chain } = submitOrderDto;
+  async buildFusionPlusOrder(fusionPlusOrder: FusionPlusOrderDto) {
+    const { quoteId, walletAddress, secretCount } = fusionPlusOrder;
+    const { secretHashes } = this.generateSecrets(secretCount);
+
     const config: AxiosRequestConfig = {
       headers: {
         Authorization: `Bearer ${process.env.INCH_API_KEY}`,
       },
-      params: {},
+      params: {
+        quoteId,
+      },
       paramsSerializer: {
         indexes: null,
       },
     };
+
     const body = {
-      order,
-      signature,
-      quoteId,
-      extension,
+      fee: 0,
+      secretsHashList: secretHashes,
+      isPermit2: true,
+      preset: 'fast',
+      walletAddress,
     };
+
     const response = await axios.post(
-      `${process.env.INCH_SUBMIT_BASE}/${ChainId[chain]}/order/submit`,
+      `${process.env.FUSION_PLUS_QUOTER_BASE}/quote/build/evm`,
       body,
       config,
     );
 
-    return response.data; // { orderHash: '0x...' }
-  } catch (error) {
+    return response.data; // returns order struct + typedData for signing
+  }
+
+  async submitOrder(submitOrderDto: SubmitOrderDto) {
+    try {
+      const { order, signature, extension, quoteId, chain } = submitOrderDto;
+      const config: AxiosRequestConfig = {
+        headers: {
+          Authorization: `Bearer ${process.env.INCH_API_KEY}`,
+        },
+        params: {},
+        paramsSerializer: {
+          indexes: null,
+        },
+      };
+      const body = {
+        order,
+        signature,
+        quoteId,
+        extension,
+      };
+      const response = await axios.post(
+        `${process.env.INCH_RELAYER_BASE}/${ChainId[chain]}/order/submit`,
+        body,
+        config,
+      );
+
+      return response.data; // { orderHash: '0x...' }
+    } catch (error: any) {
       this.logger.error(error);
       const message =
         error.response.data.description ||
         error.response.data ||
         'unable to submit order';
       throw new BadRequestException(message);
+    }
   }
+
+  async submitFusionOrder(submitOrderDto: SubmitOrderDto) {
+    try {
+      const { order, signature, extension, quoteId, chain } = submitOrderDto;
+      const config: AxiosRequestConfig = {
+        headers: {
+          Authorization: `Bearer ${process.env.INCH_API_KEY}`,
+        },
+        params: {},
+        paramsSerializer: {
+          indexes: null,
+        },
+      };
+      const body = {
+        order,
+        signature,
+        quoteId,
+        extension,
+      };
+      const response = await axios.post(
+        `${process.env.INCH_RELAYER_BASE}/${ChainId[chain]}/order/submit`,
+        body,
+        config,
+      );
+
+      return response.data; // { orderHash: '0x...' }
+    } catch (error: any) {
+      this.logger.error(error);
+      const message =
+        error.response.data.description ||
+        error.response.data ||
+        'unable to submit order';
+      throw new BadRequestException(message);
+    }
+  }
+
+  async submitFusionPlusOrder(submitOrderDto: SubmitOrderDto) {
+    try {
+      const { order, signature, extension, quoteId, chain } = submitOrderDto;
+      const config: AxiosRequestConfig = {
+        headers: {
+          Authorization: `Bearer ${process.env.INCH_API_KEY}`,
+        },
+        params: {},
+        paramsSerializer: {
+          indexes: null,
+        },
+      };
+      const body = {
+        order,
+        signature,
+        quoteId,
+        extension,
+      };
+      const response = await axios.post(
+        `${process.env.FUSION_PLUS_RELAYER_BASE}/submit`,
+        body,
+        config,
+      );
+
+      return response.data; // { orderHash: '0x...' }
+    } catch (error: any) {
+      this.logger.error(error);
+      const message =
+        error.response.data.description ||
+        error.response.data ||
+        'unable to submit order';
+      throw new BadRequestException(message);
+    }
+  }
+
+  generateSecrets(secretsCount: number) {
+    // Generate random secrets
+    const secrets = Array.from({ length: secretsCount }, () =>
+      ethers.hexlify(randomBytes(32)),
+    );
+
+    // Hash each secret
+    const secretHashes = secrets.map((s) => HashLock.hashSecret(s));
+
+    // Build hashlock from secrets
+    const hashLock =
+      secretsCount === 1
+        ? HashLock.forSingleFill(secrets[0]) // single fill
+        : HashLock.forMultipleFills(secretHashes as MerkleLeaf[]); // multiple fills (Merkle tree)
+
+    console.log('✅ Secrets generated, count:', secretsCount);
+    return { secrets, secretHashes, hashLock };
   }
 }

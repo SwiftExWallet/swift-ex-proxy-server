@@ -34,6 +34,7 @@ export class QuoterController {
   dtoClass: any,
   payload: any,
   serviceMethod: (data: any) => Promise<any>,
+  typeOfProvider:any,
 ) {
   const dto = plainToInstance(dtoClass, payload);
 
@@ -49,6 +50,7 @@ export class QuoterController {
 
   return {
     success: true,
+    provider:typeOfProvider,
     data: result,
   };
 }
@@ -80,6 +82,7 @@ private extractErrors(errors: any[]): string[] {
         RangoRouteDto,
         transformed,
         this.rangoService.bestRoute.bind(this.rangoService),
+        provider
       );
 
     case swapProvider.UNISWAP:
@@ -87,6 +90,7 @@ private extractErrors(errors: any[]): string[] {
         SwapQuoteDto,
         transformed,
         this.quoterService.getQuote.bind(this.quoterService),
+        provider
       );
 
     case swapProvider.ONEINCH:
@@ -94,6 +98,7 @@ private extractErrors(errors: any[]): string[] {
         SwapQuoteDto,
         transformed,
         this.inchService.getSwapQuote.bind(this.inchService),
+        provider
       );
 
     default:
