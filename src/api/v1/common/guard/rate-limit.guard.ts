@@ -53,7 +53,7 @@ export class RateLimitGuard implements CanActivate {
   private getGlobalLimiter(): RateLimiterAbstract {
     if (!this.globalLimiter) {
       // runs on first request, .env is ready ✅
-      this.globalLimiter = createLimiter(2, 60, 'rl_global');
+      this.globalLimiter = createLimiter(100, 60, 'rl_global');
     }
     return this.globalLimiter;
   }

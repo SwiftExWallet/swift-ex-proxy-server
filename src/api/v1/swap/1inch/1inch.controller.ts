@@ -12,7 +12,7 @@ export class inchController {
   constructor(private readonly inchService: InchService) {}
 
   @RateLimit(
-    { points: 5, duration: 60, key: 'per-minute' }, // max 5 per minute
+    { points: 20, duration: 60, key: 'per-minute' }, // max 5 per minute
     { points: 20, duration: 3600, key: 'per-hour' }, // max 20 per hour
     { points: 100, duration: 86400, key: 'per-day' }, // max 100 per day
   )

@@ -39,7 +39,11 @@ export class InchService {
       return response.data;
     } catch (error) {
       this.logger.error(error);
-      throw error;
+       const message =
+        error.response.data.description ||
+        error.response.data ||
+        'unable to get swap quote';
+      throw new BadRequestException(message);
     }
   }
 
@@ -77,7 +81,11 @@ export class InchService {
       return response.data;
     } catch (error) {
       this.logger.error(error);
-      throw error;
+       const message =
+        error.response.data.description ||
+        error.response.data ||
+        'unable to get swap quote';
+      throw new BadRequestException(message);
     }
   }
 
