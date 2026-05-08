@@ -279,7 +279,7 @@ export class InchService {
   }
 
   async orderStatus(inchOrderStatusDto: InchOrderStatusDto) {
-    const url = `${process.env.INCH_ORDER_BASE}/${inchOrderStatusDto.chain}/order/status/${inchOrderStatusDto.orderHash}`;
+    const url = `${process.env.INCH_ORDER_BASE}/${ChainId[inchOrderStatusDto.chain]}/order/status/${inchOrderStatusDto.orderHash}`;
     const config: AxiosRequestConfig = {
       headers: {
         Authorization: `Bearer ${process.env.INCH_API_KEY}`,
