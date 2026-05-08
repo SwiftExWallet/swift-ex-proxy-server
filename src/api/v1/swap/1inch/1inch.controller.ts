@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Get } from '@nestjs/common';
+import { Body, Controller, Post, Get, Query } from '@nestjs/common';
 import { SwapQuoteDto } from '../dto/swapQuote';
 import { InchService } from './1inch.service';
 import { FusionOrderDto } from '../dto/fusionOrder';
@@ -6,6 +6,7 @@ import { SubmitOrderDto } from '../dto/submitOrder';
 import { RateLimit } from '../../common/decorators/rate-limit.decorator';
 import { FusionPlusSwapQuoteDto } from '../dto/fusionPlusSwapQuote';
 import { FusionPlusOrderDto } from '../dto/fusionPlusOrder';
+import { InchOrderStatusDto } from '../dto/1inchsOrderStatus';
 
 @Controller('api/v1/swap/1inch')
 export class inchController {
@@ -49,6 +50,12 @@ export class inchController {
   @Post('/submitFusionPlusOrder')
   async submitFusionPlusOrder(@Body() submitOrderDto: SubmitOrderDto) {
     const data = await this.inchService.submitFusionPlusOrder(submitOrderDto);
+    return data;
+  }
+
+  @Get('/orderStatus')
+  async orderStatus(@Query() inchOrderStatusDto: InchOrderStatusDto) {
+    const data = await this.inchService.orderStatus(inchOrderStatusDto);
     return data;
   }
 }

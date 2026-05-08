@@ -9,6 +9,7 @@ import { FusionPlusOrderDto } from '../dto/fusionPlusOrder';
 import { ethers } from 'ethers';
 import { HashLock, MerkleLeaf } from '@1inch/cross-chain-sdk';
 import { randomBytes } from 'node:crypto';
+import { InchOrderStatusDto } from '../dto/1inchsOrderStatus';
 
 @Injectable()
 export class InchService {
@@ -275,5 +276,30 @@ export class InchService {
 
     console.log('✅ Secrets generated, count:', secretsCount);
     return { secrets, secretHashes, hashLock };
+  }
+
+  async orderStatus(inchOrderStatusDto: InchOrderStatusDto) {
+    const url = `${process.env.INCH_ORDER_BASE}/${inchOrderStatusDto.chain}/order/status/${inchOrderStatusDto.orderHash}`;
+    const config: AxiosRequestConfig = {
+      headers: {
+        Authorization: `Bearer ${process.env.INCH_API_KEY}`,
+      },
+      params: {},
+      paramsSerializer: {
+        indexes: null,
+      },
+    };
+
+    try {
+      const response = await axios.get(url, config);
+      return response.data;
+    } catch (error) {
+      this.logger.error(error);
+      const message =
+        error.response.data.description ||
+        error.response.data ||
+        'unable to get order status';
+      throw new BadRequestException(message);
+    }
   }
 }
