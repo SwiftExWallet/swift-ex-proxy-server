@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { RangoService } from './rango.service';
 import { RangoRouteDto } from '../dto/rangoRoute';
 import { ConfirmRouteDto } from '../dto/confirmRoute';
@@ -54,4 +54,10 @@ export class RangoController {
     );
     return data;
   }
+
+  @Get('/orderStatus')
+    async orderStatus(@Query() checkTransactionApprovalDto: CheckTransactionApprovalDto) {
+      const data = await this.rangoService.checkTransactionStatus(checkTransactionApprovalDto);
+      return data;
+    }
 }

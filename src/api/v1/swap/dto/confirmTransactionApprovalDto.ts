@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CheckTransactionApprovalDto {
   @IsNotEmpty()
@@ -8,4 +8,8 @@ export class CheckTransactionApprovalDto {
   @IsNotEmpty()
   @IsString()
   txId: string;
+
+  @IsOptional()
+  @IsNumber()
+  step: number = 1;
 }

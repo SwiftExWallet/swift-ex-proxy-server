@@ -21,6 +21,8 @@ import { SwapModule } from './api/v1/swap/swap.module';
 import { APP_GUARD } from '@nestjs/core';
 import { RateLimitGuard } from './api/v1/common/guard/rate-limit.guard';
 import { QuoterModule } from './api/v1/uniswap/quoter/quoter.module';
+import { SwapOrdersModule } from './api/v1/swapOrders/swapOrders.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -36,6 +38,7 @@ import { QuoterModule } from './api/v1/uniswap/quoter/quoter.module';
       signOptions: { expiresIn: '7d' },
       verifyOptions: { ignoreExpiration: false },
     }),
+    ScheduleModule.forRoot(),
     EthModule,
     UsersModule,
     BscModule,
@@ -50,44 +53,45 @@ import { QuoterModule } from './api/v1/uniswap/quoter/quoter.module';
     RedisModule,
     SwapModule,
     QuoterModule,
+    SwapOrdersModule
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: RateLimitGuard }],
 })
 export class AppModule {
-  // configure(consumer: MiddlewareConsumer): any {
-  //   consumer
-  //     .apply(DeviceAuthTokenMiddleware)
-  //     .exclude(
-  //       {
-  //         path: '/',
-  //         method: RequestMethod.GET,
-  //       },
-  //       {
-  //         path: 'health',
-  //         method: RequestMethod.GET,
-  //       },
-  //       {
-  //         path: 'api/v1/webhook/stellar-transactions',
-  //         method: RequestMethod.POST,
-  //       },
-  //       {
-  //         path: '/api/v1/webhook/moralis-transactions',
-  //         method: RequestMethod.POST,
-  //       },
-  //       {
-  //         path: '/api/v1/webhook/alchemy-on-ramp',
-  //         method: RequestMethod.POST,
-  //       },
-  //       {
-  //         path: '/api/v1/webhook/alchemy-off-ramp',
-  //         method: RequestMethod.POST,
-  //       },
-  //       {
-  //         path: '/api/v1/quoter/quote',
-  //         method: RequestMethod.POST,
-  //       },
-  //     )
-  //     .forRoutes('*');
-  // }
+  configure(consumer: MiddlewareConsumer): any {
+    consumer
+      .apply(DeviceAuthTokenMiddleware)
+      .exclude(
+        {
+          path: '/',
+          method: RequestMethod.GET,
+        },
+        {
+          path: 'health',
+          method: RequestMethod.GET,
+        },
+        {
+          path: 'api/v1/webhook/stellar-transactions',
+          method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/webhook/moralis-transactions',
+          method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/webhook/alchemy-on-ramp',
+          method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/webhook/alchemy-off-ramp',
+          method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/quoter/quote',
+          method: RequestMethod.POST,
+        },
+      )
+      .forRoutes('*');
+  }
 }
