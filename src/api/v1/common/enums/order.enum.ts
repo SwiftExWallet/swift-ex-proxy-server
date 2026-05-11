@@ -8,3 +8,11 @@ export enum OrderStatus {
   COMPLETED = 'completed',
   FAILED = 'failed',
 }
+
+export enum RangoOrderStatus{
+  RUNNING = 'running',
+  SUCCEEDED = 'succeeded',
+  FAILED = 'failed',
+  WAITING = 'waiting',
+  SUCCESS = 'success',
+}

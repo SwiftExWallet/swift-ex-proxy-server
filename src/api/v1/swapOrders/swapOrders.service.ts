@@ -20,19 +20,15 @@ export class SwapOrderService {
     private readonly swapOrders: Model<SwapOrders>
   ) { }
 
-  @Cron('* * * * *')
-  async handleCron(): Promise<void> {
-    this.logger.log('Cron job for polling pending running...');
-  }
-
-  async store(_id: mongoose.Schema.Types.ObjectId, dto: StoreSwapOrderDto): Promise<SwapOrders> {
+  async store(device:any, dto: StoreSwapOrderDto): Promise<SwapOrders> {
     try {
       const doc = new this.swapOrders({
         ...dto,
-        deviceId: _id,
+        deviceId: device._id,
         status: dto.status ?? OrderStatus.PENDING,
         blockNumber: null,
         confirmedAt: null,
+        deviceFcmToken: device.fcmToken,
       });
       return await doc.save();
     } catch (err: any) {

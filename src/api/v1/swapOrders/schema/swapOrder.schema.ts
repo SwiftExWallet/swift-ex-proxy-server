@@ -15,6 +15,17 @@ export class SwapOrders {
   deviceId: mongoose.Schema.Types.ObjectId;
 
   @Prop({
+    type: String,
+    trim: true,
+    required: function (this: SwapOrders) {
+      return [
+        swapProvider.RANGO,
+      ].includes(this.provider);
+    },
+  })
+  requestId?: string;
+  
+  @Prop({
     required: true,
     unique: true,
     index: true
@@ -60,6 +71,9 @@ export class SwapOrders {
 
   @Prop({ default: null })
   confirmedAt: Date;
+
+  @Prop({ required: true })
+  deviceFcmToken: string;
 }
 
 export const SwapOrderSchema = SchemaFactory.createForClass(SwapOrders);

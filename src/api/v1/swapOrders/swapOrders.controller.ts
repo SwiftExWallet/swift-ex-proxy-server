@@ -8,7 +8,7 @@ export class SwapOrdersController {
 
   @Post('store')
   async store(@Req() req: any, @Res() response: any, @Body() storeSwapOrderDto: StoreSwapOrderDto) {
-    const stored = await this.swapOrderService.store(req.device._id, storeSwapOrderDto);
+    const stored = await this.swapOrderService.store(req.device, storeSwapOrderDto);
     response.send(stored);
   }
 }
