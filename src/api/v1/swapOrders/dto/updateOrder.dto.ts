@@ -1,7 +1,8 @@
-import { IsString, IsEnum, IsOptional, IsNotEmpty, ValidateIf } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsNotEmpty, ValidateIf, Matches } from 'class-validator';
 import { } from '../schema/swapOrder.schema';
 import { SwapNetwork, swapProvider } from '../../common/enums/chain.enum';
 import { OrderStatus } from '../../common/enums/order.enum';
+import { ValidWalletType } from '../../common/enums/all-bridge.enum';
 
 export class StoreSwapOrderDto {
   @ValidateIf((o) => o.provider === swapProvider.RANGO)
@@ -65,4 +66,28 @@ export class UpdateSwapOrderStatusDto {
 
   @IsOptional()
   confirmedAt?: Date | null;
+}
+
+export class MultiChainWalletAddressDto{
+  @Matches(
+      /^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$|^[A-Z0-9]{1,12}-G[A-Z0-9]{55}$/,
+      { message: 'Invalid wallet address format' }
+    )
+    address: string;
+}
+
+export class BridgeTxStatusDto{
+  @IsString()
+  @IsNotEmpty()
+  txHash: string;
+  
+  @IsString()
+  @IsNotEmpty()
+  @IsEnum(ValidWalletType)
+  walletType: ValidWalletType;
+
+  @IsString()
+  @IsNotEmpty()
+  @IsEnum(swapProvider)
+  provider: swapProvider;
 }

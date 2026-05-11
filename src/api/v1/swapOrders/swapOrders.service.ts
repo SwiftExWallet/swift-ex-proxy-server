@@ -3,22 +3,27 @@ import {
   Logger,
   ConflictException,
   InternalServerErrorException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import mongoose, { Model } from 'mongoose';
 import { Cron } from '@nestjs/schedule';
 import { SwapOrders } from './schema/swapOrder.schema';
-import { StoreSwapOrderDto } from './dto/updateOrder.dto';
+import { BridgeTxStatusDto, StoreSwapOrderDto } from './dto/updateOrder.dto';
 import { OrderStatus } from '../common/enums/order.enum';
+import { DbResult, SwapOrderRepository } from './swapOrder.repository';
+import { AllbridgeCoreSdk, ChainSymbol, nodeRpcUrlsDefault } from '@allbridge/bridge-core-sdk';
 
 @Injectable()
 export class SwapOrderService {
   private readonly logger = new Logger(SwapOrderService.name);
-
+  private readonly sdk = new AllbridgeCoreSdk(nodeRpcUrlsDefault);
   constructor(
     @InjectModel(SwapOrders.name)
-    private readonly swapOrders: Model<SwapOrders>
-  ) { }
+    private readonly swapOrders: Model<SwapOrders>,
+    private readonly swapOrderRepository: SwapOrderRepository,
+  ) { 
+  }
 
   async store(device:any, dto: StoreSwapOrderDto): Promise<SwapOrders> {
     try {
@@ -42,11 +47,23 @@ export class SwapOrderService {
     }
   }
 
-  async findByTxHash(txHash: string): Promise<SwapOrders | null> {
-    return this.swapOrders.findOne({ txHash }).exec();
+  async findByTxHash(txHash: string): Promise<DbResult<SwapOrders | null>>  {
+    return await this.swapOrderRepository.findByTxHash(txHash);
   }
 
-  async findByWallet(walletAddress: string): Promise<SwapOrders[]> {
-    return this.swapOrders.find({ walletAddress }).exec();
+  async findByWallet(walletAddress: string): Promise<DbResult<SwapOrders[]>> {
+    return await this.swapOrderRepository.findByWallet(walletAddress)
+  }
+
+  async getBridgeTxStatus(bridgeTxStatusDto: BridgeTxStatusDto) {
+    const { provider, walletType, txHash, } = bridgeTxStatusDto;
+    try {
+      return await this.sdk.getTransferStatus(
+        ChainSymbol[walletType],
+        txHash,
+      );
+    } catch (err) {
+      throw new BadRequestException(`Transaction not found.`);
+    }
   }
 }

@@ -54,6 +54,7 @@ export class SwapOrderRepository {
       const data = await this.model
         .find({ walletAddress })
         .sort({ _id: -1 })
+        .select('-deviceId -deviceFcmToken')
         .exec();
       return { ok: true, data };
     } catch (err) {
