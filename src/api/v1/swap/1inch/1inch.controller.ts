@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Get, Query } from '@nestjs/common';
+import { Body, Controller, Post, Get, Query, Req } from '@nestjs/common';
 import { SwapQuoteDto } from '../dto/swapQuote';
 import { InchService } from './1inch.service';
 import { FusionOrderDto } from '../dto/fusionOrder';
@@ -42,14 +42,14 @@ export class inchController {
   }
 
   @Post('/submitOrder')
-  async submitOrder(@Body() submitOrderDto: SubmitOrderDto) {
-    const data = await this.inchService.submitOrder(submitOrderDto);
+  async submitOrder(@Req() req: any, @Body() submitOrderDto: SubmitOrderDto) {
+    const data = await this.inchService.submitFusionOrder(req.device, submitOrderDto);
     return data;
   }
 
   @Post('/submitFusionPlusOrder')
-  async submitFusionPlusOrder(@Body() submitOrderDto: SubmitOrderDto) {
-    const data = await this.inchService.submitFusionPlusOrder(submitOrderDto);
+  async submitFusionPlusOrder(@Req() req: any, @Body() submitOrderDto: SubmitOrderDto) {
+    const data = await this.inchService.submitFusionPlusOrder(req.device, submitOrderDto);
     return data;
   }
 

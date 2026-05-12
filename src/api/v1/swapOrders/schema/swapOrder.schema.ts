@@ -74,6 +74,9 @@ export class SwapOrders {
 
   @Prop({ required: true })
   deviceFcmToken: string;
+
+  @Prop({ default: null })
+  encryptedFusionSecrets: string;
 }
 
 export const SwapOrderSchema = SchemaFactory.createForClass(SwapOrders);

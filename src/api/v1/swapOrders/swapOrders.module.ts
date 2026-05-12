@@ -6,6 +6,7 @@ import { SwapOrderRepository } from './swapOrder.repository';
 import { SwapOrdersController } from './swapOrders.controller';
 import { RangoPollerService } from '../crons/rangoPoller.service';
 import { AllbridgePollerService } from '../crons/allbridgePoller.service';
+import { InchWsPollerService } from '../crons/inchWsPoller.service';
 import { RangoService } from '../swap/rango/rango.service';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';
 
@@ -18,8 +19,10 @@ import { FirebaseNotificationService } from '../notification/firebase/notificati
     SwapOrderRepository,
     RangoPollerService,
     AllbridgePollerService,
+    InchWsPollerService,
     RangoService,
     FirebaseNotificationService],
   controllers: [SwapOrdersController],
+  exports: [SwapOrderService, InchWsPollerService],
 })
 export class SwapOrdersModule {}

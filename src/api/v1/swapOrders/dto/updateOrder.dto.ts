@@ -55,6 +55,10 @@ export class StoreSwapOrderDto {
   @IsEnum(OrderStatus)
   @IsOptional()
   status?: OrderStatus;
+
+  @IsString()
+  @IsOptional()
+  encryptedFusionSecrets?: string;
 }
 
 export class UpdateSwapOrderStatusDto {

@@ -6,8 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import mongoose, { Model } from 'mongoose';
-import { Cron } from '@nestjs/schedule';
+import { Model } from 'mongoose';
 import { SwapOrders } from './schema/swapOrder.schema';
 import { BridgeTxStatusDto, MultiChainWalletAddressDto, StoreSwapOrderDto } from './dto/updateOrder.dto';
 import { OrderStatus } from '../common/enums/order.enum';

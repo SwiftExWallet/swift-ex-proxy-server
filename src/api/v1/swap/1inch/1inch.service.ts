@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { SwapQuoteDto } from '../dto/swapQuote';
-import { ChainId } from '../../common/enums/chain.enum';
+import { ChainId, swapProvider } from '../../common/enums/chain.enum';
+import { OrderStatus } from '../../common/enums/order.enum';
+import { SwapOrderService } from '../../swapOrders/swapOrders.service';
 import axios, { AxiosRequestConfig } from 'axios';
 import { FusionOrderDto } from '../dto/fusionOrder';
 import { SubmitOrderDto } from '../dto/submitOrder';
@@ -10,11 +12,18 @@ import { ethers } from 'ethers';
 import { HashLock, MerkleLeaf } from '@1inch/cross-chain-sdk';
 import { randomBytes } from 'node:crypto';
 import { InchOrderStatusDto } from '../dto/1inchsOrderStatus';
+import { encryptFusionSecrets } from '../../common/utils/encryption.util';
+import { RedisService } from '../../redis/redis.service';
+import { InchWsPollerService } from '../../crons/inchWsPoller.service';
 
 @Injectable()
 export class InchService {
   private readonly logger = new Logger(InchService.name);
-  constructor() {}
+  constructor(
+    private readonly swapOrderService: SwapOrderService,
+    private readonly redisService: RedisService,
+    private readonly inchWsPollerService: InchWsPollerService,
+  ) {}
   async getSwapQuote(swapQuote: SwapQuoteDto) {
     const { tokenIn, tokenOut, amount, walletAddress, chain } = swapQuote;
     const url = `${process.env.QUOTER_BASE}/${ChainId[chain]}/quote/receive`;
@@ -123,7 +132,7 @@ export class InchService {
 
   async buildFusionPlusOrder(fusionPlusOrder: FusionPlusOrderDto) {
     const { quoteId, walletAddress, secretCount } = fusionPlusOrder;
-    const { secretHashes } = this.generateSecrets(secretCount);
+    const { secretHashes, secrets, hashLock } = this.generateSecrets(secretCount);
 
     const config: AxiosRequestConfig = {
       headers: {
@@ -151,10 +160,17 @@ export class InchService {
       config,
     );
 
+    await this.redisService.setKey(
+      `fusion_secrets:${quoteId}`,
+      JSON.stringify({ secrets, secretHashes, hashLock }),
+      900,
+    );
+
     return response.data; // returns order struct + typedData for signing
   }
 
-  async submitOrder(submitOrderDto: SubmitOrderDto) {
+
+  async submitFusionOrder(device: any, submitOrderDto: SubmitOrderDto) {
     try {
       const { order, signature, extension, quoteId, chain } = submitOrderDto;
       const config: AxiosRequestConfig = {
@@ -178,55 +194,36 @@ export class InchService {
         config,
       );
 
-      return response.data; // { orderHash: '0x...' }
-    } catch (error: any) {
-      this.logger.error(error);
-      const message =
-        error.response.data.description ||
-        error.response.data ||
-        'unable to submit order';
-      throw new BadRequestException(message);
-    }
-  }
-
-  async submitFusionOrder(submitOrderDto: SubmitOrderDto) {
-    try {
-      const { order, signature, extension, quoteId, chain } = submitOrderDto;
-      const config: AxiosRequestConfig = {
-        headers: {
-          Authorization: `Bearer ${process.env.INCH_API_KEY}`,
-        },
-        params: {},
-        paramsSerializer: {
-          indexes: null,
-        },
-      };
-      const body = {
-        order,
-        signature,
-        quoteId,
-        extension,
-      };
-      const response = await axios.post(
-        `${process.env.INCH_RELAYER_BASE}/${ChainId[chain]}/order/submit`,
-        body,
-        config,
-      );
+      const orderHash = response.data.orderHash;
+      const savedOrder = await this.swapOrderService.store(device, {
+        txHash: orderHash,
+        provider: swapProvider.ONEINCH_FUSION,
+        walletAddress: order.maker,
+        fromChain: chain,
+        toChain: chain,
+        fromToken: order.makerAsset,
+        toToken: order.takerAsset,
+        amountIn: order.makingAmount,
+        amountOut: order.takingAmount,
+        status: OrderStatus.PENDING,
+      });
+      
+      this.inchWsPollerService.addOrderToTracking(savedOrder);
 
       return response.data; // { orderHash: '0x...' }
     } catch (error: any) {
       this.logger.error(error);
       const message =
-        error.response.data.description ||
-        error.response.data ||
+        error.response?.data?.description ||
+        error.response?.data ||
         'unable to submit order';
       throw new BadRequestException(message);
     }
   }
 
-  async submitFusionPlusOrder(submitOrderDto: SubmitOrderDto) {
+  async submitFusionPlusOrder(device: any, submitOrderDto: SubmitOrderDto) {
     try {
-      const { order, signature, extension, quoteId, chain } = submitOrderDto;
+      const { order, signature, extension, quoteId, chain, toChain } = submitOrderDto;
       const config: AxiosRequestConfig = {
         headers: {
           Authorization: `Bearer ${process.env.INCH_API_KEY}`,
@@ -248,12 +245,42 @@ export class InchService {
         config,
       );
 
+      const orderHash = response.data.orderHash;
+      
+      let encryptedFusionSecrets: string | undefined;
+      const rawSecretsStr = await this.redisService.getKey(`fusion_secrets:${quoteId}`);
+      if (rawSecretsStr) {
+        try {
+          const rawSecrets = JSON.parse(rawSecretsStr);
+          encryptedFusionSecrets = encryptFusionSecrets(rawSecrets);
+          await this.redisService.delKey(`fusion_secrets:${quoteId}`);
+        } catch (err) {
+          this.logger.error('Failed to encrypt fusion secrets', err);
+        }
+      }
+
+      const savedOrder = await this.swapOrderService.store(device, {
+        txHash: orderHash,
+        provider: swapProvider.ONEINCH_FUSION_PLUS,
+        walletAddress: order.maker,
+        fromChain: chain,
+        toChain: toChain || chain,
+        fromToken: order.makerAsset,
+        toToken: order.takerAsset,
+        amountIn: order.makingAmount,
+        amountOut: order.takingAmount,
+        status: OrderStatus.PENDING,
+        encryptedFusionSecrets,
+      });
+
+      this.inchWsPollerService.addOrderToTracking(savedOrder);
+
       return response.data; // { orderHash: '0x...' }
     } catch (error: any) {
       this.logger.error(error);
       const message =
-        error.response.data.description ||
-        error.response.data ||
+        error.response?.data?.description ||
+        error.response?.data ||
         'unable to submit order';
       throw new BadRequestException(message);
     }
