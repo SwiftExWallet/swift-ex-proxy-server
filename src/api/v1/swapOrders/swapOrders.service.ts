@@ -9,10 +9,11 @@ import { InjectModel } from '@nestjs/mongoose';
 import mongoose, { Model } from 'mongoose';
 import { Cron } from '@nestjs/schedule';
 import { SwapOrders } from './schema/swapOrder.schema';
-import { BridgeTxStatusDto, StoreSwapOrderDto } from './dto/updateOrder.dto';
+import { BridgeTxStatusDto, MultiChainWalletAddressDto, StoreSwapOrderDto } from './dto/updateOrder.dto';
 import { OrderStatus } from '../common/enums/order.enum';
 import { DbResult, SwapOrderRepository } from './swapOrder.repository';
 import { AllbridgeCoreSdk, ChainSymbol, nodeRpcUrlsDefault } from '@allbridge/bridge-core-sdk';
+import { PaginatedResult, PaginationDto } from './dto/pagination.dto';
 
 @Injectable()
 export class SwapOrderService {
@@ -65,5 +66,9 @@ export class SwapOrderService {
     } catch (err) {
       throw new BadRequestException(`Transaction not found.`);
     }
+  }
+
+    async findByWalletWithPagination(multiChainWalletAddressDto: MultiChainWalletAddressDto,pagination:PaginationDto): Promise<DbResult<PaginatedResult<SwapOrders>>> {
+    return await this.swapOrderRepository.findByWalletWithPagination(multiChainWalletAddressDto.address,pagination)
   }
 }

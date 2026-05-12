@@ -5,6 +5,7 @@ import { SwapOrders } from './schema/swapOrder.schema';
 import { StoreSwapOrderDto, } from './dto/updateOrder.dto';
 import { OrderStatus } from '../common/enums/order.enum';
 import { swapProvider } from '../common/enums/chain.enum';
+import { PaginationDto, PaginatedResult, PAGE_SIZE } from './dto/pagination.dto';
 
 export type DbResult<T> =
   | { ok: true; data: T }
@@ -106,6 +107,43 @@ export class SwapOrderRepository {
     } catch (err) {
       this.logger.error('updateStatus failed', { txHash, status, err });
       return { ok: false, error: 'updateStatus failed' };
+    }
+  }
+
+  async findByWalletWithPagination(walletAddress: string,pagination: PaginationDto,): Promise<DbResult<PaginatedResult<SwapOrders>>> {
+    try {
+      const page  = pagination.page  ?? 1;
+      const limit = pagination.limit ?? PAGE_SIZE;
+      const skip  = (page - 1) * limit;
+
+      const [total, data] = await Promise.all([
+        this.model.countDocuments({ walletAddress }),
+        this.model
+          .find({ walletAddress })
+          .select('-deviceId -deviceFcmToken')
+          .sort({ _id: -1 })
+          .skip(skip)
+          .limit(limit)
+          .exec(),
+      ]);
+
+      const totalPages = Math.ceil(total / limit);
+
+      return {
+        ok: true,
+        data: {
+          data,
+          total,
+          page,
+          limit,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+      };
+    } catch (err) {
+      this.logger.error('findByWallet failed', { walletAddress, err });
+      return { ok: false, error: 'findByWallet failed' };
     }
   }
 }

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post, Query, Req, Res } from '@nestjs/common';
 import { SwapOrderService } from './swapOrders.service';
 import { BridgeTxStatusDto, MultiChainWalletAddressDto, StoreSwapOrderDto } from './dto/updateOrder.dto';
+import { PaginationDto } from './dto/pagination.dto';
 
 @Controller('api/v1/swapOrders')
 export class SwapOrdersController {
@@ -13,8 +14,8 @@ export class SwapOrdersController {
   }
 
   @Get('/orderByWallet')
-  async orderByWallet(@Query() multiChainWalletAddressDto: MultiChainWalletAddressDto) {
-   return await this.swapOrderService.findByWallet(multiChainWalletAddressDto.address);
+  async orderByWallet(@Query() multiChainWalletAddressDto: MultiChainWalletAddressDto,@Query() pagination: PaginationDto) {
+   return await this.swapOrderService.findByWalletWithPagination(multiChainWalletAddressDto,pagination);
   }
 
   @Post('/bridgeOrderStatus')
