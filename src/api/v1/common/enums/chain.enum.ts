@@ -42,6 +42,7 @@ export enum SwapNetwork {
   SONIC = 'SONIC',
   UNI = 'UNI',
   SOL = 'SOL',
+  SRB = 'SRB',
 }
 
 export enum ChainId {
