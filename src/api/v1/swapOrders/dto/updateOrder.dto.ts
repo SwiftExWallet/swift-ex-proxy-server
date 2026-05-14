@@ -91,3 +91,14 @@ export class BridgeTxStatusDto{
   @IsEnum(swapProvider)
   provider: swapProvider;
 }
+
+export class UpdateTxStatusDto{
+  @IsString()
+  @IsNotEmpty()
+  txHash: string;
+  
+  @IsString()
+  @IsNotEmpty()
+  @IsEnum(OrderStatus)
+  orderStatus: OrderStatus;
+}
