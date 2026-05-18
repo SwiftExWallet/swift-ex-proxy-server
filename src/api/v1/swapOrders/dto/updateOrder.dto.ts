@@ -1,7 +1,7 @@
 import { IsString, IsEnum, IsOptional, IsNotEmpty, ValidateIf, Matches } from 'class-validator';
 import { } from '../schema/swapOrder.schema';
 import { SwapNetwork, swapProvider } from '../../common/enums/chain.enum';
-import { OrderStatus } from '../../common/enums/order.enum';
+import { OrderStatus, OrderTxType } from '../../common/enums/order.enum';
 import { ValidWalletType } from '../../common/enums/all-bridge.enum';
 
 export class StoreSwapOrderDto {
@@ -51,6 +51,10 @@ export class StoreSwapOrderDto {
   @IsString()
   @IsNotEmpty()
   amountOut: string;
+
+  @IsEnum(OrderTxType)
+  @IsOptional()
+  txType: OrderTxType;
 
   @IsEnum(OrderStatus)
   @IsOptional()
