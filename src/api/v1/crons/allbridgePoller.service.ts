@@ -8,7 +8,7 @@ import {
 } from '@allbridge/bridge-core-sdk';
 import { SwapOrderRepository } from '../swapOrders/swapOrder.repository';
 import { SwapOrders } from '../swapOrders/schema/swapOrder.schema';
-import { OrderStatus } from '../common/enums/order.enum';
+import { SwapOrderStatus as OrderStatus } from '../common/enums/order.enum';
 import { swapProvider } from '../common/enums/chain.enum';
 import { NotificationDto } from '../notification/dto/notification.dto';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';

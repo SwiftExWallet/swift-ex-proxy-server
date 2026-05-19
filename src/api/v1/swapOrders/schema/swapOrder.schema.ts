@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
-import { OrderStatus } from '../../common/enums/order.enum';
+import { SwapOrderStatus as OrderStatus } from '../../common/enums/order.enum';
 import { swapProvider } from '../../common/enums/chain.enum';
 
 @Schema({ collection: 'SwapOrders', timestamps: true })

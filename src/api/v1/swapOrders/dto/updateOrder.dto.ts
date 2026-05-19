@@ -1,10 +1,15 @@
 import { IsString, IsEnum, IsOptional, IsNotEmpty, ValidateIf, Matches } from 'class-validator';
 import { } from '../schema/swapOrder.schema';
 import { SwapNetwork, swapProvider } from '../../common/enums/chain.enum';
-import { OrderStatus } from '../../common/enums/order.enum';
+import { SwapOrderStatus as OrderStatus } from '../../common/enums/order.enum';
 import { ValidWalletType } from '../../common/enums/all-bridge.enum';
 
 export class StoreSwapOrderDto {
+
+  @IsString()
+  @IsNotEmpty()
+  quoteId: string;
+
   @ValidateIf((o) => o.provider === swapProvider.RANGO)
   @IsString({
     message: 'requestId must be a string',

@@ -9,7 +9,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SwapOrders } from './schema/swapOrder.schema';
 import { BridgeTxStatusDto, MultiChainWalletAddressDto, StoreSwapOrderDto } from './dto/updateOrder.dto';
-import { OrderStatus } from '../common/enums/order.enum';
+import { SwapOrderStatus } from '../common/enums/order.enum';
 import { DbResult, SwapOrderRepository } from './swapOrder.repository';
 import { AllbridgeCoreSdk, ChainSymbol, nodeRpcUrlsDefault } from '@allbridge/bridge-core-sdk';
 import { PaginatedResult, PaginationDto } from './dto/pagination.dto';
@@ -30,7 +30,7 @@ export class SwapOrderService {
       const doc = new this.swapOrders({
         ...dto,
         deviceId: device._id,
-        status: dto.status ?? OrderStatus.PENDING,
+        status: dto.status ?? SwapOrderStatus.PENDING,
         blockNumber: null,
         confirmedAt: null,
         deviceFcmToken: device.fcmToken,
@@ -45,6 +45,15 @@ export class SwapOrderService {
       this.logger.error('Failed to store transaction', err);
       throw new InternalServerErrorException('Could not save transaction.');
     }
+  }
+
+  async updateOrderStatus(orderHash: string, status: SwapOrderStatus){
+    const swapOrder = await this.swapOrderRepository.findByTxHash(orderHash);
+    if(!swapOrder){
+      this.logger.error(`Swap order not found for orderHash ${orderHash}`);
+      return;
+    }
+    return this.swapOrderRepository.updateStatus(orderHash, status)
   }
 
   async findByTxHash(txHash: string): Promise<DbResult<SwapOrders | null>>  {

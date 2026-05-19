@@ -3,8 +3,9 @@ export enum OrderType {
   SELL = 'sell',
 }
 
-export enum OrderStatus {
+export enum SwapOrderStatus {
   PENDING = 'pending',
+  PARTIALLY_FILLED = 'partially_filled',
   COMPLETED = 'completed',
   FAILED = 'failed',
 }
