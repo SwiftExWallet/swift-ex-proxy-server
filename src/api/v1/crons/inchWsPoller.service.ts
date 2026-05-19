@@ -13,9 +13,9 @@ export const FUSION_CHAINS: { chainId: NetworkEnum; name: string }[] = [
   { chainId: NetworkEnum.ETHEREUM,  name: 'ethereum'  },
   { chainId: NetworkEnum.POLYGON,   name: 'polygon'   },
   { chainId: NetworkEnum.ARBITRUM,  name: 'arbitrum'  },
-  { chainId: NetworkEnum.OPTIMISM,  name: 'optimism'  },
-  { chainId: NetworkEnum.BINANCE,   name: 'bnb'       },
-  { chainId: NetworkEnum.AVALANCHE, name: 'avalanche' },
+  // { chainId: NetworkEnum.OPTIMISM,  name: 'optimism'  },
+  // { chainId: NetworkEnum.BINANCE,   name: 'bnb'       },
+  // { chainId: NetworkEnum.AVALANCHE, name: 'avalanche' },
 ];
 
 interface OrderSubscription {
@@ -60,8 +60,7 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
     const ws = new WebSocketApi({
       url: 'wss://api.1inch.dev/fusion/ws',
       network: chainId,
-      authKey: process.env.ONEINCH_API_KEY!,
-      lazyInit: true,   // don't auto-connect until we call init()
+      authKey: process.env.INCH_API_KEY!,
     });
     
     ws.onOpen(() => {
@@ -82,7 +81,7 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
       await this.handleOrderEvent(chainId, data);
     });
 
-    ws.init(); // connect now
+    // ws.init(); // connect now
 
     this.wsClients.set(chainId, ws);
   }
