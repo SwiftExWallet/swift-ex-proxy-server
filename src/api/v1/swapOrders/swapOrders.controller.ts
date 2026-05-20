@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, Res } from '@nestjs/common';
 import { SwapOrderService } from './swapOrders.service';
 import { BridgeTxStatusDto, MultiChainWalletAddressDto, StoreSwapOrderDto } from './dto/updateOrder.dto';
 import { PaginationDto } from './dto/pagination.dto';
@@ -21,5 +21,10 @@ export class SwapOrdersController {
   @Post('/bridgeOrderStatus')
   async bridgeOrderStatus(@Body() bridgeTxStatusDto: BridgeTxStatusDto) {
    return await this.swapOrderService.getBridgeTxStatus(bridgeTxStatusDto);
+  }
+
+  @Get('/:orderHash')
+  async getOrderByOrderhash(@Param('orderHash') orderHash: string) {
+    return await this.swapOrderService.findByTxHash(orderHash);
   }
 }

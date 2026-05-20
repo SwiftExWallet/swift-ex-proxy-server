@@ -15,6 +15,7 @@ import { encryptFusionSecrets } from '../../common/utils/encryption.util';
 import { RedisService } from '../../redis/redis.service';
 import { InchWsPollerService } from '../../crons/inchWsPoller.service';
 import crypto from "crypto";
+import { CancelFusionOrderDto } from '../dto/cancelFusionOrder';
 
 @Injectable()
 export class InchService {
@@ -282,12 +283,33 @@ export class InchService {
     }
   }
 
+  async cancelOrder(cancelFusionOrderDto: CancelFusionOrderDto) {
+    const { chain, orderHash } = cancelFusionOrderDto;
+    const url = `${process.env.QUOTER_BASE}/${ChainId[chain]}/order/cancel`;
+
+    const config: AxiosRequestConfig = {
+      headers: {
+        Authorization: `Bearer ${process.env.INCH_API_KEY}`,
+      },
+      params: {
+      },
+      paramsSerializer: {
+        indexes: null,
+      },
+    };
+      const response = await axios.post(
+      url,
+      { orderHash},
+      config,
+    );
+    return response.data;
+  }
   generateSecrets(secretsCount: number, quoteId: string) {
 
     // Hash each secret
-const secretHashes = Array.from({ length: secretsCount }, (_, index) =>
-  HashLock.hashSecret(this.createSecretForQuoteId(quoteId, index))
-);
+    const secretHashes = Array.from({ length: secretsCount }, (_, index) =>
+      HashLock.hashSecret(this.createSecretForQuoteId(quoteId, index))
+    );
 
     // Build hashlock from secrets
     // const hashLock =
