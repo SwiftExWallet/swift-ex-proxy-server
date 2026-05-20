@@ -9,6 +9,7 @@ import { AllbridgePollerService } from '../crons/allbridgePoller.service';
 import { InchWsPollerService } from '../crons/inchWsPoller.service';
 import { RangoService } from '../swap/rango/rango.service';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';
+import { InchFusionPlusWsPollerService } from '../crons/inchFusionPlusWsPoller.service';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { FirebaseNotificationService } from '../notification/firebase/notificati
     RangoPollerService,
     AllbridgePollerService,
     InchWsPollerService,
+    InchFusionPlusWsPollerService,
     RangoService,
     FirebaseNotificationService],
   controllers: [SwapOrdersController],
