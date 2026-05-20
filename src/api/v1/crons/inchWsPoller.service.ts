@@ -137,40 +137,48 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
 
   // ─── Handle incoming order events ────────────────────────────────────────────
 
-  private async handleOrderEvent(chainId: NetworkEnum, event: any) {
-    const { orderHash, status, data } = event;
+  private async handleOrderEvent(chainId: NetworkEnum, orderEvent: any) {
+    const { orderHash, result, event } = orderEvent;
 
     // Only process orders we're tracking
-    const sub = this.activeSubscriptions.get(orderHash);
-    if (!sub || sub.chainId !== chainId) return;
-
-    this.logger.log(`[chain:${chainId}] Order ${orderHash} → ${status}`);
-
-    const terminalStatuses = [
-      OrderStatus.Filled,
-      OrderStatus.PartiallyFilled,
-      OrderStatus.Cancelled,
-      OrderStatus.Expired,
-    ];
-
-    if (terminalStatuses.includes(status)) {
-      await this.finalizeOrder(sub, status);
+    const sub = this.activeSubscriptions.get(result.orderHash);
+    if (!sub || sub.chainId !== chainId) {
+      this.logger.log(`${chainId}:: order not found ${orderHash}`)
+      return;
     }
+    switch (event) {
+      case 'order_created':
+        await this.swapOrderService.updateOrderStatus(orderHash, SwapOrderStatus.CREATED)
+        break;
+      case 'order_filled':
+        await this.finalizeOrder(sub, SwapOrderStatus.COMPLETED);
+        break;
+      case 'order_partially_filled':
+        this.logger.log(`${chainId}:: order partially filled ${orderHash}`)
+        await this.swapOrderService.updateOrderStatus(orderHash, SwapOrderStatus.CREATED)
+        break;
+      case 'order_cancelled':
+        await this.finalizeOrder(sub,  SwapOrderStatus.CANCELLED);
+        break;
+      case 'order_invalid':
+        await this.finalizeOrder(sub, SwapOrderStatus.INVALID);
+        break;
+    }
+
   }
 
   // ─── Finalize: update DB + unsubscribe ───────────────────────────────────────
-
+x
   private async finalizeOrder(
     sub: OrderSubscription,
-    status: OrderStatus,
+    status: SwapOrderStatus,
   ) {
     const { orderHash, chainId } = sub;
 
     try {
-      await this.swapOrderService.updateOrderStatus(orderHash, this.mapEventToStatus(status))
-
-
+      await this.swapOrderService.updateOrderStatus(orderHash, status)
       this.logger.log(`[chain:${chainId}] Order ${orderHash} saved as ${status}`);
+      this.unsubscribeOrder(orderHash, chainId);
     } catch (err) {
       this.logger.error(`Failed to update order ${orderHash}: ${err.message}`);
     } finally {
@@ -179,24 +187,6 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-
-
-  // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-  private mapEventToStatus(event: OrderStatus): SwapOrderStatus {
-    const map: Record<OrderStatus, SwapOrderStatus> = {
-      [OrderStatus.Filled]:           SwapOrderStatus.COMPLETED,
-      [OrderStatus.PartiallyFilled]: SwapOrderStatus.PARTIALLY_FILLED,
-      [OrderStatus.Cancelled]:        SwapOrderStatus.FAILED,
-      [OrderStatus.Expired]:          SwapOrderStatus.FAILED,
-      [OrderStatus.Pending]:          SwapOrderStatus.PENDING,
-      [OrderStatus.FalsePredicate]:   SwapOrderStatus.FAILED,
-      [OrderStatus.NotEnoughBalanceOrAllowance]: SwapOrderStatus.FAILED,
-      [OrderStatus.WrongPermit]:      SwapOrderStatus.FAILED,
-      [OrderStatus.InvalidSignature]: SwapOrderStatus.FAILED,
-    };
-    return map[event] ?? SwapOrderStatus.FAILED;
-  }
 
   // ─── Debug / Monitoring ──────────────────────────────────────────────────────
 

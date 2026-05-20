@@ -4,10 +4,14 @@ export enum OrderType {
 }
 
 export enum SwapOrderStatus {
+  CREATED = 'created',
   PENDING = 'pending',
   PARTIALLY_FILLED = 'partially_filled',
   COMPLETED = 'completed',
   FAILED = 'failed',
+  CANCELLED = 'cancelled',
+  EXPIRED = 'expired',
+  INVALID = 'invalid',
 }
 
 export enum RangoOrderStatus{
