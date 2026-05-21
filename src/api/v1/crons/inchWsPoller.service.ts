@@ -5,8 +5,8 @@ import {
   WebSocketApi,
   OrderStatus,
 } from '@1inch/fusion-sdk';
-import { SwapOrderService } from '../swapOrders/swapOrders.service';
 import { SwapOrderStatus } from '../common/enums/order.enum';
+import { SwapOrderRepository } from '../swapOrders/swapOrder.repository';
 
 
 export const FUSION_CHAINS: { chainId: NetworkEnum; name: string }[] = [
@@ -35,7 +35,7 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
   private activeSubscriptions = new Map<string, OrderSubscription>();
 
   constructor(
-   private swapOrderService: SwapOrderService
+   private readonly swapOrderRepository: SwapOrderRepository
   ) {}
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────────
@@ -148,14 +148,14 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
     }
     switch (event) {
       case 'order_created':
-        await this.swapOrderService.updateOrderStatus(orderHash, SwapOrderStatus.CREATED)
+        await this.swapOrderRepository.updateStatus(orderHash, SwapOrderStatus.CREATED)
         break;
       case 'order_filled':
         await this.finalizeOrder(sub, SwapOrderStatus.COMPLETED);
         break;
       case 'order_partially_filled':
         this.logger.log(`${chainId}:: order partially filled ${orderHash}`)
-        await this.swapOrderService.updateOrderStatus(orderHash, SwapOrderStatus.CREATED)
+        await this.swapOrderRepository.updateStatus(orderHash, SwapOrderStatus.CREATED)
         break;
       case 'order_cancelled':
         await this.finalizeOrder(sub,  SwapOrderStatus.CANCELLED);
@@ -176,7 +176,7 @@ x
     const { orderHash, chainId } = sub;
 
     try {
-      await this.swapOrderService.updateOrderStatus(orderHash, status)
+      await this.swapOrderRepository.updateStatus(orderHash, status)
       this.logger.log(`[chain:${chainId}] Order ${orderHash} saved as ${status}`);
       this.unsubscribeOrder(orderHash, chainId);
     } catch (err) {

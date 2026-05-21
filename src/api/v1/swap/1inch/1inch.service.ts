@@ -189,23 +189,6 @@ export class InchService {
         config,
       );
 
-      const orderHash = response.data.orderHash;
-      await this.swapOrderService.store(device, {
-        quoteId,
-        txHash: orderHash,
-        provider: swapProvider.ONEINCH_FUSION,
-        walletAddress: order.maker,
-        fromChain: chain,
-        toChain: chain,
-        fromToken: order.makerAsset,
-        toToken: order.takerAsset,
-        amountIn: order.makingAmount,
-        amountOut: order.takingAmount,
-        status: OrderStatus.PENDING,
-      });
-      
-      this.inchWsPollerService.subscribeOrder(orderHash, ChainId[chain] as any, quoteId);
-
       return response.data; // { orderHash: '0x...' }
     } catch (error: any) {
       this.logger.error(error);
