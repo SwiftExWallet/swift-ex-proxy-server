@@ -8,13 +8,10 @@ import { FusionOrderDto } from '../dto/fusionOrder';
 import { SubmitOrderDto } from '../dto/submitOrder';
 import { FusionPlusSwapQuoteDto } from '../dto/fusionPlusSwapQuote';
 import { FusionPlusOrderDto } from '../dto/fusionPlusOrder';
-import { ethers } from 'ethers';
 import { HashLock, } from '@1inch/cross-chain-sdk';
 import { InchOrderStatusDto } from '../dto/1inchsOrderStatus';
-import { encryptFusionSecrets } from '../../common/utils/encryption.util';
 import { RedisService } from '../../redis/redis.service';
 import { InchWsPollerService } from '../../crons/inchWsPoller.service';
-import crypto from "crypto";
 import { CancelFusionOrderDto } from '../dto/cancelFusionOrder';
 import { InchFusionPlusWsPollerService } from '../../crons/inchFusionPlusWsPoller.service';
 
@@ -169,7 +166,7 @@ export class InchService {
 
   async submitFusionOrder(device: any, submitOrderDto: SubmitOrderDto) {
     try {
-      const { order, signature, extension, quoteId, chain } = submitOrderDto;
+      const { order, signature, extension, quoteId, chain, orderHash } = submitOrderDto;
       const config: AxiosRequestConfig = {
         headers: {
           Authorization: `Bearer ${process.env.INCH_API_KEY}`,
@@ -185,13 +182,12 @@ export class InchService {
         quoteId,
         extension,
       };
-      const response = await axios.post(
+      await axios.post(
         `${process.env.INCH_RELAYER_BASE}/${ChainId[chain]}/order/submit`,
         body,
         config,
       );
 
-      const orderHash = response.data.orderHash;
       await this.swapOrderService.store(device, {
         quoteId,
         txHash: orderHash,
@@ -208,7 +204,7 @@ export class InchService {
 
       this.inchWsPollerService.subscribeOrder(orderHash, ChainId[chain] as any, quoteId);
 
-      return response.data; // { orderHash: '0x...' }
+      return { success: true }
     } catch (error: any) {
       this.logger.error(error);
       const message =
@@ -221,7 +217,7 @@ export class InchService {
 
   async submitFusionPlusOrder(device: any, submitOrderDto: SubmitOrderDto) {
     try {
-      const { order, signature, extension, quoteId, chain, toChain } = submitOrderDto;
+      const { order, signature, extension, quoteId, chain, toChain, orderHash } = submitOrderDto;
       const config: AxiosRequestConfig = {
         headers: {
           Authorization: `Bearer ${process.env.INCH_API_KEY}`,
@@ -237,15 +233,7 @@ export class InchService {
         quoteId,
         extension,
       };
-      const response = await axios.post(
-        `${process.env.FUSION_PLUS_RELAYER_BASE}/submit`,
-        body,
-        config,
-      );
 
-      const orderHash = response.data.orderHash;
-
-      let encryptedFusionSecrets: string | undefined;
       await this.swapOrderService.store(device, {
         quoteId,
         txHash: orderHash,
@@ -258,37 +246,15 @@ export class InchService {
         amountIn: order.makingAmount,
         amountOut: order.takingAmount,
         status: OrderStatus.PENDING,
-        encryptedFusionSecrets,
       });
-      const rawSecretsStr = await this.redisService.getKey(`fusion_secrets:${quoteId}`);
-      if (rawSecretsStr) {
-        try {
-          const rawSecrets = JSON.parse(rawSecretsStr);
-          encryptedFusionSecrets = encryptFusionSecrets(rawSecrets);
-          await this.redisService.delKey(`fusion_secrets:${quoteId}`);
-        } catch (err) {
-          this.logger.error('Failed to encrypt fusion secrets', err);
-        }
-      }
+      await axios.post(
+        `${process.env.FUSION_PLUS_RELAYER_BASE}/submit`,
+        body,
+        config,
+      );
+      this.inchFusionPlusWsPollerService.subscribeOrder(orderHash, quoteId);
 
-      const savedOrder = await this.swapOrderService.store(device, {
-        quoteId,
-        txHash: orderHash,
-        provider: swapProvider.ONEINCH_FUSION_PLUS,
-        walletAddress: order.maker,
-        fromChain: chain,
-        toChain: toChain || chain,
-        fromToken: order.makerAsset,
-        toToken: order.takerAsset,
-        amountIn: order.makingAmount,
-        amountOut: order.takingAmount,
-        status: OrderStatus.PENDING,
-        encryptedFusionSecrets,
-      });
-
-      // this.inchWsPollerService.addOrderToTracking(savedOrder);
-
-      return response.data; // { orderHash: '0x...' }
+      return { success: true }
     } catch (error: any) {
       this.logger.error(error);
       const message =

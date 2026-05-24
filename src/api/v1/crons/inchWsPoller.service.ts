@@ -4,8 +4,8 @@ import {
   NetworkEnum,
   WebSocketApi,
 } from '@1inch/fusion-sdk';
-import { SwapOrderService } from '../swapOrders/swapOrders.service';
 import { SwapOrderStatus } from '../common/enums/order.enum';
+import { SwapOrderService } from '../swapOrders/swapOrders.service';
 
 
 export const FUSION_CHAINS: { chainId: NetworkEnum; name: string }[] = [
@@ -91,16 +91,16 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
     if (!ws) throw new Error(`No WS client for chainId ${chainId}`);
     this.activeSubscriptions.set(orderHash, { chainId, orderHash, quoteId });
 
-    //subscrive to particular order
-    ws.send(
-      JSON.stringify({
-        action: 'subscribe',
-        topic: 'order',
-        filter: {
-          orderHash
-        }
-      })
-    );
+    // //subscrive to particular order
+    // ws.send(
+    //   JSON.stringify({
+    //     action: 'subscribe',
+    //     topic: 'order',
+    //     filter: {
+    //       orderHash
+    //     }
+    //   })
+    // );
     this.logger.log(`[chain:${chainId}] Watching order ${orderHash}`);
   }
   //   async watchOrder(params: {

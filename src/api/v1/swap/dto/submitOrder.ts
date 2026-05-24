@@ -37,6 +37,11 @@ export class OrderDto {
   makerTraits: string;
 }
 export class SubmitOrderDto {
+
+  @IsNotEmpty()
+  @IsString()
+  orderHash: string
+
   @IsNotEmpty()
   @IsEnum(SwapNetwork)
   chain: SwapNetwork;
