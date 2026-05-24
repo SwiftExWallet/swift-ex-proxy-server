@@ -27,4 +27,4 @@ import { InchFusionPlusWsPollerService } from '../crons/inchFusionPlusWsPoller.s
   controllers: [SwapOrdersController],
   exports: [SwapOrderService, InchWsPollerService],
 })
-export class SwapOrdersModule {}
+export class SwapOrdersModule { }

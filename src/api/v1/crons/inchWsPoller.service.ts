@@ -9,9 +9,9 @@ import { SwapOrderStatus } from '../common/enums/order.enum';
 
 
 export const FUSION_CHAINS: { chainId: NetworkEnum; name: string }[] = [
-  { chainId: NetworkEnum.ETHEREUM,  name: 'ethereum'  },
-  { chainId: NetworkEnum.POLYGON,   name: 'polygon'   },
-  { chainId: NetworkEnum.ARBITRUM,  name: 'arbitrum'  },
+  { chainId: NetworkEnum.ETHEREUM, name: 'ethereum' },
+  { chainId: NetworkEnum.POLYGON, name: 'polygon' },
+  { chainId: NetworkEnum.ARBITRUM, name: 'arbitrum' },
   // { chainId: NetworkEnum.OPTIMISM,  name: 'optimism'  },
   // { chainId: NetworkEnum.BINANCE,   name: 'bnb'       },
   // { chainId: NetworkEnum.AVALANCHE, name: 'avalanche' },
@@ -34,8 +34,8 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
   private activeSubscriptions = new Map<string, OrderSubscription>();
 
   constructor(
-   private swapOrderService: SwapOrderService
-  ) {}
+    private swapOrderService: SwapOrderService
+  ) { }
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────────
 
@@ -57,11 +57,11 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
 
   private initChainClient(chainId: NetworkEnum, name: string) {
     const ws = new WebSocketApi({
-      url: 'wss://api.1inch.dev/fusion/ws',
+      url: process.env.FUSION_WS_URL!,
       network: chainId,
       authKey: process.env.INCH_API_KEY!,
     });
-    
+
     ws.onOpen(() => {
       this.logger.log(`[${name}] WS connected`);
     });
@@ -94,36 +94,36 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
     //subscrive to particular order
     ws.send(
       JSON.stringify({
-         action: 'subscribe',
-         topic: 'order',
-         filter: {
-            orderHash
-         }
+        action: 'subscribe',
+        topic: 'order',
+        filter: {
+          orderHash
+        }
       })
-   );
+    );
     this.logger.log(`[chain:${chainId}] Watching order ${orderHash}`);
   }
-//   async watchOrder(params: {
-//   orderHash: string;
-//   quoteId: string;
-//   chainId: NetworkEnum;
-// }) {
-//   const { orderHash, quoteId, chainId } = params;
+  //   async watchOrder(params: {
+  //   orderHash: string;
+  //   quoteId: string;
+  //   chainId: NetworkEnum;
+  // }) {
+  //   const { orderHash, quoteId, chainId } = params;
 
-//   if (this.activeSubscriptions.has(orderHash)) return;
+  //   if (this.activeSubscriptions.has(orderHash)) return;
 
-//   const ws = this.wsClients.get(chainId);
-//   if (!ws) throw new Error(`No WS client for chainId ${chainId}`);
+  //   const ws = this.wsClients.get(chainId);
+  //   if (!ws) throw new Error(`No WS client for chainId ${chainId}`);
 
-//   this.activeSubscriptions.set(orderHash, { chainId, orderHash, quoteId });
+  //   this.activeSubscriptions.set(orderHash, { chainId, orderHash, quoteId });
 
-//   // Subscribe to specific order hash
-//   ws.order(orderHash, async (data) => {
-//     await this.handleOrderEvent(chainId, data);
-//   });
+  //   // Subscribe to specific order hash
+  //   ws.order(orderHash, async (data) => {
+  //     await this.handleOrderEvent(chainId, data);
+  //   });
 
-//   this.logger.log(`[chain:${chainId}] Watching order ${orderHash}`);
-//   }
+  //   this.logger.log(`[chain:${chainId}] Watching order ${orderHash}`);
+  //   }
 
   // ─── Unsubscribe ─────────────────────────────────────────────────────────────
 
@@ -157,7 +157,7 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
         await this.swapOrderService.updateOrderStatus(orderHash, SwapOrderStatus.CREATED)
         break;
       case 'order_cancelled':
-        await this.finalizeOrder(sub,  SwapOrderStatus.CANCELLED);
+        await this.finalizeOrder(sub, SwapOrderStatus.CANCELLED);
         break;
       case 'order_invalid':
         await this.finalizeOrder(sub, SwapOrderStatus.INVALID);
@@ -167,7 +167,7 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ─── Finalize: update DB + unsubscribe ───────────────────────────────────────
-x
+  x
   private async finalizeOrder(
     sub: OrderSubscription,
     status: SwapOrderStatus,

@@ -5,10 +5,13 @@ import {
 } from '@1inch/cross-chain-sdk';
 import { SwapOrderService } from '../swapOrders/swapOrders.service';
 import { SwapOrderStatus } from '../common/enums/order.enum';
+import { ethers } from 'ethers';
+import * as crypto from 'crypto';
+import axios from 'axios';
 
 
 interface OrderSubscription {
-   orderHash: string;
+  orderHash: string;
   quoteId: string;
 }
 
@@ -17,18 +20,18 @@ export class InchFusionPlusWsPollerService implements OnModuleInit, OnModuleDest
   private readonly logger = new Logger(InchFusionPlusWsPollerService.name);
 
 
-private ws: WebSocketApi;
+  private ws: WebSocketApi;
   // Track which orders we're watching: orderHash -> meta
   private activeSubscriptions = new Map<string, OrderSubscription>();
 
   constructor(
-   private swapOrderService: SwapOrderService
-  ) {}
+    private swapOrderService: SwapOrderService
+  ) { }
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────────
 
   async onModuleInit() {
-    this.initChainClient()
+    // this.initChainClient()
   }
 
   async onModuleDestroy() {
@@ -40,10 +43,10 @@ private ws: WebSocketApi;
 
   private initChainClient() {
     this.ws = new WebSocketApi({
-      url: 'wss://api.1inch.dev/fusion-plus/ws/v1.2',
+      url: process.env.FUSION_PLUS_WS_URL!,
       authKey: process.env.INCH_API_KEY!,
     });
-    
+
     this.ws.onOpen(() => {
       this.logger.log(`[fusion plus] WS connected`);
     });
@@ -69,39 +72,18 @@ private ws: WebSocketApi;
   async subscribeOrder(orderHash: string, quoteId: string) {
     this.activeSubscriptions.set(orderHash, { orderHash, quoteId });
 
-    //subscrive to particular order
-    this.ws.send(
-      JSON.stringify({
-         action: 'subscribe',
-         topic: 'order',
-         filter: {
-            orderHash
-         }
-      })
-   );
+    // //subscrive to particular order
+    // this.ws.send(
+    //   JSON.stringify({
+    //     action: 'subscribe',
+    //     topic: 'order',
+    //     filter: {
+    //       orderHash
+    //     }
+    //   })
+    // );
     this.logger.log(` FUSION PLUS Watching order ${orderHash}`);
   }
-//   async watchOrder(params: {
-//   orderHash: string;
-//   quoteId: string;
-//   chainId: NetworkEnum;
-// }) {
-//   const { orderHash, quoteId, chainId } = params;
-
-//   if (this.activeSubscriptions.has(orderHash)) return;
-
-//   const ws = this.wsClients.get(chainId);
-//   if (!ws) throw new Error(`No WS client for chainId ${chainId}`);
-
-//   this.activeSubscriptions.set(orderHash, { chainId, orderHash, quoteId });
-
-//   // Subscribe to specific order hash
-//   ws.order(orderHash, async (data) => {
-//     await this.handleOrderEvent(chainId, data);
-//   });
-
-//   this.logger.log(`[chain:${chainId}] Watching order ${orderHash}`);
-//   }
 
   // ─── Unsubscribe ─────────────────────────────────────────────────────────────
 
@@ -130,12 +112,13 @@ private ws: WebSocketApi;
       case 'order_filled':
         await this.finalizeOrder(sub, SwapOrderStatus.COMPLETED);
         break;
-      case 'order_partially_filled':
-        this.logger.log(`fusion plus order partially filled ${orderHash}`)
-        await this.swapOrderService.updateOrderStatus(orderHash, SwapOrderStatus.CREATED)
+      case 'dst_escrow_created':
+        this.logger.log(`fusion plus order dst_escrow_created ${orderHash}`);
+        await this.swapOrderService.updateOrderStatus(orderHash, SwapOrderStatus.PARTIALLY_FILLED);
+        await this.revealSecret(sub, result.orderHash, result);
         break;
       case 'order_cancelled':
-        await this.finalizeOrder(sub,  SwapOrderStatus.CANCELLED);
+        await this.finalizeOrder(sub, SwapOrderStatus.CANCELLED);
         break;
       case 'order_invalid':
         await this.finalizeOrder(sub, SwapOrderStatus.INVALID);
@@ -164,10 +147,51 @@ private ws: WebSocketApi;
     }
   }
 
+  private async revealSecret(sub: OrderSubscription, orderHash: string, eventData: any, attempt = 1,
+    maxAttempts = 3,) {
+    try {
+      const swapOrder = await this.swapOrderService.findByTxHash(orderHash);
 
-  // ─── Debug / Monitoring ──────────────────────────────────────────────────────
+      if (!swapOrder) {
+        this.logger.log(`Order no found in db ${orderHash}`)
+        return
+      }
 
-  getActiveWatches() {
-    return Array.from(this.activeSubscriptions.values());
+      const secret = this.createSecretForQuoteId(sub.quoteId, eventData?.secretIndex ?? 0)
+      const url = `${process.env.FUSION_PLUS_RELAYER_BASE}/submit/secret`;
+      this.logger.log(`Submitting secret for order ${orderHash} to ${url}`);
+      await axios.post(
+        url,
+        {
+          orderHash,
+          secret,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.INCH_API_KEY}`,
+          },
+        }
+      );
+      this.logger.log(`Successfully revealed secret for order ${orderHash}`);
+    } catch (err: any) {
+      this.logger.error(`Failed in revealSecret for order ${orderHash}: ${err.response?.data?.description || err.response?.data || err.message}`);
+      await this.revealSecret(
+        sub,
+        orderHash,
+        eventData,
+        attempt + 1,
+        maxAttempts
+      );
+    }
   }
+
+  createSecretForQuoteId(quoteId: string, index: number): string {
+    const secret = crypto
+      .createHmac("sha256", process.env.MASTER_HASH_KEY as string)
+      .update(`${index}-${quoteId}`)
+      .digest();
+    return ethers.hexlify(secret);
+  }
+
+
 }

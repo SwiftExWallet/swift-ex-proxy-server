@@ -9,13 +9,14 @@ import { SubmitOrderDto } from '../dto/submitOrder';
 import { FusionPlusSwapQuoteDto } from '../dto/fusionPlusSwapQuote';
 import { FusionPlusOrderDto } from '../dto/fusionPlusOrder';
 import { ethers } from 'ethers';
-import { HashLock,  } from '@1inch/cross-chain-sdk';
+import { HashLock, } from '@1inch/cross-chain-sdk';
 import { InchOrderStatusDto } from '../dto/1inchsOrderStatus';
 import { encryptFusionSecrets } from '../../common/utils/encryption.util';
 import { RedisService } from '../../redis/redis.service';
 import { InchWsPollerService } from '../../crons/inchWsPoller.service';
 import crypto from "crypto";
 import { CancelFusionOrderDto } from '../dto/cancelFusionOrder';
+import { InchFusionPlusWsPollerService } from '../../crons/inchFusionPlusWsPoller.service';
 
 @Injectable()
 export class InchService {
@@ -24,7 +25,8 @@ export class InchService {
     private readonly swapOrderService: SwapOrderService,
     private readonly redisService: RedisService,
     private readonly inchWsPollerService: InchWsPollerService,
-  ) {}
+    private readonly inchFusionPlusWsPollerService: InchFusionPlusWsPollerService,
+  ) { }
   async getSwapQuote(swapQuote: SwapQuoteDto) {
     const { tokenIn, tokenOut, amount, walletAddress, chain } = swapQuote;
     const url = `${process.env.QUOTER_BASE}/${ChainId[chain]}/quote/receive`;
@@ -50,7 +52,7 @@ export class InchService {
       return response.data;
     } catch (error) {
       this.logger.error(error);
-       const message =
+      const message =
         error.response.data.description ||
         error.response.data ||
         'unable to get swap quote';
@@ -92,7 +94,7 @@ export class InchService {
       return response.data;
     } catch (error) {
       this.logger.error(error);
-       const message =
+      const message =
         error.response.data.description ||
         error.response.data ||
         'unable to get swap quote';
@@ -203,7 +205,7 @@ export class InchService {
         amountOut: order.takingAmount,
         status: OrderStatus.PENDING,
       });
-      
+
       this.inchWsPollerService.subscribeOrder(orderHash, ChainId[chain] as any, quoteId);
 
       return response.data; // { orderHash: '0x...' }
@@ -242,8 +244,22 @@ export class InchService {
       );
 
       const orderHash = response.data.orderHash;
-      
+
       let encryptedFusionSecrets: string | undefined;
+      await this.swapOrderService.store(device, {
+        quoteId,
+        txHash: orderHash,
+        provider: swapProvider.ONEINCH_FUSION_PLUS,
+        walletAddress: order.maker,
+        fromChain: chain,
+        toChain: toChain || chain,
+        fromToken: order.makerAsset,
+        toToken: order.takerAsset,
+        amountIn: order.makingAmount,
+        amountOut: order.takingAmount,
+        status: OrderStatus.PENDING,
+        encryptedFusionSecrets,
+      });
       const rawSecretsStr = await this.redisService.getKey(`fusion_secrets:${quoteId}`);
       if (rawSecretsStr) {
         try {
@@ -297,18 +313,19 @@ export class InchService {
         indexes: null,
       },
     };
-      const response = await axios.post(
+    const response = await axios.post(
       url,
-      { orderHash},
+      { orderHash },
       config,
     );
     return response.data;
   }
+
   generateSecrets(secretsCount: number, quoteId: string) {
 
     // Hash each secret
     const secretHashes = Array.from({ length: secretsCount }, (_, index) =>
-      HashLock.hashSecret(this.createSecretForQuoteId(quoteId, index))
+      HashLock.hashSecret(this.inchFusionPlusWsPollerService.createSecretForQuoteId(quoteId, index))
     );
 
     // Build hashlock from secrets
@@ -317,15 +334,7 @@ export class InchService {
     //     ? HashLock.forSingleFill(secrets[0]) // single fill
     //     : HashLock.forMultipleFills(secretHashes as MerkleLeaf[]); // multiple fills (Merkle tree)
 
-    return {  secretHashes };
-  }
-
-  createSecretForQuoteId(quoteId: string, index: number) {
-    const secret = crypto
-    .createHmac("sha256", process.env.MASTER_HASH_KEY as string)
-    .update(`${index}-${quoteId}`)
-    .digest();
-    return ethers.hexlify(secret);
+    return { secretHashes };
   }
 
   async orderStatus(inchOrderStatusDto: InchOrderStatusDto) {
