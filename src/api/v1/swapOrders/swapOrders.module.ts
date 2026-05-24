@@ -1,15 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SwapOrders, SwapOrderSchema } from './schema/swapOrder.schema';
 import { SwapOrderService } from './swapOrders.service';
 import { SwapOrderRepository } from './swapOrder.repository';
 import { SwapOrdersController } from './swapOrders.controller';
-import { RangoPollerService } from '../crons/rangoPoller.service';
-import { AllbridgePollerService } from '../crons/allbridgePoller.service';
-import { InchWsPollerService } from '../crons/inchWsPoller.service';
-import { RangoService } from '../swap/rango/rango.service';
-import { FirebaseNotificationService } from '../notification/firebase/notification.service';
-import { InchFusionPlusWsPollerService } from '../crons/inchFusionPlusWsPoller.service';
+import { InchModule } from '../swap/1inch/1inch.module';
 
 @Module({
   imports: [
@@ -18,13 +13,11 @@ import { InchFusionPlusWsPollerService } from '../crons/inchFusionPlusWsPoller.s
   providers: [
     SwapOrderService,
     SwapOrderRepository,
-    RangoPollerService,
-    AllbridgePollerService,
-    InchWsPollerService,
-    InchFusionPlusWsPollerService,
-    RangoService,
-    FirebaseNotificationService],
+  ],
   controllers: [SwapOrdersController],
-  exports: [SwapOrderService, InchWsPollerService],
+  exports: [
+    SwapOrderService,
+    SwapOrderRepository,
+  ],
 })
 export class SwapOrdersModule { }

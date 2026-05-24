@@ -23,6 +23,7 @@ import { RateLimitGuard } from './api/v1/common/guard/rate-limit.guard';
 import { QuoterModule } from './api/v1/uniswap/quoter/quoter.module';
 import { SwapOrdersModule } from './api/v1/swapOrders/swapOrders.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { CronsModule } from './api/v1/crons/crons.module';
 
 @Module({
   imports: [
@@ -53,7 +54,8 @@ import { ScheduleModule } from '@nestjs/schedule';
     RedisModule,
     SwapModule,
     QuoterModule,
-    SwapOrdersModule
+    SwapOrdersModule,
+    CronsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: RateLimitGuard }],

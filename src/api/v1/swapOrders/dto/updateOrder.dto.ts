@@ -6,6 +6,13 @@ import { ValidWalletType } from '../../common/enums/all-bridge.enum';
 
 export class StoreSwapOrderDto {
 
+  @IsOptional()
+  @IsString()
+  deviceId: string
+
+  @IsOptional()
+  deviceFcmToken: string
+
   @IsString()
   @IsNotEmpty()
   quoteId: string;
@@ -18,7 +25,7 @@ export class StoreSwapOrderDto {
     message: `requestId is required for this provider`,
   })
   requestId?: string;
-  
+
   @IsString()
   @IsNotEmpty()
   txHash: string;
@@ -77,19 +84,19 @@ export class UpdateSwapOrderStatusDto {
   confirmedAt?: Date | null;
 }
 
-export class MultiChainWalletAddressDto{
+export class MultiChainWalletAddressDto {
   @Matches(
-      /^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$|^[A-Z0-9]{1,12}-G[A-Z0-9]{55}$/,
-      { message: 'Invalid wallet address format' }
-    )
-    address: string;
+    /^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$|^[A-Z0-9]{1,12}-G[A-Z0-9]{55}$/,
+    { message: 'Invalid wallet address format' }
+  )
+  address: string;
 }
 
-export class BridgeTxStatusDto{
+export class BridgeTxStatusDto {
   @IsString()
   @IsNotEmpty()
   txHash: string;
-  
+
   @IsString()
   @IsNotEmpty()
   @IsEnum(ValidWalletType)

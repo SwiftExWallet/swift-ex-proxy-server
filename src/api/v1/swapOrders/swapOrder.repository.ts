@@ -110,11 +110,11 @@ export class SwapOrderRepository {
     }
   }
 
-  async findByWalletWithPagination(walletAddress: string,pagination: PaginationDto,): Promise<DbResult<PaginatedResult<SwapOrders>>> {
+  async findByWalletWithPagination(walletAddress: string, pagination: PaginationDto,): Promise<DbResult<PaginatedResult<SwapOrders>>> {
     try {
-      const page  = pagination.page  ?? 1;
+      const page = pagination.page ?? 1;
       const limit = pagination.limit ?? PAGE_SIZE;
-      const skip  = (page - 1) * limit;
+      const skip = (page - 1) * limit;
 
       const [total, data] = await Promise.all([
         this.model.countDocuments({ walletAddress }),

@@ -39,31 +39,31 @@ export class SwapService {
 
   constructor(
     private readonly providerService: ProviderService,
-  ) {}
+  ) { }
 
   private async estimateNetworkFee(
     chain: SupportedChain,
     isNativeOut: boolean,
     quoterGasEstimate = 0n,
-): Promise<{ networkFee: string; networkFeeWei: bigint }> {
+  ): Promise<{ networkFee: string; networkFeeWei: bigint }> {
     try {
-        const feeData = await this.getProvider(chain).getFeeData();
-        const gasPrice = feeData.maxFeePerGas ?? feeData.gasPrice ?? parseUnits('3', 'gwei');
+      const feeData = await this.getProvider(chain).getFeeData();
+      const gasPrice = feeData.maxFeePerGas ?? feeData.gasPrice ?? parseUnits('3', 'gwei');
 
-        const gasUnits = quoterGasEstimate > 0n
-            ? (quoterGasEstimate * 120n) / 100n  
-            : isNativeOut
-                ? 220000n
-                : 150000n;
+      const gasUnits = quoterGasEstimate > 0n
+        ? (quoterGasEstimate * 120n) / 100n
+        : isNativeOut
+          ? 220000n
+          : 150000n;
 
-        const networkFeeWei = gasUnits * gasPrice;
-        const networkFee = formatUnits(networkFeeWei, 18);
+      const networkFeeWei = gasUnits * gasPrice;
+      const networkFee = formatUnits(networkFeeWei, 18);
 
-        return { networkFee, networkFeeWei };
+      return { networkFee, networkFeeWei };
     } catch {
-        return { networkFee: '0', networkFeeWei: 0n };
+      return { networkFee: '0', networkFeeWei: 0n };
     }
-}
+  }
 
   private resolveSupportedChain(
     chainId: any,
@@ -164,112 +164,112 @@ export class SwapService {
   async getQuote(
     dto: SwapQuoteDto,
     slippageBps = 100,
-): Promise<SwapQuote> {
+  ): Promise<SwapQuote> {
     try {
-        const chain = this.resolveSupportedChain(dto.tokenIn.chainId);
-        const config = this.cfg(chain);
-        const wrapped = this.wrapped(chain);
+      const chain = this.resolveSupportedChain(dto.tokenIn.chainId);
+      const config = this.cfg(chain);
+      const wrapped = this.wrapped(chain);
 
-        const isNativeIn = this.isNative(dto.tokenIn.address);
-        const isNativeOut = this.isNative(dto.tokenOut.address);
+      const isNativeIn = this.isNative(dto.tokenIn.address);
+      const isNativeOut = this.isNative(dto.tokenOut.address);
 
-        const tokenInAddress = isNativeIn ? wrapped : dto.tokenIn.address;
-        const tokenOutAddress = isNativeOut ? wrapped : dto.tokenOut.address;
+      const tokenInAddress = isNativeIn ? wrapped : dto.tokenIn.address;
+      const tokenOutAddress = isNativeOut ? wrapped : dto.tokenOut.address;
 
-        if (
-            tokenInAddress.toLowerCase() === wrapped.toLowerCase() &&
-            isNativeOut
-        ) {
-            const { networkFee } = await this.estimateNetworkFee(chain, false);
-
-            return {
-                inputAmount: dto.amount,
-                inputToken: dto.tokenIn.symbol,
-                outputAmount: dto.amount,
-                outputToken: config.nativeSymbol,
-                pricePerToken: '1',
-                fee: '0',
-                isMultiHop: false,
-                isWethUnwrap: true,
-                minimumReceived: dto.amount,
-                networkFee:Number(networkFee),
-            };
-        }
-
-        const tokenIn = new Token(
-            config.chainId,
-            tokenInAddress,
-            Number(dto.tokenIn.decimals),
-            dto.tokenIn.symbol,
-        );
-
-        const tokenOut = new Token(
-            config.chainId,
-            tokenOutAddress,
-            Number(dto.tokenOut.decimals),
-            dto.tokenOut.symbol,
-        );
-
-        const amountInWei = parseUnits(dto.amount, tokenIn.decimals);
-
-        const quoter = new Contract(
-            config.uniswapV3QuoterV2,
-            QUOTER_V2_ABI,
-            this.getProvider(chain),
-        );
-
-        const feeTiers = [500,3000,10000];
-
-        let selectedFee = 0;
-        let amountOut = 0n;
-        let gasEstimateFromQuoter = 0n;
-
-        for (const fee of feeTiers) {
-            try {
-                const result = await quoter.quoteExactInputSingle.staticCall({
-                    tokenIn: tokenIn.address,
-                    tokenOut: tokenOut.address,
-                    amountIn: amountInWei,
-                    fee,
-                    sqrtPriceLimitX96: 0n,
-                });
-
-                amountOut = result[0];
-                gasEstimateFromQuoter = result[3];
-                selectedFee = fee;
-                break;
-            } catch {}
-        }
-
-        if (amountOut === 0n) {
-            throw new Error('No route found');
-        }
-
-        const out = formatUnits(amountOut, tokenOut.decimals);
-        const minAmountOutWei = (amountOut * BigInt(10000 - slippageBps)) / 10000n;
-        const minimumReceived = formatUnits(minAmountOutWei, tokenOut.decimals);
-
-        const { networkFee, networkFeeWei } = await this.estimateNetworkFee(
-            chain,
-            isNativeOut,
-            gasEstimateFromQuoter,
-        );
+      if (
+        tokenInAddress.toLowerCase() === wrapped.toLowerCase() &&
+        isNativeOut
+      ) {
+        const { networkFee } = await this.estimateNetworkFee(chain, false);
 
         return {
-            inputAmount: dto.amount,
-            inputToken: dto.tokenIn.symbol,
-            outputAmount: out,
-            outputToken: isNativeOut ? config.nativeSymbol : dto.tokenOut.symbol,
-            pricePerToken: (Number(out) / Number(dto.amount)).toString(),
-            fee: selectedFee.toString(),
-            isMultiHop: false,
-            minimumReceived,
-            networkFee:Number(networkFee),
+          inputAmount: dto.amount,
+          inputToken: dto.tokenIn.symbol,
+          outputAmount: dto.amount,
+          outputToken: config.nativeSymbol,
+          pricePerToken: '1',
+          fee: '0',
+          isMultiHop: false,
+          isWethUnwrap: true,
+          minimumReceived: dto.amount,
+          networkFee: Number(networkFee),
         };
+      }
+
+      const tokenIn = new Token(
+        config.chainId,
+        tokenInAddress,
+        Number(dto.tokenIn.decimals),
+        dto.tokenIn.symbol,
+      );
+
+      const tokenOut = new Token(
+        config.chainId,
+        tokenOutAddress,
+        Number(dto.tokenOut.decimals),
+        dto.tokenOut.symbol,
+      );
+
+      const amountInWei = parseUnits(dto.amount, tokenIn.decimals);
+
+      const quoter = new Contract(
+        config.uniswapV3QuoterV2,
+        QUOTER_V2_ABI,
+        this.getProvider(chain),
+      );
+
+      const feeTiers = [500, 3000, 10000];
+
+      let selectedFee = 0;
+      let amountOut = 0n;
+      let gasEstimateFromQuoter = 0n;
+
+      for (const fee of feeTiers) {
+        try {
+          const result = await quoter.quoteExactInputSingle.staticCall({
+            tokenIn: tokenIn.address,
+            tokenOut: tokenOut.address,
+            amountIn: amountInWei,
+            fee,
+            sqrtPriceLimitX96: 0n,
+          });
+
+          amountOut = result[0];
+          gasEstimateFromQuoter = result[3];
+          selectedFee = fee;
+          break;
+        } catch { }
+      }
+
+      if (amountOut === 0n) {
+        throw new Error('No route found');
+      }
+
+      const out = formatUnits(amountOut, tokenOut.decimals);
+      const minAmountOutWei = (amountOut * BigInt(10000 - slippageBps)) / 10000n;
+      const minimumReceived = formatUnits(minAmountOutWei, tokenOut.decimals);
+
+      const { networkFee, networkFeeWei } = await this.estimateNetworkFee(
+        chain,
+        isNativeOut,
+        gasEstimateFromQuoter,
+      );
+
+      return {
+        inputAmount: dto.amount,
+        inputToken: dto.tokenIn.symbol,
+        outputAmount: out,
+        outputToken: isNativeOut ? config.nativeSymbol : dto.tokenOut.symbol,
+        pricePerToken: (Number(out) / Number(dto.amount)).toString(),
+        fee: selectedFee.toString(),
+        isMultiHop: false,
+        minimumReceived,
+        networkFee: Number(networkFee),
+      };
     } catch (e: any) {
-        throw new BadRequestException(e.message);
+      throw new BadRequestException(e.message);
     }
-}
+  }
 
 
   async buildSwapTx(
@@ -360,7 +360,7 @@ export class SwapService {
         (quoteOutWei *
           BigInt(
             10000 -
-              slippageBps,
+            slippageBps,
           )) /
         10000n;
 
@@ -420,21 +420,21 @@ export class SwapService {
           );
 
         const tx: TransactionRequest =
-          {
-            to: router,
-            from: wallet,
-            data,
-            value:
-              amountInWei,
-            nonce,
-            chainId:
-              config.chainId,
-            type: 2,
-            maxFeePerGas:
-              gas.maxFeePerGas,
-            maxPriorityFeePerGas:
-              gas.maxPriorityFeePerGas,
-          };
+        {
+          to: router,
+          from: wallet,
+          data,
+          value:
+            amountInWei,
+          nonce,
+          chainId:
+            config.chainId,
+          type: 2,
+          maxFeePerGas:
+            gas.maxFeePerGas,
+          maxPriorityFeePerGas:
+            gas.maxPriorityFeePerGas,
+        };
 
         tx.gasLimit =
           await this.estimateGasWithBuffer(
@@ -448,7 +448,7 @@ export class SwapService {
           this.toBigInt(
             tx.gasLimit,
           ) *
-            gas.maxFeePerGas;
+          gas.maxFeePerGas;
 
         if (
           nativeBalance <
@@ -518,20 +518,20 @@ export class SwapService {
           );
 
         const approveTx: TransactionRequest =
-          {
-            to: tokenIn.address,
-            from: wallet,
-            data: approveData,
-            nonce:
-              currentNonce,
-            chainId:
-              config.chainId,
-            type: 2,
-            maxFeePerGas:
-              gas.maxFeePerGas,
-            maxPriorityFeePerGas:
-              gas.maxPriorityFeePerGas,
-          };
+        {
+          to: tokenIn.address,
+          from: wallet,
+          data: approveData,
+          nonce:
+            currentNonce,
+          chainId:
+            config.chainId,
+          type: 2,
+          maxFeePerGas:
+            gas.maxFeePerGas,
+          maxPriorityFeePerGas:
+            gas.maxPriorityFeePerGas,
+        };
 
         approveTx.gasLimit =
           await this.estimateGasWithBuffer(
@@ -624,20 +624,20 @@ export class SwapService {
       }
 
       const swapTx: TransactionRequest =
-        {
-          to: router,
-          from: wallet,
-          data: swapData,
-          nonce:
-            currentNonce,
-          chainId:
-            config.chainId,
-          type: 2,
-          maxFeePerGas:
-            gas.maxFeePerGas,
-          maxPriorityFeePerGas:
-            gas.maxPriorityFeePerGas,
-        };
+      {
+        to: router,
+        from: wallet,
+        data: swapData,
+        nonce:
+          currentNonce,
+        chainId:
+          config.chainId,
+        type: 2,
+        maxFeePerGas:
+          gas.maxFeePerGas,
+        maxPriorityFeePerGas:
+          gas.maxPriorityFeePerGas,
+      };
 
       swapTx.gasLimit =
         await this.estimateGasWithBuffer(
@@ -655,7 +655,7 @@ export class SwapService {
             a +
             this.toBigInt(
               b.gasLimit ??
-                0,
+              0,
             ),
           0n,
         ) +
@@ -692,7 +692,7 @@ export class SwapService {
 
       throw new BadRequestException(
         e.message ||
-          'Failed build tx',
+        'Failed build tx',
       );
     }
   }

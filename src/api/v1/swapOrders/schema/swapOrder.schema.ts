@@ -24,7 +24,7 @@ export class SwapOrders {
     },
   })
   requestId?: string;
-  
+
   @Prop({
     required: true,
     unique: true,

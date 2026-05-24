@@ -10,17 +10,15 @@ import { FusionPlusSwapQuoteDto } from '../dto/fusionPlusSwapQuote';
 import { FusionPlusOrderDto } from '../dto/fusionPlusOrder';
 import { HashLock, } from '@1inch/cross-chain-sdk';
 import { InchOrderStatusDto } from '../dto/1inchsOrderStatus';
-import { RedisService } from '../../redis/redis.service';
-import { InchWsPollerService } from '../../crons/inchWsPoller.service';
+import { InchWsPollerService } from './inchWsPoller.service';
 import { CancelFusionOrderDto } from '../dto/cancelFusionOrder';
-import { InchFusionPlusWsPollerService } from '../../crons/inchFusionPlusWsPoller.service';
+import { InchFusionPlusWsPollerService } from './inchFusionPlusWsPoller.service';
 
 @Injectable()
 export class InchService {
   private readonly logger = new Logger(InchService.name);
   constructor(
     private readonly swapOrderService: SwapOrderService,
-    private readonly redisService: RedisService,
     private readonly inchWsPollerService: InchWsPollerService,
     private readonly inchFusionPlusWsPollerService: InchFusionPlusWsPollerService,
   ) { }
@@ -200,6 +198,8 @@ export class InchService {
         amountIn: order.makingAmount,
         amountOut: order.takingAmount,
         status: OrderStatus.PENDING,
+        deviceFcmToken: device.fcmToken,
+        deviceId: device._id
       });
 
       this.inchWsPollerService.subscribeOrder(orderHash, ChainId[chain] as any, quoteId);
@@ -246,6 +246,8 @@ export class InchService {
         amountIn: order.makingAmount,
         amountOut: order.takingAmount,
         status: OrderStatus.PENDING,
+        deviceFcmToken: device.fcmToken,
+        deviceId: device._id
       });
       await axios.post(
         `${process.env.FUSION_PLUS_RELAYER_BASE}/submit`,

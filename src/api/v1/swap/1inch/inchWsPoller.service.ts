@@ -4,9 +4,8 @@ import {
   NetworkEnum,
   WebSocketApi,
 } from '@1inch/fusion-sdk';
-import { SwapOrderStatus } from '../common/enums/order.enum';
-import { SwapOrderService } from '../swapOrders/swapOrders.service';
-
+import { SwapOrderStatus } from '../../common/enums/order.enum';
+import { SwapOrderService } from '../../swapOrders/swapOrders.service';
 
 export const FUSION_CHAINS: { chainId: NetworkEnum; name: string }[] = [
   { chainId: NetworkEnum.ETHEREUM, name: 'ethereum' },
@@ -103,27 +102,6 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
     // );
     this.logger.log(`[chain:${chainId}] Watching order ${orderHash}`);
   }
-  //   async watchOrder(params: {
-  //   orderHash: string;
-  //   quoteId: string;
-  //   chainId: NetworkEnum;
-  // }) {
-  //   const { orderHash, quoteId, chainId } = params;
-
-  //   if (this.activeSubscriptions.has(orderHash)) return;
-
-  //   const ws = this.wsClients.get(chainId);
-  //   if (!ws) throw new Error(`No WS client for chainId ${chainId}`);
-
-  //   this.activeSubscriptions.set(orderHash, { chainId, orderHash, quoteId });
-
-  //   // Subscribe to specific order hash
-  //   ws.order(orderHash, async (data) => {
-  //     await this.handleOrderEvent(chainId, data);
-  //   });
-
-  //   this.logger.log(`[chain:${chainId}] Watching order ${orderHash}`);
-  //   }
 
   // ─── Unsubscribe ─────────────────────────────────────────────────────────────
 
@@ -167,7 +145,7 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ─── Finalize: update DB + unsubscribe ───────────────────────────────────────
-  x
+
   private async finalizeOrder(
     sub: OrderSubscription,
     status: SwapOrderStatus,
@@ -185,7 +163,6 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
       this.unsubscribeOrder(orderHash, chainId);
     }
   }
-
 
   // ─── Debug / Monitoring ──────────────────────────────────────────────────────
 
