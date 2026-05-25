@@ -8,6 +8,7 @@ import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { ethers } from 'ethers';
 import * as crypto from 'crypto';
 import axios from 'axios';
+import { RedisService } from '../../redis/redis.service';
 
 interface OrderSubscription {
   orderHash: string;
@@ -19,11 +20,10 @@ export class InchFusionPlusWsPollerService implements OnModuleInit, OnModuleDest
   private readonly logger = new Logger(InchFusionPlusWsPollerService.name);
 
   private ws: WebSocketApi;
-  // Track which orders we're watching: orderHash -> meta
-  private activeSubscriptions = new Map<string, OrderSubscription>();
 
   constructor(
-    private swapOrderService: SwapOrderService
+    private swapOrderService: SwapOrderService,
+    private redisService: RedisService,
   ) { }
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────────
@@ -34,7 +34,6 @@ export class InchFusionPlusWsPollerService implements OnModuleInit, OnModuleDest
 
   async onModuleDestroy() {
     this.ws.close();
-    this.activeSubscriptions.clear();
   }
 
   // ─── Init one WS client per chain ────────────────────────────────────────────
@@ -68,27 +67,16 @@ export class InchFusionPlusWsPollerService implements OnModuleInit, OnModuleDest
   // ─── Subscribe to a specific order ───────────────────────────────────────────
 
   async subscribeOrder(orderHash: string, quoteId: string) {
-    this.activeSubscriptions.set(orderHash, { orderHash, quoteId });
+    const sub: OrderSubscription = { orderHash, quoteId };
+    await this.redisService.setKey(`active_subscription:fusion_plus:${orderHash}`, JSON.stringify(sub));
 
-    // //subscrive to particular order
-    // this.ws.send(
-    //   JSON.stringify({
-    //     action: 'subscribe',
-    //     topic: 'order',
-    //     filter: {
-    //       orderHash
-    //     }
-    //   })
-    // );
     this.logger.log(` FUSION PLUS Watching order ${orderHash}`);
   }
 
   // ─── Unsubscribe ─────────────────────────────────────────────────────────────
 
-  private unsubscribeOrder(orderHash: string) {
-    // WebSocketApi doesn't have per-hash unsubscribe; 
-    // removing from activeSubscriptions gates the handler
-    this.activeSubscriptions.delete(orderHash);
+  private async unsubscribeOrder(orderHash: string) {
+    await this.redisService.delKey(`active_subscription:fusion_plus:${orderHash}`);
     this.logger.log(` FUSION PLUS Unsubscribed from order ${orderHash}`);
   }
 
@@ -98,14 +86,16 @@ export class InchFusionPlusWsPollerService implements OnModuleInit, OnModuleDest
     const { orderHash, result, event } = orderEvent;
 
     // Only process orders we're tracking
-    const sub = this.activeSubscriptions.get(result.orderHash);
-    if (!sub) {
-      this.logger.log(` fusion plus order not found ${orderHash}`)
+    const subData = await this.redisService.getKey(`active_subscription:fusion_plus:${result.orderHash}`);
+    if (!subData) {
+      this.logger.log(` fusion plus order not found ${orderHash}`);
       return;
     }
+
+    const sub = JSON.parse(subData) as OrderSubscription;
     switch (event) {
       case 'order_created':
-        await this.swapOrderService.updateOrderStatus(orderHash, SwapOrderStatus.CREATED)
+        await this.swapOrderService.updateOrderStatus(orderHash, SwapOrderStatus.CREATED);
         break;
       case 'order_filled':
         await this.finalizeOrder(sub, SwapOrderStatus.COMPLETED);
@@ -134,14 +124,14 @@ export class InchFusionPlusWsPollerService implements OnModuleInit, OnModuleDest
     const { orderHash } = sub;
 
     try {
-      await this.swapOrderService.updateOrderStatus(orderHash, status)
+      await this.swapOrderService.updateOrderStatus(orderHash, status);
       this.logger.log(` fusion plus Order ${orderHash} saved as ${status}`);
-      this.unsubscribeOrder(orderHash);
-    } catch (err) {
+      await this.unsubscribeOrder(orderHash);
+    } catch (err: any) {
       this.logger.error(`Failed to update order ${orderHash}: ${err.message}`);
     } finally {
       // Always unsubscribe + clean up regardless of DB result
-      this.unsubscribeOrder(orderHash);
+      await this.unsubscribeOrder(orderHash);
     }
   }
 

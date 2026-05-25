@@ -6,6 +6,7 @@ import {
 } from '@1inch/fusion-sdk';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { SwapOrderService } from '../../swapOrders/swapOrders.service';
+import { RedisService } from '../../redis/redis.service';
 
 export const FUSION_CHAINS: { chainId: NetworkEnum; name: string }[] = [
   { chainId: NetworkEnum.ETHEREUM, name: 'ethereum' },
@@ -29,11 +30,9 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
   // One persistent WS client per chain
   private wsClients = new Map<NetworkEnum, WebSocketApi>();
 
-  // Track which orders we're watching: orderHash -> meta
-  private activeSubscriptions = new Map<string, OrderSubscription>();
-
   constructor(
-    private swapOrderService: SwapOrderService
+    private swapOrderService: SwapOrderService,
+    private redisService: RedisService,
   ) { }
 
   // ─── Lifecycle ───────────────────────────────────────────────────────────────
@@ -49,7 +48,6 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
       client.close();
     }
     this.wsClients.clear();
-    this.activeSubscriptions.clear();
   }
 
   // ─── Init one WS client per chain ────────────────────────────────────────────
@@ -88,27 +86,17 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
   async subscribeOrder(orderHash: string, chainId: NetworkEnum, quoteId: string) {
     const ws = this.wsClients.get(chainId);
     if (!ws) throw new Error(`No WS client for chainId ${chainId}`);
-    this.activeSubscriptions.set(orderHash, { chainId, orderHash, quoteId });
 
-    // //subscrive to particular order
-    // ws.send(
-    //   JSON.stringify({
-    //     action: 'subscribe',
-    //     topic: 'order',
-    //     filter: {
-    //       orderHash
-    //     }
-    //   })
-    // );
+    const sub: OrderSubscription = { chainId, orderHash, quoteId };
+    await this.redisService.setKey(`active_subscription:fusion:${orderHash}`, JSON.stringify(sub));
+
     this.logger.log(`[chain:${chainId}] Watching order ${orderHash}`);
   }
 
   // ─── Unsubscribe ─────────────────────────────────────────────────────────────
 
-  private unsubscribeOrder(orderHash: string, chainId: NetworkEnum) {
-    // WebSocketApi doesn't have per-hash unsubscribe; 
-    // removing from activeSubscriptions gates the handler
-    this.activeSubscriptions.delete(orderHash);
+  private async unsubscribeOrder(orderHash: string, chainId: NetworkEnum) {
+    await this.redisService.delKey(`active_subscription:fusion:${orderHash}`);
     this.logger.log(`[chain:${chainId}] Unsubscribed from order ${orderHash}`);
   }
 
@@ -118,21 +106,28 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
     const { orderHash, result, event } = orderEvent;
 
     // Only process orders we're tracking
-    const sub = this.activeSubscriptions.get(result.orderHash);
-    if (!sub || sub.chainId !== chainId) {
-      this.logger.log(`${chainId}:: order not found ${orderHash}`)
+    const subData = await this.redisService.getKey(`active_subscription:fusion:${result.orderHash}`);
+    if (!subData) {
+      this.logger.log(`${chainId}:: order not found ${orderHash}`);
       return;
     }
+
+    const sub = JSON.parse(subData) as OrderSubscription;
+    if (sub.chainId !== chainId) {
+      this.logger.log(`${chainId}:: order found but chainId mismatch ${orderHash}`);
+      return;
+    }
+
     switch (event) {
       case 'order_created':
-        await this.swapOrderService.updateOrderStatus(orderHash, SwapOrderStatus.CREATED)
+        await this.swapOrderService.updateOrderStatus(orderHash, SwapOrderStatus.CREATED);
         break;
       case 'order_filled':
         await this.finalizeOrder(sub, SwapOrderStatus.COMPLETED);
         break;
       case 'order_partially_filled':
-        this.logger.log(`${chainId}:: order partially filled ${orderHash}`)
-        await this.swapOrderService.updateOrderStatus(orderHash, SwapOrderStatus.CREATED)
+        this.logger.log(`${chainId}:: order partially filled ${orderHash}`);
+        await this.swapOrderService.updateOrderStatus(orderHash, SwapOrderStatus.CREATED);
         break;
       case 'order_cancelled':
         await this.finalizeOrder(sub, SwapOrderStatus.CANCELLED);
@@ -153,20 +148,20 @@ export class InchWsPollerService implements OnModuleInit, OnModuleDestroy {
     const { orderHash, chainId } = sub;
 
     try {
-      await this.swapOrderService.updateOrderStatus(orderHash, status)
+      await this.swapOrderService.updateOrderStatus(orderHash, status);
       this.logger.log(`[chain:${chainId}] Order ${orderHash} saved as ${status}`);
-      this.unsubscribeOrder(orderHash, chainId);
-    } catch (err) {
+      await this.unsubscribeOrder(orderHash, chainId);
+    } catch (err: any) {
       this.logger.error(`Failed to update order ${orderHash}: ${err.message}`);
     } finally {
       // Always unsubscribe + clean up regardless of DB result
-      this.unsubscribeOrder(orderHash, chainId);
+      await this.unsubscribeOrder(orderHash, chainId);
     }
   }
 
   // ─── Debug / Monitoring ──────────────────────────────────────────────────────
 
-  getActiveWatches() {
-    return Array.from(this.activeSubscriptions.values());
+  async getActiveWatches() {
+    return [];
   }
 }
