@@ -8,6 +8,7 @@ import { RangoPollerService } from '../crons/rangoPoller.service';
 import { AllbridgePollerService } from '../crons/allbridgePoller.service';
 import { RangoService } from '../swap/rango/rango.service';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';
+import { EvmTxPollerService } from '../crons/evmTxPoller.service';
 
 @Module({
   imports: [
@@ -19,7 +20,9 @@ import { FirebaseNotificationService } from '../notification/firebase/notificati
     RangoPollerService,
     AllbridgePollerService,
     RangoService,
-    FirebaseNotificationService],
+    FirebaseNotificationService,
+    EvmTxPollerService
+  ],
   controllers: [SwapOrdersController],
 })
 export class SwapOrdersModule {}

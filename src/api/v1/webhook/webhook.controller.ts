@@ -12,6 +12,7 @@ import { AlchemyOnRampWebhookDto } from './dto/alchemyOnRampWebhook.dto';
 import { AlchemyOffRampWebhookDto } from './dto/alchemyOffRampWebhook.dto';
 import { AlchemyWebhookService } from './alchemyWebhook.service';
 import { WebhookStellarDto } from './dto/stellarWebhook.dto';
+import { BanxaWebhookService } from './banxaWebhook.service';
 
 @Controller('/api/v1/webhook')
 export class WebhookController {
@@ -20,6 +21,7 @@ export class WebhookController {
   constructor(
     private readonly webhookService: WebhookService,
     private readonly alchemyWebhookService: AlchemyWebhookService,
+    private readonly banxaWebhookService: BanxaWebhookService,
   ) {}
 
   @Post('stellar-transactions')
@@ -46,5 +48,12 @@ export class WebhookController {
   async handleOffRamp(@Body() body: AlchemyOffRampWebhookDto) {
     await this.alchemyWebhookService.handleAlchemyOffRamp(body);
     return { status: 'ok', message: 'alchemy off ramp webhook received.' };
+  }
+
+  @Post('banxa')
+  @HttpCode(200)
+  async handleBanxaRamp(@Body() body: any) {
+    await this.banxaWebhookService.handleWebHook(body);
+    return { status: 'ok', message: 'banxa webhook received.' };
   }
 }

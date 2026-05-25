@@ -8,6 +8,7 @@ import { Order, OrderSchema } from '../orders/schema/order.schema';
 import { OrdersModule } from '../orders/orders.module';
 import { DeviceModule } from '../device/device.module';
 import { RedisModule } from '../redis/redis.module';
+import { BanxaWebhookService } from './banxaWebhook.service';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { RedisModule } from '../redis/redis.module';
     WebhookService,
     FirebaseNotificationService,
     AlchemyWebhookService,
+    BanxaWebhookService,
   ],
 })
 export class WebhookModule {}
