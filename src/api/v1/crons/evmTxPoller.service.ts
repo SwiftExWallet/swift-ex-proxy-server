@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { SwapOrderRepository } from '../swapOrders/swapOrder.repository';
-import { OrderStatus } from '../common/enums/order.enum';
+import { SwapOrderStatus } from '../common/enums/order.enum';
 import { swapProvider } from '../common/enums/chain.enum';
 import { SwapOrders } from '../swapOrders/schema/swapOrder.schema';
 import { NotificationDto } from '../notification/dto/notification.dto';
@@ -18,11 +18,11 @@ interface BlockscoutReceiptResponse {
     } | null;
 }
 
-function mapBlockscoutStatus(result: BlockscoutReceiptResponse): OrderStatus | null {
+function mapBlockscoutStatus(result: BlockscoutReceiptResponse): SwapOrderStatus | null {
     if (result.status === '0' || !result.result) return null;
     return result.result.status === '1'
-        ? OrderStatus.COMPLETED
-        : OrderStatus.FAILED;
+        ? SwapOrderStatus.COMPLETED
+        : SwapOrderStatus.FAILED;
 }
 
 @Injectable()

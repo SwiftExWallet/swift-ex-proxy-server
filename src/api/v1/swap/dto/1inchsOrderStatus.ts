@@ -3,7 +3,7 @@ import {
   IsNotEmpty,
   IsString,
 } from 'class-validator';
-import { SwapNetwork } from '../../common/enums/chain.enum';
+import { SwapNetwork, swapProvider } from '../../common/enums/chain.enum';
 
 export class InchOrderStatusDto {
   @IsNotEmpty()
@@ -13,4 +13,8 @@ export class InchOrderStatusDto {
   @IsNotEmpty()
   @IsEnum(SwapNetwork)
   chain: SwapNetwork;
+
+  @IsNotEmpty()
+  @IsEnum(swapProvider)
+  swapProvider: swapProvider;
 }

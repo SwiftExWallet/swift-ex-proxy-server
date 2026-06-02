@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Get, Query } from '@nestjs/common';
+import { Body, Controller, Post, Get, Query, Req, Delete, Param } from '@nestjs/common';
 import { SwapQuoteDto } from '../dto/swapQuote';
 import { InchService } from './1inch.service';
 import { FusionOrderDto } from '../dto/fusionOrder';
@@ -7,6 +7,7 @@ import { RateLimit } from '../../common/decorators/rate-limit.decorator';
 import { FusionPlusSwapQuoteDto } from '../dto/fusionPlusSwapQuote';
 import { FusionPlusOrderDto } from '../dto/fusionPlusOrder';
 import { InchOrderStatusDto } from '../dto/1inchsOrderStatus';
+import { CancelFusionOrderDto } from '../dto/cancelFusionOrder';
 
 @Controller('api/v1/swap/1inch')
 export class inchController {
@@ -42,20 +43,26 @@ export class inchController {
   }
 
   @Post('/submitOrder')
-  async submitOrder(@Body() submitOrderDto: SubmitOrderDto) {
-    const data = await this.inchService.submitOrder(submitOrderDto);
+  async submitOrder(@Req() req: any, @Body() submitOrderDto: SubmitOrderDto) {
+    const data = await this.inchService.submitFusionOrder(req.device, submitOrderDto);
     return data;
   }
 
   @Post('/submitFusionPlusOrder')
-  async submitFusionPlusOrder(@Body() submitOrderDto: SubmitOrderDto) {
-    const data = await this.inchService.submitFusionPlusOrder(submitOrderDto);
+  async submitFusionPlusOrder(@Req() req: any, @Body() submitOrderDto: SubmitOrderDto) {
+    const data = await this.inchService.submitFusionPlusOrder(req.device, submitOrderDto);
     return data;
   }
 
   @Get('/orderStatus')
   async orderStatus(@Query() inchOrderStatusDto: InchOrderStatusDto) {
     const data = await this.inchService.orderStatus(inchOrderStatusDto);
+    return data;
+  }
+
+  @Delete('/cancelorder')
+  async cancelOrder(@Body() cancelFusionOrderDto: CancelFusionOrderDto) {
+    const data = await this.inchService.cancelOrder(cancelFusionOrderDto);
     return data;
   }
 }

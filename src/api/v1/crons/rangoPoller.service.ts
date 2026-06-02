@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { SwapOrderRepository } from '../swapOrders/swapOrder.repository';
 import { SwapOrders } from '../swapOrders/schema/swapOrder.schema';
-import { OrderStatus, RangoOrderStatus } from '../common/enums/order.enum';
+import { SwapOrderStatus as OrderStatus, RangoOrderStatus } from '../common/enums/order.enum';
 import { swapProvider } from '../common/enums/chain.enum';
 import { RangoService } from '../swap/rango/rango.service';
 import { CheckTransactionApprovalDto } from '../swap/dto/confirmTransactionApprovalDto';

@@ -53,7 +53,7 @@ export class SwapProviderResolver {
         };
 
       case swapProvider.UNISWAP:
-      case swapProvider.ONEINCH:
+      case swapProvider.ONEINCH_FUSION:
         return data;
     }
   }

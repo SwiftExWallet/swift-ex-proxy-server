@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SwapOrders } from './schema/swapOrder.schema';
 import { StoreSwapOrderDto, } from './dto/updateOrder.dto';
-import { OrderStatus } from '../common/enums/order.enum';
+import { SwapOrderStatus } from '../common/enums/order.enum';
 import { swapProvider } from '../common/enums/chain.enum';
 import { PaginationDto, PaginatedResult, PAGE_SIZE } from './dto/pagination.dto';
 
@@ -24,7 +24,7 @@ export class SwapOrderRepository {
     try {
       const doc = new this.model({
         ...dto,
-        status: dto.status ?? OrderStatus.PENDING,
+        status: dto.status ?? SwapOrderStatus.PENDING,
         blockNumber: null,
         confirmedAt: null,
       });
@@ -69,7 +69,7 @@ export class SwapOrderRepository {
   ): Promise<DbResult<SwapOrders[]>> {
     try {
       const data = await this.model
-        .find({ provider, status: OrderStatus.PENDING })
+        .find({ provider, status: SwapOrderStatus.PENDING })
         .lean()
         .exec();
       return { ok: true, data };
@@ -81,7 +81,7 @@ export class SwapOrderRepository {
 
   async updateStatus(
     txHash: string,
-    status: OrderStatus,
+    status: SwapOrderStatus,
     blockNumber: number | null = null,
   ): Promise<DbResult<void>> {
     try {

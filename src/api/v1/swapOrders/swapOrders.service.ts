@@ -6,14 +6,15 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import mongoose, { Model } from 'mongoose';
-import { Cron } from '@nestjs/schedule';
+import { Model } from 'mongoose';
 import { SwapOrders } from './schema/swapOrder.schema';
+import { SwapOrderStatus } from '../common/enums/order.enum';
 import { BridgeTxStatusDto, MultiChainWalletAddressDto, StoreSwapOrderDto, UpdateTxStatusDto } from './dto/updateOrder.dto';
-import { OrderStatus } from '../common/enums/order.enum';
 import { DbResult, SwapOrderRepository } from './swapOrder.repository';
 import { AllbridgeCoreSdk, ChainSymbol, nodeRpcUrlsDefault } from '@allbridge/bridge-core-sdk';
 import { PaginatedResult, PaginationDto } from './dto/pagination.dto';
+import { InchWsPollerService } from '../crons/inchWsPoller.service';
+import { ChainId, swapProvider } from '../common/enums/chain.enum';
 
 @Injectable()
 export class SwapOrderService {
@@ -23,19 +24,22 @@ export class SwapOrderService {
     @InjectModel(SwapOrders.name)
     private readonly swapOrders: Model<SwapOrders>,
     private readonly swapOrderRepository: SwapOrderRepository,
+    private readonly inchWsPollerService: InchWsPollerService,
   ) { 
   }
 
   async store(device:any, dto: StoreSwapOrderDto): Promise<SwapOrders> {
+    const {fromChain,txHash,quoteId}=dto;
     try {
       const doc = new this.swapOrders({
         ...dto,
         deviceId: device._id,
-        status: dto.status ?? OrderStatus.PENDING,
+        status: dto.status ?? SwapOrderStatus.PENDING,
         blockNumber: null,
         confirmedAt: null,
         deviceFcmToken: device.fcmToken,
       });
+      await this.inchWsPollerService.subscribeOrder(txHash, ChainId[fromChain] as any, quoteId);
       return await doc.save();
     } catch (err: any) {
       if (err.code === 11000) {
@@ -48,6 +52,15 @@ export class SwapOrderService {
     }
   }
 
+  async updateOrderStatus(orderHash: string, status: SwapOrderStatus){
+    const swapOrder = await this.swapOrderRepository.findByTxHash(orderHash);
+    if(!swapOrder){
+      this.logger.error(`Swap order not found for orderHash ${orderHash}`);
+      return;
+    }
+    return this.swapOrderRepository.updateStatus(orderHash, status)
+  }
+
   async findByTxHash(txHash: string): Promise<DbResult<SwapOrders | null>>  {
     return await this.swapOrderRepository.findByTxHash(txHash);
   }
@@ -56,13 +69,19 @@ export class SwapOrderService {
     return await this.swapOrderRepository.findByWallet(walletAddress)
   }
 
-  async getBridgeTxStatus(bridgeTxStatusDto: BridgeTxStatusDto) {
+  async getBridgeTxStatus(bridgeTxStatusDto:any) {
     const { provider, walletType, txHash, } = bridgeTxStatusDto;
     try {
-      return await this.sdk.getTransferStatus(
-        ChainSymbol[walletType],
-        txHash,
-      );
+      switch (provider) {
+        case swapProvider.ALLBRIDGE:
+          return await this.sdk.getTransferStatus(
+            ChainSymbol[walletType],
+            txHash,
+          );
+        default:
+          return `${provider} service not active yet.`
+      }
+
     } catch (err) {
       throw new BadRequestException(`Transaction not found.`);
     }

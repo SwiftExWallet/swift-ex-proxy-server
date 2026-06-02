@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
-import { OrderStatus, OrderTxType } from '../../common/enums/order.enum';
+import { SwapOrderStatus as OrderStatus, OrderTxType } from '../../common/enums/order.enum';
 import { swapProvider } from '../../common/enums/chain.enum';
 
 @Schema({ collection: 'SwapOrders', timestamps: true })
@@ -81,6 +81,9 @@ export class SwapOrders {
 
   @Prop({ required: true })
   deviceFcmToken: string;
+
+  @Prop({ default: null })
+  encryptedFusionSecrets: string;
 }
 
 export const SwapOrderSchema = SchemaFactory.createForClass(SwapOrders);

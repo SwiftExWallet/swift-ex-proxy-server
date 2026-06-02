@@ -93,7 +93,7 @@ private extractErrors(errors: any[]): string[] {
         provider
       );
 
-    case swapProvider.ONEINCH:
+    case swapProvider.ONEINCH_FUSION:
       return await this.handleValidationAndRun(
         SwapQuoteDto,
         transformed,

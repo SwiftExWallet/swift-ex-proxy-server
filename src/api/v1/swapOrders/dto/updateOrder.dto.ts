@@ -1,10 +1,15 @@
 import { IsString, IsEnum, IsOptional, IsNotEmpty, ValidateIf, Matches } from 'class-validator';
 import { } from '../schema/swapOrder.schema';
 import { SwapNetwork, swapProvider } from '../../common/enums/chain.enum';
-import { OrderStatus, OrderTxType } from '../../common/enums/order.enum';
+import { SwapOrderStatus as OrderStatus, OrderTxType } from '../../common/enums/order.enum';
 import { ValidWalletType } from '../../common/enums/all-bridge.enum';
 
 export class StoreSwapOrderDto {
+
+  @IsString()
+  @IsNotEmpty()
+  quoteId: string;
+
   @ValidateIf((o) => o.provider === swapProvider.RANGO)
   @IsString({
     message: 'requestId must be a string',
@@ -59,6 +64,10 @@ export class StoreSwapOrderDto {
   @IsEnum(OrderStatus)
   @IsOptional()
   status?: OrderStatus;
+
+  @IsString()
+  @IsOptional()
+  encryptedFusionSecrets?: string;
 }
 
 export class UpdateSwapOrderStatusDto {
@@ -87,8 +96,8 @@ export class BridgeTxStatusDto{
   
   @IsString()
   @IsNotEmpty()
-  @IsEnum(ValidWalletType)
-  walletType: ValidWalletType;
+  @IsEnum(ValidWalletType||SwapNetwork)
+  walletType: ValidWalletType|SwapNetwork;
 
   @IsString()
   @IsNotEmpty()
