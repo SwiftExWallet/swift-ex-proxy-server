@@ -29,7 +29,7 @@ export class SwapOrderService {
   }
 
   async store(device:any, dto: StoreSwapOrderDto): Promise<SwapOrders> {
-    const {fromChain,txHash,quoteId}=dto;
+    const {fromChain,txHash,quoteId,provider}=dto;
     try {
       const doc = new this.swapOrders({
         ...dto,
@@ -39,7 +39,9 @@ export class SwapOrderService {
         confirmedAt: null,
         deviceFcmToken: device.fcmToken,
       });
-      await this.inchWsPollerService.subscribeOrder(txHash, ChainId[fromChain] as any, quoteId);
+      if(provider===swapProvider.ONEINCH_FUSION||provider===swapProvider.ONEINCH_FUSION_PLUS){
+        await this.inchWsPollerService.subscribeOrder(txHash, ChainId[fromChain] as any, quoteId);
+      }
       return await doc.save();
     } catch (err: any) {
       if (err.code === 11000) {

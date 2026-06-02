@@ -6,8 +6,13 @@ import { ValidWalletType } from '../../common/enums/all-bridge.enum';
 
 export class StoreSwapOrderDto {
 
-  @IsString()
-  @IsNotEmpty()
+  @ValidateIf((o) => (o.provider === swapProvider.ONEINCH_FUSION||o.provider === swapProvider.ONEINCH_FUSION_PLUS))
+  @IsString({
+    message: 'requestId must be a string',
+  })
+  @IsNotEmpty({
+    message: `requestId is required for this provider`,
+  })
   quoteId: string;
 
   @ValidateIf((o) => o.provider === swapProvider.RANGO)
