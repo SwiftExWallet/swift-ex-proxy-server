@@ -77,9 +77,12 @@
       "ts"
     ],
     "rootDir": "src",
-    "testRegex": ".*\\.spec\\.ts$",
+    "testRegex": ".*\\.(spec|test)\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "moduleNameMapper": {
+      "^.*/firebaseServiceAccount\\.json$": "<rootDir>/api/v1/notification/firebase/__mocks__/firebaseServiceAccount.json"
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
