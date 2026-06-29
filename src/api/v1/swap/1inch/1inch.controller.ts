@@ -8,10 +8,16 @@ import { FusionPlusSwapQuoteDto } from '../dto/fusionPlusSwapQuote';
 import { FusionPlusOrderDto } from '../dto/fusionPlusOrder';
 import { InchOrderStatusDto } from '../dto/1inchsOrderStatus';
 import { CancelFusionOrderDto } from '../dto/cancelFusionOrder';
+import { FustionNativeService } from './1inch.fusion.native.swap.service';
+import { ConfirmSwapOrderDto } from '../dto/prepareTxDto';
+import { NotificationDto } from '../../notification/dto/notification.dto';
 
 @Controller('api/v1/swap/1inch')
 export class inchController {
-  constructor(private readonly inchService: InchService) {}
+  constructor(
+    private readonly inchService: InchService,
+    private readonly fustionNativeService: FustionNativeService
+  ) { }
 
   @RateLimit(
     { points: 20, duration: 60, key: 'per-minute' }, // max 5 per minute
@@ -64,5 +70,20 @@ export class inchController {
   async cancelOrder(@Body() cancelFusionOrderDto: CancelFusionOrderDto) {
     const data = await this.inchService.cancelOrder(cancelFusionOrderDto);
     return data;
+  }
+
+  @Post('/buildFusionPlusNativeOrder')
+  async buildFusionPlusNativeOrder(@Body() body: FusionPlusSwapQuoteDto,) {
+    return await this.fustionNativeService.createSwapOrder(body);
+  }
+
+  @Post('/submitFusionPlusNativeOrder')
+  async confirmOrder(@Body() confirmSwapOrderDto: ConfirmSwapOrderDto) {
+    return this.fustionNativeService.confirmSwapOrder(confirmSwapOrderDto);
+  }
+
+  @Post('/customNotification')
+  async customNotification(@Req() req: any,@Body() notification: NotificationDto) {
+    return await this.inchService.fireCustomNotification(req.device,notification);
   }
 }

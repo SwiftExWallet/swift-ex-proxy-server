@@ -6,10 +6,13 @@ import { SwapOrderRepository } from './swapOrder.repository';
 import { SwapOrdersController } from './swapOrders.controller';
 import { RangoPollerService } from '../crons/rangoPoller.service';
 import { AllbridgePollerService } from '../crons/allbridgePoller.service';
-import { InchWsPollerService } from '../crons/inchWsPoller.service';
+import { InchWsPollerService } from '../swap/1inch/inchWsPoller.service';
 import { RangoService } from '../swap/rango/rango.service';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';
 import { EvmTxPollerService } from '../crons/evmTxPoller.service';
+import { RedisService } from '../redis/redis.service';
+import { InchFusionPlusWsPollerService } from '../swap/1inch/inchFusionPlusWsPoller.service';
+import { UniswapTxPollerService } from '../crons/uniswapTxPoller.service';
 
 @Module({
   imports: [
@@ -23,9 +26,12 @@ import { EvmTxPollerService } from '../crons/evmTxPoller.service';
     InchWsPollerService,
     RangoService,
     FirebaseNotificationService,
-    EvmTxPollerService
+    EvmTxPollerService,
+    InchFusionPlusWsPollerService,
+    RedisService,
+    UniswapTxPollerService
   ],
   controllers: [SwapOrdersController],
-  exports: [SwapOrderService, InchWsPollerService],
+  exports: [SwapOrderService, InchWsPollerService,InchFusionPlusWsPollerService],
 })
 export class SwapOrdersModule {}

@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SwapOrders } from './schema/swapOrder.schema';
@@ -144,6 +144,38 @@ export class SwapOrderRepository {
     } catch (err) {
       this.logger.error('findByWallet failed', { walletAddress, err });
       return { ok: false, error: 'findByWallet failed' };
+    }
+  }
+
+  async updateOrderStatus(
+    txHash: string,
+    status: SwapOrderStatus,
+    blockNumber: number | null = null,
+  ): Promise<SwapOrders|null> {
+    try {
+      const result = await this.model.findOneAndUpdate(
+        { txHash },
+        {
+          $set: {
+            status,
+            confirmedAt: new Date(),
+            blockNumber,
+          },
+        },
+        {
+          new: true,
+        },
+      );
+
+      if (!result) {
+        this.logger.warn(`order data not found for txHash=${txHash}`);
+        throw new BadRequestException('order data not found');
+      }
+
+      return result;
+    } catch (err) {
+      this.logger.error('order data not found', { txHash, status, err });
+      throw new BadRequestException('order data not found');
     }
   }
 }

@@ -12,6 +12,10 @@ export enum SwapOrderStatus {
   CANCELLED = 'cancelled',
   EXPIRED = 'expired',
   INVALID = 'invalid',
+  EXECUTED = "executed",
+  REFUNDING = "refunding",
+  REFUNDED = "refunded",
+  FILLED = "filled",
 }
 
 export enum RangoOrderStatus{

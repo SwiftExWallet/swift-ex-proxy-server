@@ -108,9 +108,9 @@ export class AllbridgePollerService {
     }
     private async processTxNotification(tx: SwapOrders): Promise<void> {
             const notificationPayload: NotificationDto = {
-                title: `Allbridge Tx Update`,
-                body: `Order update ${tx.amountOut} amout has been marked as ${OrderStatus.COMPLETED}.`,
-                data: {},
+                title: `Received: ${tx.amountOut} ${tx.toToken}`,
+                body: `From ${tx.walletAddress?.slice(0, 4)}.....${tx.walletAddress?.slice(-4)}`,
+                data: {"network":tx.fromChain,"txHash":tx.txHash},
             };
             await this.firebaseNotificationService.sendNotification(
                 tx.deviceFcmToken as string,

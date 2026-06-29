@@ -4,6 +4,8 @@ import {
   ConflictException,
   InternalServerErrorException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -13,8 +15,9 @@ import { BridgeTxStatusDto, MultiChainWalletAddressDto, StoreSwapOrderDto, Updat
 import { DbResult, SwapOrderRepository } from './swapOrder.repository';
 import { AllbridgeCoreSdk, ChainSymbol, nodeRpcUrlsDefault } from '@allbridge/bridge-core-sdk';
 import { PaginatedResult, PaginationDto } from './dto/pagination.dto';
-import { InchWsPollerService } from '../crons/inchWsPoller.service';
+import { InchWsPollerService } from '../swap/1inch/inchWsPoller.service';
 import { ChainId, swapProvider } from '../common/enums/chain.enum';
+import { InchFusionPlusWsPollerService } from '../swap/1inch/inchFusionPlusWsPoller.service';
 
 @Injectable()
 export class SwapOrderService {
@@ -24,7 +27,9 @@ export class SwapOrderService {
     @InjectModel(SwapOrders.name)
     private readonly swapOrders: Model<SwapOrders>,
     private readonly swapOrderRepository: SwapOrderRepository,
+     @Inject(forwardRef(() => InchWsPollerService))
     private readonly inchWsPollerService: InchWsPollerService,
+    private readonly inchFusionPlusWsPollerService: InchFusionPlusWsPollerService,
   ) { 
   }
 
@@ -39,8 +44,12 @@ export class SwapOrderService {
         confirmedAt: null,
         deviceFcmToken: device.fcmToken,
       });
-      if(provider===swapProvider.ONEINCH_FUSION||provider===swapProvider.ONEINCH_FUSION_PLUS){
-        await this.inchWsPollerService.subscribeOrder(txHash, ChainId[fromChain] as any, quoteId);
+      // if(provider===swapProvider.ONEINCH_FUSION){
+      //   await this.inchWsPollerService.subscribeOrder(txHash, ChainId[fromChain] as any, quoteId);
+      // }
+      if(provider===swapProvider.ONEINCH_FUSION_PLUS)
+      {
+        this.inchFusionPlusWsPollerService.subscribeOrder(txHash, quoteId);
       }
       return await doc.save();
     } catch (err: any) {
@@ -95,5 +104,9 @@ export class SwapOrderService {
 
   async updateOrder(updateTxStatusDto: UpdateTxStatusDto): Promise<DbResult<void>>  {
     return await this.swapOrderRepository.updateStatus(updateTxStatusDto.txHash,updateTxStatusDto.orderStatus);
+  }
+
+  async updateOrderByHash(updateTxStatusDto: UpdateTxStatusDto): Promise<SwapOrders|null>  {
+    return await this.swapOrderRepository.updateOrderStatus(updateTxStatusDto.txHash,updateTxStatusDto.orderStatus);
   }
 }

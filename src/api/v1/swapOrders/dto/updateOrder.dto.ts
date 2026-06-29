@@ -8,10 +8,10 @@ export class StoreSwapOrderDto {
 
   @ValidateIf((o) => (o.provider === swapProvider.ONEINCH_FUSION||o.provider === swapProvider.ONEINCH_FUSION_PLUS))
   @IsString({
-    message: 'requestId must be a string',
+    message: 'quoteId must be a string',
   })
   @IsNotEmpty({
-    message: `requestId is required for this provider`,
+    message: 'quoteId is required for this provider',
   })
   quoteId: string;
 

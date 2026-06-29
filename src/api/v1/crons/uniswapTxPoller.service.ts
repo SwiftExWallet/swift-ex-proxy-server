@@ -37,7 +37,7 @@ function mapBlockscoutStatus(result: BlockscoutReceiptResponse): SwapOrderStatus
 }
 
 @Injectable()
-export class EvmTxPollerService {
+export class UniswapTxPollerService {
     private readonly BLOCKSCOUT_URLS: Record<string, string> = {
         ETH: process.env.BLOCKSCOUT_ETH as string,
         BSC: process.env.BLOCKSCOUT_BSC as string,
@@ -47,7 +47,7 @@ export class EvmTxPollerService {
         BASE: process.env.BLOCKSCOUT_BAS as string,
         AVAX: process.env.BLOCKSCOUT_AVA as string,
     };
-    private readonly logger = new Logger(EvmTxPollerService.name);
+    private readonly logger = new Logger(UniswapTxPollerService.name);
     private isRunning = false;
 
     constructor(
@@ -55,25 +55,25 @@ export class EvmTxPollerService {
         private readonly firebaseNotificationService: FirebaseNotificationService
     ) { }
 
-    @Cron('*/15 * * * * *', { name: 'EvmTx-Cron' })
+    @Cron('*/15 * * * * *', { name: 'Uniswap-Cron' })
     async poll(): Promise<void> {
         if (this.isRunning) {
-            this.logger.warn('EvmTx previous tick still running');
+            this.logger.warn('uniswap previous tick still running');
             return;
         }
 
         this.isRunning = true;
         try {
-            const result = await this.repo.findPendingByProvider(swapProvider.EVMTX);
+            const result = await this.repo.findPendingByProvider(swapProvider.UNISWAP);
             if (!result.ok) {
-                this.logger.error(`EvmTx fetch failed: ${result.error}`);
+                this.logger.error(`uniswap fetch failed: ${result.error}`);
                 return;
             }
 
             const { data: pending } = result;
             if (!pending.length) return;
 
-            this.logger.debug(`${pending.length} pending EvmTx found`);
+            this.logger.debug(`${pending.length} pending uniswap found`);
 
             for (let i = 0; i < pending.length; i += BATCH_SIZE) {
                 const batch = pending.slice(i, i + BATCH_SIZE);
@@ -83,7 +83,7 @@ export class EvmTxPollerService {
 
                 results.forEach((r, idx) => {
                     if (r.status === 'rejected') {
-                        this.logger.error(`EvmTx batch ${i + idx} unexpected rejection`, r.reason,);
+                        this.logger.error(`uniswap batch ${i + idx} unexpected rejection`, r.reason,);
                     }
                 });
             }
@@ -130,21 +130,21 @@ export class EvmTxPollerService {
 
         const newStatus = mapBlockscoutStatus(response);
         if (!newStatus) {
-            this.logger.debug(`EvmTx ${tx.txHash} not yet mined on ${tx.fromChain}`,);
+            this.logger.debug(`uniswap ${tx.txHash} not yet mined on ${tx.fromChain}`,);
             return;
         }
 
         const dbResult = await this.repo.updateOrderStatus(tx.txHash, newStatus);
         if (!dbResult) {
-            this.logger.error(`EvmTx failed to update txHash ${tx.txHash} ${dbResult}`,);
+            this.logger.error(`uniswap failed to update txHash ${tx.txHash} ${dbResult}`,);
             return;
         }
 
-        this.logger.log(`EvmTx ${tx.txHash} ${tx.fromChain} to ${newStatus}`,);
-        this.processTxNotification(tx, newStatus ,dbResult.txType);
+        this.logger.log(`uniswap ${tx.txHash} ${tx.fromChain} to ${newStatus}`,);
+        this.processTxNotification(tx, newStatus, dbResult.txType);
     }
 
-    private async processTxNotification(tx: SwapOrders, status: string,txType: string): Promise<void> {
+    private async processTxNotification(tx: SwapOrders, status: string, txType: string): Promise<void> {
         const notificationPayload: NotificationDto = {
                 title: `Received: ${tx.amountOut} ${tx.toToken}`,
                 body: `From ${tx.walletAddress?.slice(0, 4)}.....${tx.walletAddress?.slice(-4)}`,

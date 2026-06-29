@@ -60,4 +60,8 @@ export class SubmitOrderDto {
   @IsNotEmpty()
   @IsString()
   quoteId: string;
+
+  @IsNotEmpty()
+  @IsString()
+  orderHash: string;
 }
