@@ -23,33 +23,26 @@ export class FirebaseNotificationService {
     try {
       const { title, body, data } = payload;
       const message: admin.messaging.Message = {
-        token,
+        token: token,
         notification: {
           title: title,
           body: body,
         },
-        data: data || {},
-        // Android specific configuration for heads-up notifications
+        data: data,
         android: {
           priority: 'high',
           notification: {
-            priority: 'max',
-            defaultSound: true,
-            defaultVibrateTimings: true,
-            sticky: false,
-            localOnly: false,
-            defaultLightSettings: true,
-            visibility: 'public',
             channelId: '1',
-            clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+            sound: 'default',
+            priority: 'high',
+            defaultVibrateTimings: true,
+            visibility: 'public',
           },
-          ttl: 3600 * 1000, // 1 hour TTL
         },
-        // iOS specific configuration
         apns: {
           headers: {
             'apns-priority': '10',
-            'apns-push-type': 'alert',
+            'apns-push-type': 'alert'
           },
           payload: {
             aps: {
@@ -58,10 +51,10 @@ export class FirebaseNotificationService {
                 body: body,
               },
               sound: 'default',
-              badge: 1,
-            },
-          },
-        },
+              badge: 0,
+            }
+          }
+        }
       };
       const response = await admin.messaging().send(message);
       return response;

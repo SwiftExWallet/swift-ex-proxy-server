@@ -1,278 +1,148 @@
-import {
-  Injectable,
-  Logger,
-  BadRequestException,
-} from '@nestjs/common';
-import { ethers } from 'ethers';
-import {
-  CHAIN_CONFIGS,
-  ERC20_ABI,
-  FEE_TIERS,
-  QUOTER_V2_ABI,
-} from './constants/quoter.chain.config';
-import { GetQuoteDto, SupportedChain, TradeType } from './dto/quoter.dto';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { AlphaRouter, SwapType } from '@uniswap/smart-order-router';
+import { Token, CurrencyAmount, TradeType, Ether, Percent, } from '@uniswap/sdk-core';
+import { ethers, parseUnits, TransactionRequest, ZeroAddress } from 'ethers';
+import { JsonRpcProvider } from '@ethersproject/providers';
 import { ProviderService } from '../../provider/provider.service';
-import { ChainEnum } from '../../common/enums/chain.enum';
+import { CHAIN_CONFIGS } from './constants/quoter.chain.config';
+import { SwapQuoteDto, TokenInfoDto } from '../../common/dto/swapQuote.dto';
+import { SwapQuote } from '../../common/interface/swap.interface';
+import { ChainEnum, ChainId } from '../../common/enums/chain.enum';
 
-export interface TokenInfo {
-  address: string;
-  symbol: string;
-  name: string;
-  decimals: number;
-}
-
-export interface FeeTierQuote {
-  feeTier: number;
-  feeTierLabel: string;
-  amountOut: string;
-  amountOutFormatted: string;
-  amountIn: string;
-  amountInFormatted: string;
-  gasEstimate: string;
-  gasCostWei: string;
-  gasCostEth: string;
-  pricePerToken: string;
-  priceImpact?: string;
-}
-
-export interface QuoteResponse {
-  chain: SupportedChain;
-  chainId: number;
-  chainName: string;
-  tradeType: TradeType;
-  tokenIn: TokenInfo;
-  tokenOut: TokenInfo;
-  rawAmount: string;
-  bestQuote: FeeTierQuote;
-  allQuotes: FeeTierQuote[];
-  slippage: string;
-  minimumReceived?: string;
-  maximumSent?: string;
-  timestamp: number;
-}
 
 @Injectable()
 export class QuoterService {
   private readonly logger = new Logger(QuoterService.name);
-  constructor(private readonly rpcService: ProviderService) {}
-  private readonly providerCache = new Map<SupportedChain, ethers.JsonRpcProvider>();
+  constructor(private readonly rpcService: ProviderService) { }
 
-  private getProvider(chain: SupportedChain): ethers.JsonRpcProvider {
-    
-    const chainEnumMap: Record<SupportedChain, ChainEnum> = {
-      [SupportedChain.ETH]: ChainEnum.ETH,
-      [SupportedChain.BNB]: ChainEnum.BSC,
-      [SupportedChain.POLYGON]: ChainEnum.POL,
-      [SupportedChain.ARB]: ChainEnum.ARB,
-      [SupportedChain.BASE]: ChainEnum.BASE,
-      [SupportedChain.AVAX]: ChainEnum.AVAX,
-      [SupportedChain.OPT]: ChainEnum.OP,
-    };
-    return this.rpcService.getProvider(chainEnumMap[chain]);
+  private isZeroAddress(value: string,): boolean {
+    const list = [
+      '0X0000000000000000000000000000000000000000',
+      '0XEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE',
+      'ETH',
+      'BNB',
+      'MATIC',
+      'POL',
+      'AVAX',
+    ];
+    return list.includes(
+      value.toUpperCase(),
+    );
   }
 
-  async getTokenInfo(chain: SupportedChain, address: string): Promise<TokenInfo> {
-    const provider = this.getProvider(chain);
-    const config = CHAIN_CONFIGS[chain];
-
-    const isNative =
-      address.toLowerCase() === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ||
-      address.toLowerCase() === 'native';
-
-    const resolvedAddress = isNative ? config.wrappedNative : address;
-
-    try {
-      const contract = new ethers.Contract(resolvedAddress, ERC20_ABI, provider);
-      const [symbol, name, decimals] = await Promise.all([
-        contract.symbol(),
-        contract.name(),
-        contract.decimals(),
-      ]);
-      return { address: resolvedAddress, symbol, name, decimals: Number(decimals) };
-    } catch (err) {
-      throw new BadRequestException(
-        `Failed to fetch token info for ${resolvedAddress} on ${chain}: ${err.message}`,
-      );
+  private buildToken(token: TokenInfoDto, chainId: number) {
+    const native = this.isZeroAddress(token.address);
+    if (native) {
+      return Ether.onChain(chainId);
     }
+
+    return new Token(
+      chainId,
+      token.address,
+      Number(token.decimals),
+      token.symbol,
+    );
   }
 
-  private async quoteSingleFeeTier(
-    chain: SupportedChain,
-    tokenIn: TokenInfo,
-    tokenOut: TokenInfo,
-    amount: bigint,
-    feeTier: number,
-    tradeType: TradeType,
-    gasPriceWei: bigint,
-  ): Promise<FeeTierQuote | null> {
-    const config = CHAIN_CONFIGS[chain];
-    const provider = this.getProvider(chain);
-    const quoter = new ethers.Contract(config.uniswapV3QuoterV2, QUOTER_V2_ABI, provider);
 
+  async getQuote(swapQuote: SwapQuoteDto, internalCall: Boolean = false): Promise<SwapQuote | any> {
     try {
-      let amountOut: bigint;
-      let amountIn: bigint;
-      let gasEstimate: bigint;
-
-      if (tradeType === TradeType.EXACT_IN) {
-        const result = await quoter.quoteExactInputSingle.staticCall({
-          tokenIn: tokenIn.address,
-          tokenOut: tokenOut.address,
-          amountIn: amount,
-          fee: feeTier,
-          sqrtPriceLimitX96: 0n,
-        });
-        amountOut = result[0];
-        gasEstimate = result[3];
-        amountIn = amount;
-      } else {
-        const result = await quoter.quoteExactOutputSingle.staticCall({
-          tokenIn: tokenIn.address,
-          tokenOut: tokenOut.address,
-          amount,
-          fee: feeTier,
-          sqrtPriceLimitX96: 0n,
-        });
-        amountIn = result[0];
-        gasEstimate = result[3];
-        amountOut = amount;
-      }
-
-      const gasCostWei = gasEstimate * gasPriceWei;
-      const gasCostEth = ethers.formatEther(gasCostWei);
-      const amountOutNum = parseFloat(ethers.formatUnits(amountOut, tokenOut.decimals));
-      const amountInNum  = parseFloat(ethers.formatUnits(amountIn,  tokenIn.decimals));
-      const pricePerToken = amountInNum > 0
-        ? (amountOutNum / amountInNum).toFixed(6)
-        : '0';
-
-      return {
-        feeTier,
-        feeTierLabel: `${feeTier / 10000}%`,
-        amountOut: amountOut.toString(),
-        amountOutFormatted: ethers.formatUnits(amountOut, tokenOut.decimals),
-        amountIn: amountIn.toString(),
-        amountInFormatted: ethers.formatUnits(amountIn, tokenIn.decimals),
-        gasEstimate: gasEstimate.toString(),
-        gasCostWei: gasCostWei.toString(),
-        gasCostEth,
-        pricePerToken,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  async getQuote(dto: GetQuoteDto): Promise<QuoteResponse> {
-    try {
-      const {
-        chain,
-        tokenIn: tokenInAddr,
-        tokenOut: tokenOutAddr,
-        amount,
-        tradeType,
-        slippage,
-      } = dto;
-
-      const config = CHAIN_CONFIGS[chain];
-
-      this.logger.log(
-        `Fetching quote on ${chain}: ${tokenInAddr} -> ${tokenOutAddr} | amount: ${amount}`
-      );
-
-      const provider = this.getProvider(chain);
-
-      const [tokenIn, tokenOut, feeData] = await Promise.all([
-        this.getTokenInfo(chain, tokenInAddr),
-        this.getTokenInfo(chain, tokenOutAddr),
-        provider.getFeeData(),
-      ]);
-
-      const gasPriceWei = feeData.gasPrice ?? feeData.maxFeePerGas ?? 0n;
-      const rawAmount = BigInt(amount);
-      const quotePromises = FEE_TIERS.map((fee) =>
-        this.quoteSingleFeeTier(
-          chain,
-          tokenIn,
-          tokenOut,
-          rawAmount,
-          fee,
-          tradeType ?? TradeType.EXACT_IN,
-          gasPriceWei
-        )
-      );
-
-      const rawResults = await Promise.all(quotePromises);
-
-      const validQuotes = rawResults.filter(
-        (q): q is FeeTierQuote => q !== null
-      );
-
-      if (validQuotes.length === 0) {
-        throw new BadRequestException(
-          `No Uniswap V3 liquidity found for ${tokenIn.symbol} -> ${tokenOut.symbol} on ${config.name}`
-        );
-      }
-
-      const slippageBps = parseFloat(slippage ?? "0.5") / 100;
-
-      const allQuotes = validQuotes.map((quote) => {
-        if (tradeType !== TradeType.EXACT_OUT) {
-          const minOut =
-            BigInt(quote.amountOut) *
-            BigInt(Math.floor((1 - slippageBps) * 10000)) /
-            10000n;
-
-          return {
-            ...quote,
-            minimumReceived: ethers.formatUnits(minOut, tokenOut.decimals),
-          };
-        } else {
-          const maxIn =
-            BigInt(quote.amountIn) *
-            BigInt(Math.floor((1 + slippageBps) * 10000)) /
-            10000n;
-
-          return {
-            ...quote,
-            maximumSent: ethers.formatUnits(maxIn, tokenIn.decimals),
-          };
-        }
+      const { tokenIn, tokenOut, amount, recipient } = swapQuote;
+      const provider = new JsonRpcProvider(this.rpcService.getChainRpcUrl(ChainEnum[ChainId[tokenIn.chainId]]));
+      const router = new AlphaRouter({ chainId: tokenIn.chainId, provider: provider as any });
+      const isNativeIn = tokenIn.address === ZeroAddress;
+      const isNativeOut = tokenOut.address === ZeroAddress;
+      const tokenInput = isNativeIn ? Ether.onChain(tokenIn.chainId) : this.buildToken(tokenIn, tokenIn.chainId);
+      const tokenOutput = isNativeOut ? Ether.onChain(tokenOut.chainId) : this.buildToken(tokenOut, tokenOut.chainId);
+      const rawAmount = parseUnits(amount, tokenIn.decimals);
+      const amountIn = CurrencyAmount.fromRawAmount(tokenInput, rawAmount.toString());
+      const route = await router.route(
+        amountIn,
+        tokenOutput,
+        TradeType.EXACT_INPUT, {
+        recipient: recipient,
+        slippageTolerance: new Percent('50', '10000'), // 0.5%
+        deadline: Math.floor(Date.now() / 1000) + 1800,
+        type: SwapType.SWAP_ROUTER_02,
       });
-
-      const bestQuote =
-        tradeType === TradeType.EXACT_OUT
-          ? allQuotes.reduce((a, b) =>
-            BigInt(a.amountIn) < BigInt(b.amountIn) ? a : b
-          )
-          : allQuotes.reduce((a, b) =>
-            BigInt(a.amountOut) > BigInt(b.amountOut) ? a : b
-          );
-
-      return {
-        chain,
-        chainId: config.chainId,
-        chainName: config.name,
-        tradeType: tradeType ?? TradeType.EXACT_IN,
-        tokenIn,
-        tokenOut,
-        rawAmount: amount,
-        bestQuote,
-        allQuotes,
-        slippage: slippage ?? "0.5",
-        timestamp: Date.now(),
+      if (!route) {
+        this.logger.error('No route found');
+        throw new BadRequestException('No route found',);
+      }
+      const outputSwapAmt = route.quote.toExact();
+      const slippage = 0.5;
+      const minimumReceived = (Number(outputSwapAmt) * (1 - slippage)).toFixed(Number(tokenOut.decimals),);
+      const gasCostWei = BigInt(route.estimatedGasUsed.toString()) * BigInt(route.gasPriceWei.toString());
+      const networkFee = ethers.formatEther(gasCostWei);
+      const tokenPath = route.route[0].tokenPath.map((t) => t.symbol);
+      const isMultiHop = tokenPath.length > 2;
+      let fee = 'N/A';
+      const firstRoute: any = route.route[0];
+      try {
+        fee = firstRoute.pools?.[0]?.fee?.toString() || 'N/A';
+      } catch { }
+      return internalCall ? route : {
+        inputAmount: amount,
+        inputToken: tokenIn.symbol,
+        outputAmount: outputSwapAmt,
+        outputToken: tokenOut.symbol,
+        pricePerToken: (Number(outputSwapAmt) / Number(amount)).toString(),
+        fee: fee,
+        isMultiHop: isMultiHop,
+        minimumReceived: minimumReceived,
+        networkFee: Number(networkFee),
       };
-    } catch (error) {
-      this.logger.error("Quote error:", error);
-      this.logger.error("Error stack:", error.stack);
-
-      const message =
-        error.info?.error?.message ||
-        error.shortMessage ||
-        error.message ||
-        "Failed to get swap quotes.";
-      throw new BadRequestException(message);
+    } catch (e) {
+      this.logger.error("error", e);
+      throw new BadRequestException(e.message);
     }
   }
 
+  async buildSwapTx(swapQuote: SwapQuoteDto, slippageBps = 100): Promise<TransactionRequest[]> {
+    try {
+      const { tokenIn, recipient } = swapQuote;
+      const txs: TransactionRequest[] = [];
+      const route = await this.getQuote(swapQuote, true);
+      if (!route || !route.methodParameters) {
+        throw new BadRequestException('Failed build tx');
+      }
+      const provider = new JsonRpcProvider(this.rpcService.getChainRpcUrl(ChainEnum[ChainId[tokenIn.chainId]]));
+      const nonce = await provider.getTransactionCount(recipient, 'pending');
+      const feeData = await provider.getFeeData();
+      const isNativeIn = this.isZeroAddress(tokenIn.address);
+      const erc20Interface = new ethers.Interface(['function approve(address spender,uint256 amount)',]);
+      //  APPROVE TX
+      if (!isNativeIn) {
+        txs.push({
+          to: tokenIn.address,
+          from: recipient,
+          data: erc20Interface.encodeFunctionData('approve', [route.methodParameters.to, ethers.MaxUint256,]),
+          nonce: nonce,
+          chainId: tokenIn.chainId,
+          type: 2,
+          maxFeePerGas: feeData.maxFeePerGas?.toString(),
+          maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
+          gasLimit: '76056',
+        });
+      }
+      //SWAP TX
+      txs.push({
+        to: route.methodParameters.to,
+        from: recipient,
+        data: route.methodParameters.calldata,
+        value: route.methodParameters.value,
+        nonce: isNativeIn ? nonce : nonce + 1,
+        chainId: tokenIn.chainId,
+        type: 2,
+        maxFeePerGas: feeData.maxFeePerGas?.toString(),
+        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
+        gasLimit: '220000',
+      });
+      return txs;
+    } catch (error) {
+      throw new BadRequestException(
+        error.message,
+      );
+    }
+  }
 }

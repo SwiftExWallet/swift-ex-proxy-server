@@ -18,7 +18,11 @@ import { AllBridgeModule } from './api/v1/bridge/all-bridge/all-bridge.module';
 import { BridgeModule } from './api/v1/bridge/bridge.module';
 import { RedisModule } from './api/v1/redis/redis.module';
 import { SwapModule } from './api/v1/swap/swap.module';
+import { APP_GUARD } from '@nestjs/core';
+import { RateLimitGuard } from './api/v1/common/guard/rate-limit.guard';
 import { QuoterModule } from './api/v1/uniswap/quoter/quoter.module';
+import { SwapOrdersModule } from './api/v1/swapOrders/swapOrders.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -34,6 +38,7 @@ import { QuoterModule } from './api/v1/uniswap/quoter/quoter.module';
       signOptions: { expiresIn: '7d' },
       verifyOptions: { ignoreExpiration: false },
     }),
+    ScheduleModule.forRoot(),
     EthModule,
     UsersModule,
     BscModule,
@@ -47,10 +52,11 @@ import { QuoterModule } from './api/v1/uniswap/quoter/quoter.module';
     BridgeModule,
     RedisModule,
     SwapModule,
-    QuoterModule
+    QuoterModule,
+    SwapOrdersModule
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, { provide: APP_GUARD, useClass: RateLimitGuard }],
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer): any {
@@ -79,6 +85,14 @@ export class AppModule {
         },
         {
           path: '/api/v1/webhook/alchemy-off-ramp',
+          method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/quoter/quote',
+          method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/webhook/banxa',
           method: RequestMethod.POST,
         },
       )

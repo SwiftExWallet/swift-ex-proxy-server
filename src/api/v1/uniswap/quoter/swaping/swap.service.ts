@@ -166,7 +166,7 @@ export class SwapService {
     slippageBps = 100,
 ): Promise<SwapQuote> {
     try {
-        const chain = this.resolveSupportedChain(dto.chainId);
+        const chain = this.resolveSupportedChain(dto.tokenIn.chainId);
         const config = this.cfg(chain);
         const wrapped = this.wrapped(chain);
 
@@ -284,7 +284,7 @@ export class SwapService {
 
       const chain =
         this.resolveSupportedChain(
-          dto.chainId,
+          dto.tokenIn.chainId,
         );
 
       const config =

@@ -25,7 +25,7 @@ import {
   getNetwork,
   getTransactionCount,
 } from '../../common/helpers/blockchainUtilityMethods';
-import { JsonRpcProvider } from 'ethers';
+import { FeeData, JsonRpcProvider } from 'ethers';
 import { ProviderService } from '../../provider/provider.service';
 import { ChainEnum } from '../../common/enums/chain.enum';
 
@@ -109,11 +109,12 @@ getProvider(chain: ChainEnum): JsonRpcProvider {
           getNetwork(this.getProvider(ChainEnum[walletType])),
           getFeeData(this.getProvider(ChainEnum[walletType])),
         ]);
+        const bufferedFeeData = this.bufferFeeData(feeData); 
         const approveGasLimit = await getEstimateGas(this.getProvider(ChainEnum[walletType]), fromAddress, approveTransaction);
         const approveTxMeta = {
           nonce: currentNonce,
           gasLimit: approveGasLimit,
-          feeData: feeData,
+          feeData: bufferedFeeData,
           network: network,
         };
 
@@ -155,7 +156,7 @@ getProvider(chain: ChainEnum): JsonRpcProvider {
       const txMeta = {
         nonce: nonce,
         gasLimit: gasLimit,
-        feeData: feeData,
+        feeData: this.bufferFeeData(feeData),
         network: network,
       };
 
@@ -299,5 +300,20 @@ getProvider(chain: ChainEnum): JsonRpcProvider {
       this.logger.error(`=== ${label} simulation FAILED: ${revertReason} ===`);
       throw new BadRequestException(revertReason);
     }
+  }
+
+  private bufferFeeData(feeData: FeeData, bufferPercent = 25): FeeData {
+    const bump = (value: bigint | null, pct: number): bigint | null => {
+      if (value == null) return null;
+      return (value * BigInt(100 + pct)) / 100n;
+    };
+
+    return {
+      ...feeData,
+      maxFeePerGas: bump(feeData.maxFeePerGas, bufferPercent),
+      maxPriorityFeePerGas: bump(feeData.maxPriorityFeePerGas, bufferPercent),
+      // gasPrice is legacy (pre-EIP-1559), bump it too for non-EIP-1559 chains
+      gasPrice: bump(feeData.gasPrice, bufferPercent),
+    } as FeeData;
   }
 }

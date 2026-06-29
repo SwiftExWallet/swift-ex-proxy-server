@@ -1,6 +1,6 @@
 import { IsEnum, IsNotEmpty, IsObject, IsOptional } from 'class-validator';
 import mongoose from 'mongoose';
-import { OrderStatus, OrderType } from '../../common/enums/order.enum';
+import { SwapOrderStatus as OrderStatus, OrderType } from '../../common/enums/order.enum';
 
 export class UpdateOrderDto {
   @IsNotEmpty()

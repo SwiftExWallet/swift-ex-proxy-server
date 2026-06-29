@@ -1,9 +1,8 @@
-import { Injectable, HttpException, HttpStatus, Logger, BadRequestException } from '@nestjs/common';
-import { ChainId, Token, WETH9, Fetcher, Route, Trade, TradeType, CurrencyAmount, Percent } from '@pancakeswap/sdk';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { ChainId, Token, Fetcher, Route, Trade, TradeType, CurrencyAmount, Percent } from '@pancakeswap/sdk';
 import { ethers } from 'ethers';
 import { createPublicClient, http } from 'viem';
 import { bsc } from 'viem/chains';
-import { PancakeSwapParams, PancakeSwapQuote, PancakeSwapQuoteParams } from '../../common/interface/swap.interface';
 import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
 import { BSC_APPROVAL_ABI, BSC_APPROVAL_SUBMIT_ABI, BSC_SWAP_PREPARE_ABI, BSC_TOKEN_ABI } from '../../common/abi/bsc';
 

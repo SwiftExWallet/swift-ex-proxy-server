@@ -159,4 +159,30 @@ export class RangoService {
       throw new BadRequestException(message);
     }
   }
+
+  async checkTransactionStatus(
+    checkTransactionApprovalDto: CheckTransactionApprovalDto,
+  ) {
+    try {
+      const prepareUrl = `${process.env.RANGO_BASE_URL}/tx/check-status`;
+      const url = new URL(prepareUrl);
+      url.searchParams.append('apiKey', process.env.RANGO_API_KEY as string);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apiKey': process.env.RANGO_API_KEY as string
+        },
+        body: JSON.stringify(checkTransactionApprovalDto)
+      })
+      return await response.json();
+    } catch (error) {
+      this.logger.error(error);
+      const message =
+        error.response.data.description ||
+        error.response.data ||
+        'unable to get swap quote';
+      throw new BadRequestException(message);
+    }
+  }
 }

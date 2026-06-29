@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsOptional, ValidateNested } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
 
 export class TokenParamDto {
   @IsNotEmpty()
@@ -23,6 +23,7 @@ export class RangoRouteDto {
   @IsNotEmpty()
   amount: string;
 
-  @IsNotEmpty()
-  slippage: string;
+  @IsOptional()
+  @IsString()
+  slippage: string = '1.0';
 }

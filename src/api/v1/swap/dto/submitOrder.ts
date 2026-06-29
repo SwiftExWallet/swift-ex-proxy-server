@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsString, IsOptional } from 'class-validator';
 import { Order } from '../../orders/schema/order.schema';
 import { Type } from 'class-transformer';
 import { SwapNetwork } from '../../common/enums/chain.enum';
@@ -41,9 +41,13 @@ export class SubmitOrderDto {
   @IsEnum(SwapNetwork)
   chain: SwapNetwork;
 
+  @IsOptional()
+  @IsEnum(SwapNetwork)
+  toChain?: SwapNetwork;
+
   @Type(() => OrderDto)
   @IsNotEmpty()
-  order: Order;
+  order: OrderDto;
 
   @IsNotEmpty()
   @IsString()
@@ -56,4 +60,8 @@ export class SubmitOrderDto {
   @IsNotEmpty()
   @IsString()
   quoteId: string;
+
+  @IsNotEmpty()
+  @IsString()
+  orderHash: string;
 }
