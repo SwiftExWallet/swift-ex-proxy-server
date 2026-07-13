@@ -108,7 +108,7 @@ export class AllbridgePollerService {
     }
     private async processTxNotification(tx: SwapOrders): Promise<void> {
             const notificationPayload: NotificationDto = {
-                title: `Received: ${tx.amountOut} ${tx.toToken}`,
+                title: `Order Completed: ${tx.amountOut} ${tx.toToken} from SDEX`,
                 body: `From ${tx.walletAddress?.slice(0, 4)}.....${tx.walletAddress?.slice(-4)}`,
                 data: {"network":tx.fromChain,"txHash":tx.txHash},
             };

@@ -36,8 +36,15 @@ export class SwapOrderService {
   async store(device:any, dto: StoreSwapOrderDto): Promise<SwapOrders> {
     const {fromChain,txHash,quoteId,provider}=dto;
     try {
+      let usdValue = dto.usdValue;
+
+      if (['USDT', 'USDC'].includes(dto.fromToken?.toUpperCase())) {
+        usdValue = Number(dto.amountIn);
+      }
+
       const doc = new this.swapOrders({
         ...dto,
+        usdValue,
         deviceId: device._id,
         status: dto.status ?? SwapOrderStatus.PENDING,
         blockNumber: null,

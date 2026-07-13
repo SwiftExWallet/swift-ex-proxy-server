@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsOptional, IsNotEmpty, ValidateIf, Matches } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsNotEmpty, ValidateIf, Matches, IsNumber } from 'class-validator';
 import { } from '../schema/swapOrder.schema';
 import { SwapNetwork, swapProvider } from '../../common/enums/chain.enum';
 import { SwapOrderStatus as OrderStatus, OrderTxType } from '../../common/enums/order.enum';
@@ -73,6 +73,10 @@ export class StoreSwapOrderDto {
   @IsString()
   @IsOptional()
   encryptedFusionSecrets?: string;
+
+  @IsNumber()
+  @IsOptional()
+  usdValue?: number;
 }
 
 export class UpdateSwapOrderStatusDto {
