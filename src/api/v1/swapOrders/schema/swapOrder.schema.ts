@@ -84,6 +84,9 @@ export class SwapOrders {
 
   @Prop({ default: null })
   encryptedFusionSecrets: string;
+
+  @Prop({ default: 0 })
+  usdValue: number;
 }
 
 export const SwapOrderSchema = SchemaFactory.createForClass(SwapOrders);

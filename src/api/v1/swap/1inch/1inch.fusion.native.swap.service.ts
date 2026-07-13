@@ -334,7 +334,7 @@ export class FustionNativeService {
                             await this.firebaseNotificationService.sendNotification(
                                 orderStatusUpdate.deviceFcmToken,
                                 {
-                                    title: `Received: ${orderStatusUpdate.amountOut} ${orderStatusUpdate.toToken}`,
+                                    title: `Order Completed: ${orderStatusUpdate.amountOut} ${orderStatusUpdate.toToken}`,
                                     body: `From ${orderStatusUpdate.walletAddress?.slice(0, 4)}.....${orderStatusUpdate.walletAddress?.slice(-4)}`,
                                     data: { "network": orderStatusUpdate.fromChain, "txHash": orderStatusUpdate.txHash },
                                 }
@@ -393,7 +393,7 @@ export class FustionNativeService {
                         await this.firebaseNotificationService.sendNotification(
                             orderStatusUpdate.deviceFcmToken,
                             {
-                                title: `Received: ${orderStatusUpdate.amountOut} ${orderStatusUpdate.toToken}`,
+                                title: `Order Completed: ${orderStatusUpdate.amountOut} ${orderStatusUpdate.toToken}`,
                                 body: `From ${orderStatusUpdate.walletAddress?.slice(0, 4)}.....${orderStatusUpdate.walletAddress?.slice(-4)}`,
                                 data: {"network":orderStatusUpdate.fromChain,"txHash":orderStatusUpdate.txHash},
                             },

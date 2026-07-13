@@ -270,7 +270,7 @@ export class InchService {
           await this.firebaseNotificationService.sendNotification(
             orderStausUpdate?.deviceFcmToken as string,
             {
-              title: `Received: ${orderStausUpdate?.amountOut} ${orderStausUpdate?.toToken}`,
+              title: `Order Completed: ${orderStausUpdate?.amountOut} ${orderStausUpdate?.toToken}`,
               body: `From ${orderStausUpdate?.walletAddress?.slice(0, 4)}.....${orderStausUpdate?.walletAddress?.slice(-4)}`,
               data: { "network": orderStausUpdate?.fromChain||"", "txHash": orderStausUpdate?.txHash||"" },
             },

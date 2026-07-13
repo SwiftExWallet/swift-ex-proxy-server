@@ -146,7 +146,7 @@ export class EvmTxPollerService {
 
     private async processTxNotification(tx: SwapOrders, status: string,txType: string): Promise<void> {
         const notificationPayload: NotificationDto = {
-                title: `Received: ${tx.amountOut} ${tx.toToken}`,
+                title: `Order Completed: ${tx.amountOut} ${tx.toToken}`,
                 body: `From ${tx.walletAddress?.slice(0, 4)}.....${tx.walletAddress?.slice(-4)}`,
                 data: {"network":tx.fromChain,"txHash":tx.txHash},
             };
