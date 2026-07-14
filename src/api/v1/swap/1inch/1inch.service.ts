@@ -1,8 +1,12 @@
-import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { SwapQuoteDto } from '../dto/swapQuote';
 import { ChainId, swapProvider } from '../../common/enums/chain.enum';
-import { SwapOrderStatus as OrderStatus, SwapOrderStatus } from '../../common/enums/order.enum';
+import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { SwapOrderService } from '../../swapOrders/swapOrders.service';
 import axios, { AxiosRequestConfig } from 'axios';
 import { FusionOrderDto } from '../dto/fusionOrder';
@@ -10,7 +14,12 @@ import { SubmitOrderDto } from '../dto/submitOrder';
 import { FusionPlusSwapQuoteDto } from '../dto/fusionPlusSwapQuote';
 import { FusionPlusOrderDto } from '../dto/fusionPlusOrder';
 import { ethers } from 'ethers';
-import { HashLock, MerkleLeaf, SDK, OrderStatus as SDKOrderStatus } from '@1inch/cross-chain-sdk';
+import {
+  HashLock,
+  MerkleLeaf,
+  SDK,
+  OrderStatus as SDKOrderStatus,
+} from '@1inch/cross-chain-sdk';
 import { InchOrderStatusDto } from '../dto/1inchsOrderStatus';
 import { encryptFusionSecrets } from '../../common/utils/encryption.util';
 import { RedisService } from '../../redis/redis.service';
@@ -30,14 +39,18 @@ interface RedisOrderSecretState {
 const SECRET_POLL_INTERVAL_MS = 10_000;
 const SECRET_POLL_RETRY_STEP_MS = 5_000;
 const SECRET_POLL_MAX_RETRY_DELAY_MS = 5 * 60 * 1000;
+const SECRET_POLL_MAX_RESCHEDULES = 5;
 const PENDING_RECOVERY_WINDOW_MS = 2 * 60 * 60 * 1000;
 
-const TERMINAL_ORDER_STATUSES: ReadonlySet<SDKOrderStatus> = new Set([
+const SECRET_SUBMIT_ORDER_STATUSES: ReadonlySet<SDKOrderStatus> = new Set([
+  SDKOrderStatus.Pending,
+]);
+
+const FINAL_ORDER_STATUSES: ReadonlySet<SDKOrderStatus> = new Set([
   SDKOrderStatus.Executed,
   SDKOrderStatus.Expired,
   SDKOrderStatus.Cancelled,
   SDKOrderStatus.Refunded,
-  SDKOrderStatus.Refunding,
 ]);
 
 @Injectable()
@@ -45,13 +58,14 @@ export class InchService implements OnModuleInit {
   private readonly logger = new Logger(InchService.name);
   private readonly sdk: SDK;
   private readonly activeSecretPollers = new Map<string, NodeJS.Timeout>();
+  private readonly secretPollReschedules = new Map<string, number>();
   private isRecoveringPendingOrders = false;
 
   constructor(
     private readonly swapOrderService: SwapOrderService,
     private readonly redisService: RedisService,
     private readonly inchWsPollerService: InchWsPollerService,
-    private readonly firebaseNotificationService: FirebaseNotificationService
+    private readonly firebaseNotificationService: FirebaseNotificationService,
   ) {
     this.sdk = new SDK({
       url: 'https://api.1inch.com/fusion-plus',
@@ -63,7 +77,12 @@ export class InchService implements OnModuleInit {
     await this.recoverPendingFusionPlusOrders();
   }
 
-  private async getSecretState(key: string): Promise<{ secrets: string[]; secretHashes: string[]; hashLock: any; submittedIdx: Set<number> } | null> {
+  private async getSecretState(key: string): Promise<{
+    secrets: string[];
+    secretHashes: string[];
+    hashLock: any;
+    submittedIdx: Set<number>;
+  } | null> {
     const rawStr = await this.redisService.getKey(`fusion_secrets:${key}`);
     if (!rawStr) return null;
     try {
@@ -85,7 +104,10 @@ export class InchService implements OnModuleInit {
       hashLock: state.hashLock,
       submittedIdx: Array.from(state.submittedIdx),
     };
-    await this.redisService.setKey(`fusion_secrets:${key}`, JSON.stringify(dataToSave));
+    await this.redisService.setKey(
+      `fusion_secrets:${key}`,
+      JSON.stringify(dataToSave),
+    );
   }
 
   private async delSecretState(key: string): Promise<void> {
@@ -97,7 +119,14 @@ export class InchService implements OnModuleInit {
     const url = `${process.env.QUOTER_BASE}/${ChainId[chain]}/quote/receive`;
     const config: AxiosRequestConfig = {
       headers: { Authorization: `Bearer ${process.env.INCH_API_KEY}` },
-      params: { walletAddress, amount, toTokenAddress: tokenOut, fromTokenAddress: tokenIn, enableEstimate: true, isPermit2: true },
+      params: {
+        walletAddress,
+        amount,
+        toTokenAddress: tokenOut,
+        fromTokenAddress: tokenIn,
+        enableEstimate: true,
+        isPermit2: true,
+      },
       paramsSerializer: { indexes: null },
     };
 
@@ -106,17 +135,36 @@ export class InchService implements OnModuleInit {
       return response.data;
     } catch (error) {
       this.logger.error(error);
-      const message = error.response?.data?.description || error.response?.data || 'unable to get swap quote';
+      const message =
+        error.response?.data?.description ||
+        error.response?.data ||
+        'unable to get swap quote';
       throw new BadRequestException(message);
     }
   }
 
   async getFusionPlusSwapQuote(fusionPlusSwapQuote: FusionPlusSwapQuoteDto) {
-    const { srcChain, dstChain, srcTokenAddress, dstTokenAddress, amount, walletAddress } = fusionPlusSwapQuote;
+    const {
+      srcChain,
+      dstChain,
+      srcTokenAddress,
+      dstTokenAddress,
+      amount,
+      walletAddress,
+    } = fusionPlusSwapQuote;
     const url = `${process.env.FUSION_PLUS_QUOTER_BASE}/quote/receive`;
     const config: AxiosRequestConfig = {
       headers: { Authorization: `Bearer ${process.env.INCH_API_KEY}` },
-      params: { walletAddress, amount, srcChain: ChainId[srcChain], dstChain: ChainId[dstChain], srcTokenAddress, dstTokenAddress, enableEstimate: true, isPermit2: true },
+      params: {
+        walletAddress,
+        amount,
+        srcChain: ChainId[srcChain],
+        dstChain: ChainId[dstChain],
+        srcTokenAddress,
+        dstTokenAddress,
+        enableEstimate: true,
+        isPermit2: true,
+      },
       paramsSerializer: { indexes: null },
     };
 
@@ -125,26 +173,43 @@ export class InchService implements OnModuleInit {
       return response.data;
     } catch (error) {
       this.logger.error(error);
-      const message = error.response?.data?.description || error.response?.data || 'unable to get swap quote';
+      const message =
+        error.response?.data?.description ||
+        error.response?.data ||
+        'unable to get swap quote';
       throw new BadRequestException(message);
     }
   }
 
   async buildFusionOrder(fusionOrder: FusionOrderDto) {
-    const { quote, tokenIn, tokenOut, amount, walletAddress, chain } = fusionOrder;
+    const { quote, tokenIn, tokenOut, amount, walletAddress, chain } =
+      fusionOrder;
     const config: AxiosRequestConfig = {
       headers: { Authorization: `Bearer ${process.env.INCH_API_KEY}` },
-      params: { fee: 0, isPermit2: false, additionalAuctionStartDelay: 30, walletAddress, amount, toTokenAddress: tokenOut, fromTokenAddress: tokenIn },
+      params: {
+        fee: 0,
+        isPermit2: false,
+        additionalAuctionStartDelay: 30,
+        walletAddress,
+        amount,
+        toTokenAddress: tokenOut,
+        fromTokenAddress: tokenIn,
+      },
       paramsSerializer: { indexes: null },
     };
-    const response = await axios.post(`${process.env.QUOTER_BASE}/${ChainId[chain]}/quote/build`, quote, config);
+    const response = await axios.post(
+      `${process.env.QUOTER_BASE}/${ChainId[chain]}/quote/build`,
+      quote,
+      config,
+    );
     return response.data;
   }
 
   async buildFusionPlusOrder(fusionPlusOrder: FusionPlusOrderDto) {
     try {
       const { quoteId, walletAddress, secretCount } = fusionPlusOrder;
-      const { secrets, secretHashes, hashLock } = this.generateSecrets(secretCount);
+      const { secrets, secretHashes, hashLock } =
+        this.generateSecrets(secretCount);
 
       await this.setSecretState(`quote:${quoteId}`, {
         secrets,
@@ -165,7 +230,7 @@ export class InchService implements OnModuleInit {
         preset: 'fast',
         walletAddress,
         hashLock,
-        source: "APP",
+        source: 'APP',
       };
 
       const response = await axios.post(
@@ -178,7 +243,10 @@ export class InchService implements OnModuleInit {
     } catch (error) {
       await this.delSecretState(`quote:${fusionPlusOrder.quoteId}`);
       this.logger.error(error);
-      const message = error.response?.data?.description || error.response?.data || 'unable to build swap';
+      const message =
+        error.response?.data?.description ||
+        error.response?.data ||
+        'unable to build swap';
       throw new BadRequestException(message);
     }
   }
@@ -192,22 +260,32 @@ export class InchService implements OnModuleInit {
         paramsSerializer: { indexes: null },
       };
       const body = { order, signature, quoteId, extension };
-      const response = await axios.post(`${process.env.INCH_RELAYER_BASE}/${ChainId[chain]}/order/submit`, body, config);
+      const response = await axios.post(
+        `${process.env.INCH_RELAYER_BASE}/${ChainId[chain]}/order/submit`,
+        body,
+        config,
+      );
       return response.data;
     } catch (error: any) {
       this.logger.error(error);
-      const message = error.response?.data?.description || error.response?.data || 'unable to submit order';
+      const message =
+        error.response?.data?.description ||
+        error.response?.data ||
+        'unable to submit order';
       throw new BadRequestException(message);
     }
   }
 
   async submitFusionPlusOrder(device: any, submitOrderDto: SubmitOrderDto) {
-    const { order, signature, extension, quoteId, chain, orderHash } = submitOrderDto;
+    const { order, signature, extension, quoteId, chain, orderHash } =
+      submitOrderDto;
     const tempKey = `quote:${quoteId}`;
 
     const secretState = await this.getSecretState(tempKey);
     if (!secretState) {
-      throw new BadRequestException(`Secrets not found for quoteId "${quoteId}". Call buildFusionPlusOrder first.`);
+      throw new BadRequestException(
+        `Secrets not found for quoteId "${quoteId}". Call buildFusionPlusOrder first.`,
+      );
     }
 
     try {
@@ -216,15 +294,27 @@ export class InchService implements OnModuleInit {
         params: {},
         paramsSerializer: { indexes: null },
       };
-      const body = { order, srcChainId: ChainId[chain], signature, quoteId, extension };
+      const body = {
+        order,
+        srcChainId: ChainId[chain],
+        signature,
+        quoteId,
+        extension,
+      };
 
-      const response = await axios.post(`${process.env.FUSION_PLUS_RELAYER_BASE}/submit`, body, config);
+      const response = await axios.post(
+        `${process.env.FUSION_PLUS_RELAYER_BASE}/submit`,
+        body,
+        config,
+      );
 
       await this.delSecretState(tempKey);
       await this.setSecretState(orderHash, secretState);
 
       let encryptedFusionSecrets: string | undefined;
-      const rawSecretsStr = await this.redisService.getKey(`fusion_secrets:${quoteId}`);
+      const rawSecretsStr = await this.redisService.getKey(
+        `fusion_secrets:${quoteId}`,
+      );
       if (rawSecretsStr) {
         try {
           const rawSecrets = JSON.parse(rawSecretsStr);
@@ -242,11 +332,13 @@ export class InchService implements OnModuleInit {
       await this.delSecretState(tempKey);
       await this.delSecretState(orderHash);
       this.logger.error(error);
-      const message = error.response?.data?.description || error.response?.data || 'unable to submit order';
+      const message =
+        error.response?.data?.description ||
+        error.response?.data ||
+        'unable to submit order';
       throw new BadRequestException(message);
     }
   }
-
 
   private stopSecretRevealPoller(orderHash: string): void {
     const timeout = this.activeSecretPollers.get(orderHash);
@@ -254,6 +346,92 @@ export class InchService implements OnModuleInit {
       clearTimeout(timeout);
     }
     this.activeSecretPollers.delete(orderHash);
+    this.secretPollReschedules.delete(orderHash);
+  }
+
+  private mapFusionPlusStatus(status: SDKOrderStatus): SwapOrderStatus {
+    return SwapOrderStatus[
+      status.toUpperCase() as keyof typeof SwapOrderStatus
+    ];
+  }
+
+  private getPendingRecoveryWindowMs(): number {
+    const configuredWindowMs = Number(process.env.PENDING_RECOVERY_WINDOW_MS);
+    return Number.isFinite(configuredWindowMs) && configuredWindowMs > 0
+      ? configuredWindowMs
+      : PENDING_RECOVERY_WINDOW_MS;
+  }
+
+  private getErrorMessage(err: unknown): unknown {
+    return err instanceof Error ? err.message : err;
+  }
+
+  private async sendOrderStatusNotification(
+    orderStatusUpdate: any,
+    orderStatus: SwapOrderStatus,
+  ): Promise<void> {
+    if (
+      orderStatus === SwapOrderStatus.REFUNDING ||
+      !orderStatusUpdate?.deviceFcmToken
+    ) {
+      return;
+    }
+
+    try {
+      await this.firebaseNotificationService.sendNotification(
+        orderStatusUpdate.deviceFcmToken as string,
+        {
+          title: `Order ${orderStatus}: ${orderStatusUpdate?.amountOut} ${orderStatusUpdate?.toToken}`,
+          body: `From ${orderStatusUpdate?.walletAddress?.slice(0, 4)}.....${orderStatusUpdate?.walletAddress?.slice(-4)}`,
+          data: {
+            network: orderStatusUpdate?.fromChain || '',
+            txHash: orderStatusUpdate?.txHash || '',
+          },
+        },
+      );
+    } catch (err) {
+      this.logger.error(
+        `[${orderStatusUpdate?.txHash}] Failed to send ${orderStatus} notification`,
+        this.getErrorMessage(err),
+      );
+    }
+  }
+
+  private async updateOrderStatusAndNotify(
+    orderHash: string,
+    orderStatus: SwapOrderStatus,
+  ): Promise<any> {
+    const orderStatusUpdate = await this.swapOrderService.updateOrderByHash({
+      txHash: orderHash,
+      orderStatus,
+    });
+    await this.sendOrderStatusNotification(orderStatusUpdate, orderStatus);
+    return orderStatusUpdate;
+  }
+
+  private async exhaustSecretRevealPoller(
+    orderHash: string,
+    reason: unknown,
+  ): Promise<boolean> {
+    this.logger.error(
+      `[${orderHash}] Secret reveal poller exhausted after ${SECRET_POLL_MAX_RESCHEDULES} reschedules`,
+      this.getErrorMessage(reason),
+    );
+
+    try {
+      await this.updateOrderStatusAndNotify(
+        orderHash,
+        SwapOrderStatus.EXHAUSTED,
+      );
+      this.stopSecretRevealPoller(orderHash);
+      return true;
+    } catch (err) {
+      this.logger.error(
+        `[${orderHash}] Failed to mark order as exhausted`,
+        this.getErrorMessage(err),
+      );
+      return false;
+    }
   }
 
   private startSecretRevealPoller(orderHash: string): void {
@@ -268,6 +446,23 @@ export class InchService implements OnModuleInit {
       this.activeSecretPollers.set(orderHash, timeout);
     };
 
+    const rescheduleOrExhaust = async (
+      delayMs: number,
+      reason: unknown,
+    ): Promise<void> => {
+      const rescheduleCount =
+        this.secretPollReschedules.get(orderHash) ?? 0;
+
+      if (rescheduleCount >= SECRET_POLL_MAX_RESCHEDULES) {
+        await this.exhaustSecretRevealPoller(orderHash, reason);
+        return;
+      }
+
+      const nextRescheduleCount = rescheduleCount + 1;
+      this.secretPollReschedules.set(orderHash, nextRescheduleCount);
+      schedule(delayMs);
+    };
+
     const tick = async (): Promise<void> => {
       const secretState = await this.getSecretState(orderHash);
       if (!secretState) {
@@ -278,8 +473,7 @@ export class InchService implements OnModuleInit {
       try {
         const { status } = await this.sdk.getOrderStatus(orderHash);
 
-        // Not yet terminal (covers Pending): keep revealing secrets and keep polling.
-        if (!TERMINAL_ORDER_STATUSES.has(status)) {
+        if (SECRET_SUBMIT_ORDER_STATUSES.has(status)) {
           const data = await this.sdk.getReadyToAcceptSecretFills(orderHash);
           let stateUpdated = false;
           for (const { idx } of data.fills) {
@@ -296,7 +490,9 @@ export class InchService implements OnModuleInit {
             await this.sdk.submitSecret(orderHash, secret);
             secretState.submittedIdx.add(idx);
             stateUpdated = true;
-            this.logger.log(`[${orderHash}] Secret revealed for fill idx ${idx}`);
+            this.logger.log(
+              `[${orderHash}] Secret revealed for fill idx ${idx}`,
+            );
           }
 
           if (stateUpdated) {
@@ -304,45 +500,63 @@ export class InchService implements OnModuleInit {
           }
 
           retryDelayMs = SECRET_POLL_INTERVAL_MS;
-          schedule(retryDelayMs);
+          await rescheduleOrExhaust(retryDelayMs, `order status remained ${status}`);
           return;
         }
 
-        // Terminal state (Executed / Expired / Cancelled / Refunded /Refundeding): clear the polling interval.
-        const allSecretsFilled =
-          secretState.secrets.length > 0 &&
-          secretState.submittedIdx.size === secretState.secrets.length;
+        if (status === SDKOrderStatus.Refunding) {
+          const orderStatusUpdate = await this.updateOrderStatusAndNotify(
+            orderHash,
+            SwapOrderStatus.REFUNDING,
+          );
+          this.logger.log(
+            `[${orderHash}] Order status updated: ${status}. Continuing polling.`,
+            'DB status:',
+            orderStatusUpdate,
+          );
 
-        const resolvedStatus =
-          status === SDKOrderStatus.Executed && allSecretsFilled
-            ? SwapOrderStatus.COMPLETED
-            : SwapOrderStatus[status.toUpperCase()];
+          retryDelayMs = SECRET_POLL_INTERVAL_MS;
+          await rescheduleOrExhaust(retryDelayMs, `order status remained ${status}`);
+          return;
+        }
 
-        const orderStausUpdate = await this.swapOrderService.updateOrderByHash({ txHash: orderHash, orderStatus: resolvedStatus });
-        this.logger.log(`[${orderHash}] Order terminal reached: ${status}. Cleaning Redis state.`, "DB status:", orderStausUpdate);
-        if (status !== SDKOrderStatus.Refunding) {
-          await this.firebaseNotificationService.sendNotification(
-            orderStausUpdate?.deviceFcmToken as string,
-            {
-              title: `Order ${resolvedStatus}: ${orderStausUpdate?.amountOut} ${orderStausUpdate?.toToken}`,
-              body: `From ${orderStausUpdate?.walletAddress?.slice(0, 4)}.....${orderStausUpdate?.walletAddress?.slice(-4)}`,
-              data: { "network": orderStausUpdate?.fromChain || "", "txHash": orderStausUpdate?.txHash || "" },
-            },
+        if (FINAL_ORDER_STATUSES.has(status)) {
+          const resolvedStatus = this.mapFusionPlusStatus(status);
+          const orderStatusUpdate = await this.updateOrderStatusAndNotify(
+            orderHash,
+            resolvedStatus,
+          );
+          this.logger.log(
+            `[${orderHash}] Order terminal reached: ${status}. Cleaning Redis state.`,
+            'DB status:',
+            orderStatusUpdate,
           );
           await this.delSecretState(orderHash);
           this.stopSecretRevealPoller(orderHash);
+          return;
         }
+
+        this.logger.warn(
+          `[${orderHash}] Unhandled Fusion+ status "${status}". Continuing polling.`,
+        );
+        retryDelayMs = SECRET_POLL_INTERVAL_MS;
+        await rescheduleOrExhaust(retryDelayMs, `unhandled order status ${status}`);
       } catch (err) {
-        retryDelayMs = Math.min(retryDelayMs + SECRET_POLL_RETRY_STEP_MS, SECRET_POLL_MAX_RETRY_DELAY_MS);
-        this.logger.error(`[${orderHash}] Poller error (will retry in ${retryDelayMs}ms):`, err?.message ?? err);
-        schedule(retryDelayMs);
+        retryDelayMs = Math.min(
+          retryDelayMs + SECRET_POLL_RETRY_STEP_MS,
+          SECRET_POLL_MAX_RETRY_DELAY_MS,
+        );
+        this.logger.error(
+          `[${orderHash}] Poller error (will retry in ${retryDelayMs}ms if reschedule budget remains):`,
+          this.getErrorMessage(err),
+        );
+        await rescheduleOrExhaust(retryDelayMs, err);
       }
     };
 
     schedule(retryDelayMs);
   }
 
-  @Cron('*/2 * * * *', { name: 'fusion-plus-pending-recovery' })
   async recoverPendingFusionPlusOrders(): Promise<void> {
     if (this.isRecoveringPendingOrders) {
       return;
@@ -350,10 +564,16 @@ export class InchService implements OnModuleInit {
 
     this.isRecoveringPendingOrders = true;
     try {
-      const since = new Date(Date.now() - Number(process.env.PENDING_RECOVERY_WINDOW_MS));
-      const result = await this.swapOrderService.findPendingByProviderSince(swapProvider.ONEINCH_FUSION_PLUS, since);
+      const since = new Date(Date.now() - this.getPendingRecoveryWindowMs());
+      const result = await this.swapOrderService.findByProviderAndStatusesSince(
+        swapProvider.ONEINCH_FUSION_PLUS,
+        [SwapOrderStatus.PENDING, SwapOrderStatus.REFUNDING],
+        since,
+      );
       if (!result.ok) {
-        this.logger.error(`fusion+ pending recovery fetch failed: ${result.error}`);
+        this.logger.error(
+          `fusion+ startup recovery fetch failed: ${result.error}`,
+        );
         return;
       }
 
@@ -362,7 +582,9 @@ export class InchService implements OnModuleInit {
         return;
       }
 
-      this.logger.log(`fusion+ pending recovery: found ${pending.length} pending order(s) created since ${since.toISOString()}`);
+      this.logger.log(
+        `fusion+ startup recovery: found ${pending.length} active order(s) created since ${since.toISOString()}`,
+      );
 
       for (const order of pending) {
         if (this.activeSecretPollers.has(order.txHash)) {
@@ -371,7 +593,9 @@ export class InchService implements OnModuleInit {
 
         const secretState = await this.getSecretState(order.txHash);
         if (!secretState) {
-          this.logger.warn(`[${order.txHash}] pending fusion+ order has no secret state in redis, skipping recovery`);
+          this.logger.warn(
+            `[${order.txHash}] active fusion+ order has no secret state in redis, skipping recovery`,
+          );
           continue;
         }
 
@@ -409,7 +633,9 @@ export class InchService implements OnModuleInit {
 
     let hashLock: HashLock;
     if (count > 2) {
-      const merkleLeaves = HashLock.getMerkleLeavesFromSecretHashes(secretHashes as MerkleLeaf[]);
+      const merkleLeaves = HashLock.getMerkleLeavesFromSecretHashes(
+        secretHashes as MerkleLeaf[],
+      );
       hashLock = HashLock.forMultipleFills(merkleLeaves);
     } else {
       hashLock = HashLock.forSingleFill(secrets[0]);
@@ -420,14 +646,16 @@ export class InchService implements OnModuleInit {
 
   createSecretForQuoteId(quoteId: string, index: number) {
     const secret = crypto
-      .createHmac("sha256", process.env.MASTER_HASH_KEY as string)
+      .createHmac('sha256', process.env.MASTER_HASH_KEY as string)
       .update(`${index}-${quoteId}`)
       .digest();
     return ethers.hexlify(secret);
   }
 
   async orderStatus(inchOrderStatusDto: InchOrderStatusDto) {
-    if (inchOrderStatusDto.swapProvider === swapProvider["ONEINCH_FUSION_PLUS"]) {
+    if (
+      inchOrderStatusDto.swapProvider === swapProvider['ONEINCH_FUSION_PLUS']
+    ) {
       return await this.fusionPlusOrderStatus(inchOrderStatusDto);
     }
     const url = `${process.env.INCH_ORDER_BASE}/${ChainId[inchOrderStatusDto.chain]}/order/status/${inchOrderStatusDto.orderHash}`;
@@ -440,20 +668,28 @@ export class InchService implements OnModuleInit {
     try {
       const response = await axios.get(url, config);
       if (response.data.status) {
-        const orderStausUpdate = await this.swapOrderService.updateOrderByHash({ txHash: inchOrderStatusDto.orderHash, orderStatus: SwapOrderStatus[response.data.status.toUpperCase()] });
+        const orderStatusUpdate = await this.swapOrderService.updateOrderByHash(
+          {
+            txHash: inchOrderStatusDto.orderHash,
+            orderStatus: SwapOrderStatus[response.data.status.toUpperCase()],
+          },
+        );
         // await this.firebaseNotificationService.sendNotification(
-        //   orderStausUpdate?.deviceFcmToken as string,
+        //   orderStatusUpdate?.deviceFcmToken as string,
         //   {
-        //     title: `Received: ${orderStausUpdate?.amountOut} ${orderStausUpdate?.toToken}`,
-        //     body: `From ${orderStausUpdate?.walletAddress}`,
-        //     data: { "network": orderStausUpdate?.fromChain || "", "txHash": orderStausUpdate?.txHash || "" },
+        //     title: `Received: ${orderStatusUpdate?.amountOut} ${orderStatusUpdate?.toToken}`,
+        //     body: `From ${orderStatusUpdate?.walletAddress}`,
+        //     data: { "network": orderStatusUpdate?.fromChain || "", "txHash": orderStatusUpdate?.txHash || "" },
         //   },
         // );
       }
       return response.data;
     } catch (error) {
       this.logger.error(error);
-      const message = error.response?.data?.description || error.response?.data || 'unable to get order status';
+      const message =
+        error.response?.data?.description ||
+        error.response?.data ||
+        'unable to get order status';
       throw new BadRequestException(message);
     }
   }
@@ -469,20 +705,28 @@ export class InchService implements OnModuleInit {
     try {
       const response = await axios.get(url, config);
       if (response.data.status) {
-        const orderStausUpdate = await this.swapOrderService.updateOrderByHash({ txHash: inchOrderStatusDto.orderHash, orderStatus: SwapOrderStatus[response.data.status.toUpperCase()] });
+        const orderStatusUpdate = await this.swapOrderService.updateOrderByHash(
+          {
+            txHash: inchOrderStatusDto.orderHash,
+            orderStatus: SwapOrderStatus[response.data.status.toUpperCase()],
+          },
+        );
         // await this.firebaseNotificationService.sendNotification(
-        //   orderStausUpdate?.deviceFcmToken as string,
+        //   orderStatusUpdate?.deviceFcmToken as string,
         //   {
-        //     title: `Received: ${orderStausUpdate?.amountOut} ${orderStausUpdate?.toToken}`,
-        //     body: `From ${orderStausUpdate?.walletAddress?.slice(0, 4)}.....${orderStausUpdate?.walletAddress?.slice(-4)}`,
-        //     data: { "network": orderStausUpdate?.fromChain || "", "txHash": orderStausUpdate?.txHash || "" },
+        //     title: `Received: ${orderStatusUpdate?.amountOut} ${orderStatusUpdate?.toToken}`,
+        //     body: `From ${orderStatusUpdate?.walletAddress?.slice(0, 4)}.....${orderStatusUpdate?.walletAddress?.slice(-4)}`,
+        //     data: { "network": orderStatusUpdate?.fromChain || "", "txHash": orderStatusUpdate?.txHash || "" },
         //   },
         // );
       }
       return response.data;
     } catch (error) {
       this.logger.error(error);
-      const message = error.response?.data?.description || error.response?.data || 'unable to get order status';
+      const message =
+        error.response?.data?.description ||
+        error.response?.data ||
+        'unable to get order status';
       throw new BadRequestException(message);
     }
   }
@@ -499,8 +743,7 @@ export class InchService implements OnModuleInit {
       );
       return true;
     } catch (error) {
-      throw new BadRequestException("unable to send notification");
+      throw new BadRequestException('unable to send notification');
     }
   }
-
 }

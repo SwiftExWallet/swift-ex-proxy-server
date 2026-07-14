@@ -95,6 +95,10 @@ export class SwapOrderService {
     return await this.swapOrderRepository.findPendingByProviderSince(provider, since);
   }
 
+  async findByProviderAndStatusesSince(provider: swapProvider, statuses: SwapOrderStatus[], since: Date): Promise<DbResult<SwapOrders[]>> {
+    return await this.swapOrderRepository.findByProviderAndStatusesSince(provider, statuses, since);
+  }
+
   async getBridgeTxStatus(bridgeTxStatusDto:any) {
     const { provider, walletType, txHash, } = bridgeTxStatusDto;
     try {
