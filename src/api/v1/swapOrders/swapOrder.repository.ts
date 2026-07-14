@@ -79,6 +79,22 @@ export class SwapOrderRepository {
     }
   }
 
+  async findPendingByProviderSince(
+    provider: swapProvider,
+    since: Date,
+  ): Promise<DbResult<SwapOrders[]>> {
+    try {
+      const data = await this.model
+        .find({ provider, status: SwapOrderStatus.PENDING, createdAt: { $gte: since } })
+        .lean()
+        .exec();
+      return { ok: true, data };
+    } catch (err) {
+      this.logger.error('findPendingByProviderSince failed', { provider, since, err });
+      return { ok: false, error: 'findPendingByProviderSince failed' };
+    }
+  }
+
   async updateStatus(
     txHash: string,
     status: SwapOrderStatus,

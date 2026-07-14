@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { SwapQuoteDto } from '../dto/swapQuote';
 import { ChainId, swapProvider } from '../../common/enums/chain.enum';
 import { SwapOrderStatus as OrderStatus, SwapOrderStatus } from '../../common/enums/order.enum';
@@ -26,10 +27,24 @@ interface RedisOrderSecretState {
   submittedIdx: number[];
 }
 
+const SECRET_POLL_INTERVAL_MS = 10_000;
+const SECRET_POLL_RETRY_STEP_MS = 5_000;
+const SECRET_POLL_MAX_RETRY_DELAY_MS = 5 * 60 * 1000;
+const PENDING_RECOVERY_WINDOW_MS = 2 * 60 * 60 * 1000;
+
+const TERMINAL_ORDER_STATUSES: ReadonlySet<SDKOrderStatus> = new Set([
+  SDKOrderStatus.Executed,
+  SDKOrderStatus.Expired,
+  SDKOrderStatus.Cancelled,
+  SDKOrderStatus.Refunded,
+]);
+
 @Injectable()
-export class InchService {
+export class InchService implements OnModuleInit {
   private readonly logger = new Logger(InchService.name);
   private readonly sdk: SDK;
+  private readonly activeSecretPollers = new Map<string, NodeJS.Timeout>();
+  private isRecoveringPendingOrders = false;
 
   constructor(
     private readonly swapOrderService: SwapOrderService,
@@ -42,7 +57,11 @@ export class InchService {
       authKey: process.env.INCH_API_KEY,
     });
   }
-  
+
+  async onModuleInit(): Promise<void> {
+    await this.recoverPendingFusionPlusOrders();
+  }
+
   private async getSecretState(key: string): Promise<{ secrets: string[]; secretHashes: string[]; hashLock: any; submittedIdx: Set<number> } | null> {
     const rawStr = await this.redisService.getKey(`fusion_secrets:${key}`);
     if (!rawStr) return null;
@@ -228,17 +247,38 @@ export class InchService {
   }
 
 
-  private startSecretRevealPoller(orderHash: string): void {
-    const POLL_INTERVAL_MS = 10_000;
+  private stopSecretRevealPoller(orderHash: string): void {
+    const timeout = this.activeSecretPollers.get(orderHash);
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+    this.activeSecretPollers.delete(orderHash);
+  }
 
-    const intervalId = setInterval(async () => {
+  private startSecretRevealPoller(orderHash: string): void {
+    if (this.activeSecretPollers.has(orderHash)) {
+      return;
+    }
+
+    let retryDelayMs = SECRET_POLL_INTERVAL_MS;
+
+    const schedule = (delayMs: number): void => {
+      const timeout = setTimeout(() => void tick(), delayMs);
+      this.activeSecretPollers.set(orderHash, timeout);
+    };
+
+    const tick = async (): Promise<void> => {
       const secretState = await this.getSecretState(orderHash);
       if (!secretState) {
-        clearInterval(intervalId);
+        this.stopSecretRevealPoller(orderHash);
         return;
       }
 
       try {
+        const { status } = await this.sdk.getOrderStatus(orderHash);
+
+        // Not yet terminal (covers Refunding / Pending): keep revealing secrets and keep polling.
+        if (!TERMINAL_ORDER_STATUSES.has(status)) {
         const data = await this.sdk.getReadyToAcceptSecretFills(orderHash);
         let stateUpdated = false;
         for (const { idx } of data.fills) {
@@ -262,11 +302,23 @@ export class InchService {
           await this.setSecretState(orderHash, secretState);
         }
 
-        const { status } = await this.sdk.getOrderStatus(orderHash);
+          retryDelayMs = SECRET_POLL_INTERVAL_MS;
+          schedule(retryDelayMs);
+          return;
+        }
 
-        if (status === SDKOrderStatus.Executed || status === SDKOrderStatus.Expired || status === SDKOrderStatus.Refunded) {
-          const orderStausUpdate=await this.swapOrderService.updateOrderByHash({txHash:orderHash,orderStatus:SwapOrderStatus[status.toUpperCase()]});
-          this.logger.log(`[${orderHash}] Order terminal reached: ${status}. Cleaning Redis state.`,"DB status:",orderStausUpdate);
+        // Terminal state (Executed / Expired / Cancelled / Refunded): clear the polling interval.
+        const allSecretsFilled =
+          secretState.secrets.length > 0 &&
+          secretState.submittedIdx.size === secretState.secrets.length;
+
+        const resolvedStatus =
+          status === SDKOrderStatus.Executed && allSecretsFilled
+            ? SwapOrderStatus.COMPLETED
+            : SwapOrderStatus[status.toUpperCase()];
+
+        const orderStausUpdate = await this.swapOrderService.updateOrderByHash({ txHash: orderHash, orderStatus: resolvedStatus });
+          this.logger.log(`[${orderHash}] Order terminal reached: ${status}. Cleaning Redis state.`, "DB status:", orderStausUpdate);
           await this.firebaseNotificationService.sendNotification(
             orderStausUpdate?.deviceFcmToken as string,
             {
@@ -276,14 +328,56 @@ export class InchService {
             },
           );
           await this.delSecretState(orderHash);
-          clearInterval(intervalId);
-          return;
+        this.stopSecretRevealPoller(orderHash);
+      } catch (err) {
+        retryDelayMs = Math.min(retryDelayMs + SECRET_POLL_RETRY_STEP_MS, SECRET_POLL_MAX_RETRY_DELAY_MS);
+        this.logger.error(`[${orderHash}] Poller error (will retry in ${retryDelayMs}ms):`, err?.message ?? err);
+        schedule(retryDelayMs);
+      }
+    };
+
+    schedule(retryDelayMs);
+  }
+
+  @Cron('*/2 * * * *', { name: 'fusion-plus-pending-recovery' })
+  async recoverPendingFusionPlusOrders(): Promise<void> {
+    if (this.isRecoveringPendingOrders) {
+      return;
+    }
+
+    this.isRecoveringPendingOrders = true;
+    try {
+      const since = new Date(Date.now() - PENDING_RECOVERY_WINDOW_MS);
+      const result = await this.swapOrderService.findPendingByProviderSince(swapProvider.ONEINCH_FUSION_PLUS, since);
+      if (!result.ok) {
+        this.logger.error(`fusion+ pending recovery fetch failed: ${result.error}`);
+        return;
+      }
+
+      const { data: pending } = result;
+      if (!pending.length) {
+        return;
+      }
+
+      this.logger.log(`fusion+ pending recovery: found ${pending.length} pending order(s) created since ${since.toISOString()}`);
+
+      for (const order of pending) {
+        if (this.activeSecretPollers.has(order.txHash)) {
+          continue;
         }
 
-      } catch (err) {
-        this.logger.error(`[${orderHash}] Poller error (will retry):`, err?.message ?? err);
+        const secretState = await this.getSecretState(order.txHash);
+        if (!secretState) {
+          this.logger.warn(`[${order.txHash}] pending fusion+ order has no secret state in redis, skipping recovery`);
+          continue;
+        }
+
+        this.logger.log(`[${order.txHash}] resuming secret reveal polling`);
+        this.startSecretRevealPoller(order.txHash);
       }
-    }, POLL_INTERVAL_MS);
+    } finally {
+      this.isRecoveringPendingOrders = false;
+    }
   }
 
   async cancelOrder(cancelFusionOrderDto: CancelFusionOrderDto) {
