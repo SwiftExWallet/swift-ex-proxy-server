@@ -3,6 +3,8 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { bigintJsonSerializerMiddleware } from './api/v1/common/middleware/bigintJsonSerializer.middleware';
 import { json, urlencoded } from 'express';
+import helmet from 'helmet';
+import { createCorsOptions } from './api/v1/common/config/cors.config';
 
 const DEFAULT_API_BODY_LIMIT = '512kb';
 const DEFAULT_WEBHOOK_BODY_LIMIT = '128kb';
@@ -29,10 +31,9 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+  app.use(helmet());
   app.use(bigintJsonSerializerMiddleware);
-  app.enableCors({
-    origin: '*',
-  });
+  app.enableCors(createCorsOptions());
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
