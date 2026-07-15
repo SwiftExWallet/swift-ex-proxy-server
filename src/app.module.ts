@@ -23,20 +23,35 @@ import { RateLimitGuard } from './api/v1/common/guard/rate-limit.guard';
 import { QuoterModule } from './api/v1/uniswap/quoter/quoter.module';
 import { SwapOrdersModule } from './api/v1/swapOrders/swapOrders.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { getMongoConnectionConfig } from './api/v1/common/config/datastore.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    MongooseModule.forRoot(process.env.MONGODB_CONN_STRING as any, {
-      dbName: process.env.DB_NAME,
+    MongooseModule.forRootAsync({
+      useFactory: () => {
+        const mongoConfig = getMongoConnectionConfig();
+        return {
+          uri: mongoConfig.uri,
+          ...mongoConfig.options,
+        };
+      },
     }),
     JwtModule.register({
       global: true,
       secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: '7d' },
-      verifyOptions: { ignoreExpiration: false },
+      signOptions: {
+        expiresIn: '7d',
+        issuer: process.env.JWT_ISSUER || undefined,
+        audience: process.env.JWT_AUDIENCE || undefined,
+      },
+      verifyOptions: {
+        ignoreExpiration: false,
+        issuer: process.env.JWT_ISSUER || undefined,
+        audience: process.env.JWT_AUDIENCE || undefined,
+      },
     }),
     ScheduleModule.forRoot(),
     EthModule,

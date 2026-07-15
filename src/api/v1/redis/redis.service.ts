@@ -5,29 +5,34 @@ import {
   Logger,
 } from '@nestjs/common';
 import Redis from 'ioredis';
+import { createRedisClient } from '../common/config/datastore.config';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
 
-  private client: Redis;
+  private client: Redis | null = null;
 
-  onModuleInit() {
-    this.client = new Redis({
-      host: process.env.REDIS_HOST,
-      port: 6379, // default Redis port
-      password: process.env.REDIS_PWD,
-    });
-    this.checkConnection();
+  async onModuleInit() {
+    this.client = createRedisClient();
+    await this.checkConnection();
   }
 
   onModuleDestroy() {
-    this.client.quit();
+    this.client?.quit();
+  }
+
+  private getClient(): Redis {
+    if (!this.client) {
+      throw new Error('Redis client is not initialized');
+    }
+
+    return this.client;
   }
 
   async checkConnection() {
     try {
-      const pong = await this.client.ping();
+      const pong = await this.getClient().ping();
       console.log('Redis PING response:', pong); // should log "PONG"
       return pong;
     } catch (err) {
@@ -38,19 +43,19 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async setKey(key: string, value: string, ttlSeconds?: number): Promise<void> {
     if (ttlSeconds) {
-      await this.client.set(key, value, 'EX', process.env.REDIS_TTL || 1800);
+      await this.getClient().set(key, value, 'EX', ttlSeconds);
       this.logger.log('=== redis key set with ttl ===');
     } else {
-      await this.client.set(key, value);
+      await this.getClient().set(key, value);
       this.logger.log('=== redis key set without ttl ===');
     }
   }
 
   async getKey(key: string): Promise<string | null> {
-    return await this.client.get(key);
+    return await this.getClient().get(key);
   }
 
   async delKey(key: string): Promise<void> {
-    await this.client.del(key);
+    await this.getClient().del(key);
   }
 }

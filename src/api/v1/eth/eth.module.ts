@@ -5,10 +5,11 @@ import { UsdtController } from './usdt.controller';
 import { ProviderModule } from '../provider/provider.module';
 import { UniSwapService } from './uniSwap/eth.uniswap.service';
 import { EthTestnetSwapService } from './eth.testnet.service';
+import { TokenMetadataService } from '../common/services/tokenMetadata.service';
 
 @Module({
   imports: [ProviderModule],
-  providers: [EthService,UniSwapService,EthTestnetSwapService],
+  providers: [EthService,UniSwapService,EthTestnetSwapService,TokenMetadataService],
   controllers: [EthController, UsdtController],
 })
 export class EthModule {}

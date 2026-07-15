@@ -16,7 +16,7 @@ import {
   RATE_LIMIT_KEY,
   RateLimitConfig,
 } from '../decorators/rate-limit.decorator';
-import Redis from 'ioredis';
+import { createRedisClient } from '../config/datastore.config';
 
 function createLimiter(
   points: number,
@@ -27,10 +27,7 @@ function createLimiter(
     return new RateLimiterMemory({ points, duration });
   }
 
-  const redisClient = new Redis({
-    host: process.env.REDIS_HOST,
-    port: Number(process.env.REDIS_PORT),
-    password: process.env.REDIS_PWD,//remove in server
+  const redisClient = createRedisClient({
     enableOfflineQueue: false,
   });
 
@@ -42,7 +39,7 @@ function createLimiter(
   });
 }
 
-const routeLimiters = new Map<string, RateLimiterMemory>();
+const routeLimiters = new Map<string, RateLimiterAbstract>();
 
 @Injectable()
 export class RateLimitGuard implements CanActivate {

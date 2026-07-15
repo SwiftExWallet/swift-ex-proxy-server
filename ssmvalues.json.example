@@ -1,13 +1,48 @@
 {
+  "MONGODB_CONN_STRING": {
+    "value": "mongodb+srv://swiftx-api:password@cluster.example.mongodb.net",
+    "type": "SecureString",
+    "description": "MongoDB connection string using TLS and a least-privilege application user"
+  },
+  "DB_NAME": {
+    "value": "swiftx",
+    "type": "String",
+    "description": "MongoDB database name"
+  },
+  "MONGO_TLS": {
+    "value": "true",
+    "type": "String",
+    "description": "Require TLS for MongoDB connections"
+  },
+  "MONGO_SERVER_SELECTION_TIMEOUT_MS": {
+    "value": "5000",
+    "type": "String",
+    "description": "MongoDB server selection timeout in milliseconds"
+  },
   "REDIS_HOST": {
     "value": "your-redis-host",
     "type": "String",
     "description": "Redis server hostname or IP address"
   },
+  "REDIS_PORT": {
+    "value": "6379",
+    "type": "String",
+    "description": "Redis server port"
+  },
+  "REDIS_USERNAME": {
+    "value": "swiftx-api",
+    "type": "String",
+    "description": "Redis ACL username with least-privilege commands"
+  },
   "REDIS_PWD": {
     "value": "your-redis-password",
     "type": "SecureString",
     "description": "Redis server password (encrypted)"
+  },
+  "REDIS_TLS": {
+    "value": "true",
+    "type": "String",
+    "description": "Require TLS for Redis connections"
   },
   "PROVIDER_RPC_ETH": {
     "value": "https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY",
@@ -28,6 +63,15 @@
     "value": "7d",
     "type": "String",
     "description": "JWT token expiration time"
+  },
+  "API_BODY_LIMIT": {
+    "value": "512kb",
+    "type": "String",
+    "description": "Maximum JSON/urlencoded request body size for general API routes"
+  },
+  "WEBHOOK_BODY_LIMIT": {
+    "value": "128kb",
+    "type": "String",
+    "description": "Maximum JSON/urlencoded request body size for webhook routes"
   }
 }
-

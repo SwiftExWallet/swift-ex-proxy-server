@@ -1,4 +1,12 @@
-import { IsEnum, IsNotEmpty, IsOptional, Matches, ValidateNested } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsNumberString,
+  IsOptional,
+  IsString,
+  Matches,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ChainId } from '../enums/chain.enum';
 
@@ -9,7 +17,10 @@ export class TokenInfoDto {
   )
   address: string;
 
+  // TODO(next build): remove client-supplied symbol/decimals from the public DTO.
+  // The server resolves and overwrites both values before quoting.
   @IsNotEmpty()
+  @IsString()
   symbol: string;
 
   @IsNotEmpty()
@@ -17,6 +28,7 @@ export class TokenInfoDto {
   chainId: number;
 
   @IsNotEmpty()
+  @IsNumberString()
   decimals: string;
 }
 

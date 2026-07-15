@@ -7,15 +7,19 @@ import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto'
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 import { UsdtBalanceDto } from './dto/usdtBalance.dto';
+import { TokenMetadataService } from '../common/services/tokenMetadata.service';
 
 @Controller('/api/v1/bsc')
 export class BscController {
   constructor(
-    private readonly bscService: BscService
+    private readonly bscService: BscService,
+    private readonly tokenMetadataService: TokenMetadataService,
   ) {}
   @Post('swap-quote')
   async getSwapQuote(@Res() res, @Body() swapQuoteDto: SwapQuoteDto) {
-    const data = await this.bscService.getSwapQuote(swapQuoteDto)
+    const normalizedDto =
+      await this.tokenMetadataService.normalizeSwapQuote(swapQuoteDto);
+    const data = await this.bscService.getSwapQuote(normalizedDto)
     res.status(200).json(data);
   }
 
@@ -35,8 +39,12 @@ export class BscController {
     @Res() res,
     @Body() prepareSwapTransactionDto: SwapQuoteDto,
   ) {
+    const normalizedDto =
+      await this.tokenMetadataService.normalizeSwapQuote(
+        prepareSwapTransactionDto,
+      );
     const data = await this.bscService.prepareSwapTransaction(
-      prepareSwapTransactionDto,
+      normalizedDto,
     );
     res.status(200).json(data);
   }

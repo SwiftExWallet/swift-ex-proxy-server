@@ -3,6 +3,7 @@ import { NotificationDto } from '../notification/dto/notification.dto';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';
 import { DeviceService } from '../device/device.service';
 import mongoose from 'mongoose';
+import { BanxaWebhookDto } from './dto/banxaWebhook.dto';
 
 type OrderNotification = {
     title: string
@@ -26,7 +27,7 @@ export class BanxaWebhookService {
         private readonly deviceService: DeviceService,
     ) { }
 
-    async handleWebHook(dto: any): Promise<void> {
+    async handleWebHook(dto: BanxaWebhookDto): Promise<void> {
         try {
             this.logger.debug("banxa webhook", dto);
             const currentDevice = await this.deviceService.findOne(dto.external_id as unknown as mongoose.Schema.Types.ObjectId);

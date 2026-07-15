@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -76,13 +77,19 @@ export class WebhookService {
 
   async handleWebhookMoralis(payload: WebhookMoralisDto) {
     try {
-      const { erc20Transfers, erc20Approvals, txs } = payload;
+      const erc20Transfers = payload.erc20Transfers ?? [];
+      const erc20Approvals = payload.erc20Approvals ?? [];
+      const txs = payload.txs ?? [];
       this.logger.log('==== WebhookReceived: handleWebhookMoralis ===', {
         payload,
       });
 
       if (payload.isTestPayload()) {
         return { status: 'ok', message: 'Test payload skipped' };
+      }
+
+      if (!payload.tag) {
+        throw new BadRequestException('Moralis webhook tag is required');
       }
 
       const { decryptedToken } = this.decryptToken(payload.tag);

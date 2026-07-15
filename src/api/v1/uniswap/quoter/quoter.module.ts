@@ -8,12 +8,13 @@ import { SwapProviderResolver } from './dto/swap-provider.resolver';
 import { SwapOrdersModule } from '../../swapOrders/swapOrders.module';
 import { RedisModule } from '../../redis/redis.module';
 import { NotificationModule } from '../../notification/notification.module';
+import { TokenMetadataService } from '../../common/services/tokenMetadata.service';
 
 
 @Module({
   imports: [SwapOrdersModule,RedisModule,NotificationModule],
   controllers: [QuoterController],
-  providers: [QuoterService,ProviderService,InchService,RangoService,SwapProviderResolver],
+  providers: [QuoterService,ProviderService,InchService,RangoService,SwapProviderResolver,TokenMetadataService],
   exports: [QuoterService],
 })
 export class QuoterModule { }

@@ -13,6 +13,7 @@ import { AlchemyOffRampWebhookDto } from './dto/alchemyOffRampWebhook.dto';
 import { AlchemyWebhookService } from './alchemyWebhook.service';
 import { WebhookStellarDto } from './dto/stellarWebhook.dto';
 import { BanxaWebhookService } from './banxaWebhook.service';
+import { BanxaWebhookDto } from './dto/banxaWebhook.dto';
 
 @Controller('/api/v1/webhook')
 export class WebhookController {
@@ -52,7 +53,7 @@ export class WebhookController {
 
   @Post('banxa')
   @HttpCode(200)
-  async handleBanxaRamp(@Body() body: any) {
+  async handleBanxaRamp(@Body() body: BanxaWebhookDto) {
     await this.banxaWebhookService.handleWebHook(body);
     return { status: 'ok', message: 'banxa webhook received.' };
   }

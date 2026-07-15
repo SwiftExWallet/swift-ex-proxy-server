@@ -1,21 +1,25 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { AlphaRouter, SwapType } from '@uniswap/smart-order-router';
-import { Token, CurrencyAmount, TradeType, Ether, Percent, } from '@uniswap/sdk-core';
+import {
+  Token,
+  CurrencyAmount,
+  TradeType,
+  Ether,
+  Percent,
+} from '@uniswap/sdk-core';
 import { ethers, parseUnits, TransactionRequest, ZeroAddress } from 'ethers';
 import { JsonRpcProvider } from '@ethersproject/providers';
 import { ProviderService } from '../../provider/provider.service';
-import { CHAIN_CONFIGS } from './constants/quoter.chain.config';
 import { SwapQuoteDto, TokenInfoDto } from '../../common/dto/swapQuote.dto';
 import { SwapQuote } from '../../common/interface/swap.interface';
 import { ChainEnum, ChainId } from '../../common/enums/chain.enum';
 
-
 @Injectable()
 export class QuoterService {
   private readonly logger = new Logger(QuoterService.name);
-  constructor(private readonly rpcService: ProviderService) { }
+  constructor(private readonly rpcService: ProviderService) {}
 
-  private isZeroAddress(value: string,): boolean {
+  private isZeroAddress(value: string): boolean {
     const list = [
       '0X0000000000000000000000000000000000000000',
       '0XEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE',
@@ -25,9 +29,7 @@ export class QuoterService {
       'POL',
       'AVAX',
     ];
-    return list.includes(
-      value.toUpperCase(),
-    );
+    return list.includes(value.toUpperCase());
   }
 
   private buildToken(token: TokenInfoDto, chainId: number) {
@@ -44,35 +46,55 @@ export class QuoterService {
     );
   }
 
-
-  async getQuote(swapQuote: SwapQuoteDto, internalCall: Boolean = false): Promise<SwapQuote | any> {
+  async getQuote(
+    swapQuote: SwapQuoteDto,
+    internalCall: Boolean = false,
+  ): Promise<SwapQuote | any> {
     try {
       const { tokenIn, tokenOut, amount, recipient } = swapQuote;
-      const provider = new JsonRpcProvider(this.rpcService.getChainRpcUrl(ChainEnum[ChainId[tokenIn.chainId]]));
-      const router = new AlphaRouter({ chainId: tokenIn.chainId, provider: provider as any });
+      const provider = new JsonRpcProvider(
+        this.rpcService.getChainRpcUrl(ChainEnum[ChainId[tokenIn.chainId]]),
+      );
+      const router = new AlphaRouter({
+        chainId: tokenIn.chainId,
+        provider: provider as any,
+      });
       const isNativeIn = tokenIn.address === ZeroAddress;
       const isNativeOut = tokenOut.address === ZeroAddress;
-      const tokenInput = isNativeIn ? Ether.onChain(tokenIn.chainId) : this.buildToken(tokenIn, tokenIn.chainId);
-      const tokenOutput = isNativeOut ? Ether.onChain(tokenOut.chainId) : this.buildToken(tokenOut, tokenOut.chainId);
+      const tokenInput = isNativeIn
+        ? Ether.onChain(tokenIn.chainId)
+        : this.buildToken(tokenIn, tokenIn.chainId);
+      const tokenOutput = isNativeOut
+        ? Ether.onChain(tokenOut.chainId)
+        : this.buildToken(tokenOut, tokenOut.chainId);
       const rawAmount = parseUnits(amount, tokenIn.decimals);
-      const amountIn = CurrencyAmount.fromRawAmount(tokenInput, rawAmount.toString());
+      const amountIn = CurrencyAmount.fromRawAmount(
+        tokenInput,
+        rawAmount.toString(),
+      );
       const route = await router.route(
         amountIn,
         tokenOutput,
-        TradeType.EXACT_INPUT, {
-        recipient: recipient,
-        slippageTolerance: new Percent('50', '10000'), // 0.5%
-        deadline: Math.floor(Date.now() / 1000) + 1800,
-        type: SwapType.SWAP_ROUTER_02,
-      });
+        TradeType.EXACT_INPUT,
+        {
+          recipient: recipient,
+          slippageTolerance: new Percent('50', '10000'), // 0.5%
+          deadline: Math.floor(Date.now() / 1000) + 1800,
+          type: SwapType.SWAP_ROUTER_02,
+        },
+      );
       if (!route) {
         this.logger.error('No route found');
-        throw new BadRequestException('No route found',);
+        throw new BadRequestException('No route found');
       }
       const outputSwapAmt = route.quote.toExact();
       const slippage = 0.5;
-      const minimumReceived = (Number(outputSwapAmt) * (1 - slippage)).toFixed(Number(tokenOut.decimals),);
-      const gasCostWei = BigInt(route.estimatedGasUsed.toString()) * BigInt(route.gasPriceWei.toString());
+      const minimumReceived = (Number(outputSwapAmt) * (1 - slippage)).toFixed(
+        Number(tokenOut.decimals),
+      );
+      const gasCostWei =
+        BigInt(route.estimatedGasUsed.toString()) *
+        BigInt(route.gasPriceWei.toString());
       const networkFee = ethers.formatEther(gasCostWei);
       const tokenPath = route.route[0].tokenPath.map((t) => t.symbol);
       const isMultiHop = tokenPath.length > 2;
@@ -80,25 +102,30 @@ export class QuoterService {
       const firstRoute: any = route.route[0];
       try {
         fee = firstRoute.pools?.[0]?.fee?.toString() || 'N/A';
-      } catch { }
-      return internalCall ? route : {
-        inputAmount: amount,
-        inputToken: tokenIn.symbol,
-        outputAmount: outputSwapAmt,
-        outputToken: tokenOut.symbol,
-        pricePerToken: (Number(outputSwapAmt) / Number(amount)).toString(),
-        fee: fee,
-        isMultiHop: isMultiHop,
-        minimumReceived: minimumReceived,
-        networkFee: Number(networkFee),
-      };
+      } catch {}
+      return internalCall
+        ? route
+        : {
+            inputAmount: amount,
+            inputToken: tokenIn.symbol,
+            outputAmount: outputSwapAmt,
+            outputToken: tokenOut.symbol,
+            pricePerToken: (Number(outputSwapAmt) / Number(amount)).toString(),
+            fee: fee,
+            isMultiHop: isMultiHop,
+            minimumReceived: minimumReceived,
+            networkFee: Number(networkFee),
+          };
     } catch (e) {
-      this.logger.error("error", e);
+      this.logger.error('error', e);
       throw new BadRequestException(e.message);
     }
   }
 
-  async buildSwapTx(swapQuote: SwapQuoteDto, slippageBps = 100): Promise<TransactionRequest[]> {
+  async buildSwapTx(
+    swapQuote: SwapQuoteDto,
+    slippageBps = 100,
+  ): Promise<TransactionRequest[]> {
     try {
       const { tokenIn, recipient } = swapQuote;
       const txs: TransactionRequest[] = [];
@@ -106,17 +133,24 @@ export class QuoterService {
       if (!route || !route.methodParameters) {
         throw new BadRequestException('Failed build tx');
       }
-      const provider = new JsonRpcProvider(this.rpcService.getChainRpcUrl(ChainEnum[ChainId[tokenIn.chainId]]));
+      const provider = new JsonRpcProvider(
+        this.rpcService.getChainRpcUrl(ChainEnum[ChainId[tokenIn.chainId]]),
+      );
       const nonce = await provider.getTransactionCount(recipient, 'pending');
       const feeData = await provider.getFeeData();
       const isNativeIn = this.isZeroAddress(tokenIn.address);
-      const erc20Interface = new ethers.Interface(['function approve(address spender,uint256 amount)',]);
+      const erc20Interface = new ethers.Interface([
+        'function approve(address spender,uint256 amount)',
+      ]);
       //  APPROVE TX
       if (!isNativeIn) {
         txs.push({
           to: tokenIn.address,
           from: recipient,
-          data: erc20Interface.encodeFunctionData('approve', [route.methodParameters.to, ethers.MaxUint256,]),
+          data: erc20Interface.encodeFunctionData('approve', [
+            route.methodParameters.to,
+            ethers.MaxUint256,
+          ]),
           nonce: nonce,
           chainId: tokenIn.chainId,
           type: 2,
@@ -140,9 +174,7 @@ export class QuoterService {
       });
       return txs;
     } catch (error) {
-      throw new BadRequestException(
-        error.message,
-      );
+      throw new BadRequestException(error.message);
     }
   }
 }

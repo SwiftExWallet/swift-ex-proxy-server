@@ -1,23 +1,131 @@
+import { Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+
+const MAX_MORALIS_ARRAY_SIZE = 100;
+const MAX_MORALIS_STRING_LENGTH = 256;
+
+class MoralisBlockDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_MORALIS_STRING_LENGTH)
+  number?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_MORALIS_STRING_LENGTH)
+  hash?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_MORALIS_STRING_LENGTH)
+  timestamp?: string;
+}
+
+class MoralisNftApprovalsDto {
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_MORALIS_ARRAY_SIZE)
+  ERC721?: any[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_MORALIS_ARRAY_SIZE)
+  ERC1155?: any[];
+}
+
 export class WebhookMoralisDto {
-  abi: any[];
-  block: { number: string; hash: string; timestamp: string };
-  txs: any[];
-  txsInternal: any[];
-  logs: any[];
-  chainId: string;
-  confirmed: boolean;
-  retries: number;
-  tag: string;
-  streamId: string;
-  erc20Approvals: any[];
-  erc20Transfers: any[];
-  nftTokenApprovals: any[];
-  nftApprovals: {
-    ERC721: any[];
-    ERC1155: any[];
-  };
-  nftTransfers: any[];
-  nativeBalances: any[];
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_MORALIS_ARRAY_SIZE)
+  abi?: any[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => MoralisBlockDto)
+  block?: MoralisBlockDto;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_MORALIS_ARRAY_SIZE)
+  txs?: any[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_MORALIS_ARRAY_SIZE)
+  txsInternal?: any[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_MORALIS_ARRAY_SIZE)
+  logs?: any[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_MORALIS_STRING_LENGTH)
+  chainId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  confirmed?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  retries?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_MORALIS_STRING_LENGTH)
+  tag?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_MORALIS_STRING_LENGTH)
+  streamId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_MORALIS_ARRAY_SIZE)
+  erc20Approvals?: any[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_MORALIS_ARRAY_SIZE)
+  erc20Transfers?: any[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_MORALIS_ARRAY_SIZE)
+  nftTokenApprovals?: any[];
+
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => MoralisNftApprovalsDto)
+  nftApprovals?: MoralisNftApprovalsDto;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_MORALIS_ARRAY_SIZE)
+  nftTransfers?: any[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MAX_MORALIS_ARRAY_SIZE)
+  nativeBalances?: any[];
 
   isTestPayload(): boolean {
     if (Object.keys(this).length === 0) {
