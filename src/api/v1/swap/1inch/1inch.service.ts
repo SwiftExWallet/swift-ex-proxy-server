@@ -37,7 +37,7 @@ interface RedisOrderSecretState {
 }
 
 const SECRET_POLL_INTERVAL_MS = 10_000;
-const SECRET_POLL_RETRY_STEP_MS = 5_000;
+const SECRET_POLL_RETRY_STEP_MS = 10_000;
 const SECRET_POLL_MAX_RETRY_DELAY_MS = 5 * 60 * 1000;
 const SECRET_POLL_MAX_RESCHEDULES = 5;
 const PENDING_RECOVERY_WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -476,6 +476,7 @@ export class InchService implements OnModuleInit {
         if (SECRET_SUBMIT_ORDER_STATUSES.has(status)) {
           const data = await this.sdk.getReadyToAcceptSecretFills(orderHash);
           let stateUpdated = false;
+          this.logger.debug("fills length: ", data?.fills?.length || 0)
           for (const { idx } of data.fills) {
             if (secretState.submittedIdx.has(idx)) {
               continue;
