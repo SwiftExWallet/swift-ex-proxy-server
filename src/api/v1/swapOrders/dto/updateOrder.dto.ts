@@ -3,6 +3,7 @@ import { } from '../schema/swapOrder.schema';
 import { SwapNetwork, swapProvider } from '../../common/enums/chain.enum';
 import { SwapOrderStatus as OrderStatus, OrderTxType } from '../../common/enums/order.enum';
 import { ValidWalletType } from '../../common/enums/all-bridge.enum';
+import { PaginationDto } from './pagination.dto';
 
 export class StoreSwapOrderDto {
 
@@ -96,6 +97,14 @@ export class MultiChainWalletAddressDto{
       { message: 'Invalid wallet address format' }
     )
     address: string;
+}
+
+export class OrderByWalletQueryDto extends PaginationDto {
+  @Matches(
+    /^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$|^[A-Z0-9]{1,12}-G[A-Z0-9]{55}$/,
+    { message: 'Invalid wallet address format' },
+  )
+  address: string;
 }
 
 export class BridgeTxStatusDto{

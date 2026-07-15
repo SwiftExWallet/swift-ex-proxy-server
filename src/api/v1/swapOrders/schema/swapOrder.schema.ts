@@ -93,3 +93,5 @@ export class SwapOrders {
 }
 
 export const SwapOrderSchema = SchemaFactory.createForClass(SwapOrders);
+SwapOrderSchema.index({ deviceId: 1, walletAddress: 1 });
+SwapOrderSchema.index({ walletAddress: 1, createdAt: -1 });

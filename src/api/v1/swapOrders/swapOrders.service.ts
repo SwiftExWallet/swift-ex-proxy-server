@@ -4,6 +4,7 @@ import {
   ConflictException,
   InternalServerErrorException,
   BadRequestException,
+  ForbiddenException,
   Inject,
   forwardRef,
 } from '@nestjs/common';
@@ -11,7 +12,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SwapOrders } from './schema/swapOrder.schema';
 import { SwapOrderStatus } from '../common/enums/order.enum';
-import { BridgeTxStatusDto, MultiChainWalletAddressDto, StoreSwapOrderDto, UpdateTxStatusDto } from './dto/updateOrder.dto';
+import { BridgeTxStatusDto, MultiChainWalletAddressDto, OrderByWalletQueryDto, StoreSwapOrderDto, UpdateTxStatusDto } from './dto/updateOrder.dto';
 import { DbResult, SwapOrderRepository } from './swapOrder.repository';
 import { AllbridgeCoreSdk, ChainSymbol, nodeRpcUrlsDefault } from '@allbridge/bridge-core-sdk';
 import { PaginatedResult, PaginationDto } from './dto/pagination.dto';
@@ -83,6 +84,15 @@ export class SwapOrderService {
     return await this.swapOrderRepository.findByTxHash(txHash);
   }
 
+  async findByTxHashForWallet(txHash: string, walletAddress: string): Promise<DbResult<SwapOrders | null>>  {
+    return await this.swapOrderRepository.findByTxHashForWallet(txHash, walletAddress);
+  }
+
+  async findOrderByHashForDeviceWallet(deviceId: string, txHash: string, walletAddress: string): Promise<DbResult<SwapOrders | null>>  {
+    await this.assertWalletBelongsToDevice(deviceId, walletAddress);
+    return await this.swapOrderRepository.findByTxHashForWallet(txHash, walletAddress);
+  }
+
   async findByWallet(walletAddress: string): Promise<DbResult<SwapOrders[]>> {
     return await this.swapOrderRepository.findByWallet(walletAddress)
   }
@@ -119,6 +129,23 @@ export class SwapOrderService {
 
     async findByWalletWithPagination(multiChainWalletAddressDto: MultiChainWalletAddressDto,pagination:PaginationDto): Promise<DbResult<PaginatedResult<SwapOrders>>> {
     return await this.swapOrderRepository.findByWalletWithPagination(multiChainWalletAddressDto.address,pagination)
+  }
+
+  async findOrdersForDeviceWallet(deviceId: string, query: OrderByWalletQueryDto): Promise<DbResult<PaginatedResult<SwapOrders>>> {
+    await this.assertWalletBelongsToDevice(deviceId, query.address);
+    return await this.swapOrderRepository.findByWalletWithPagination(query.address, query)
+  }
+
+  private async assertWalletBelongsToDevice(deviceId: string, walletAddress: string): Promise<void> {
+    const walletBelongsToDevice = await this.swapOrderRepository.walletBelongsToDevice(deviceId, walletAddress);
+
+    if (!walletBelongsToDevice.ok) {
+      throw new InternalServerErrorException('Could not verify wallet ownership.');
+    }
+
+    if (!walletBelongsToDevice.data) {
+      throw new ForbiddenException('Wallet address is not associated with this device.');
+    }
   }
 
   async updateOrder(updateTxStatusDto: UpdateTxStatusDto): Promise<DbResult<void>>  {

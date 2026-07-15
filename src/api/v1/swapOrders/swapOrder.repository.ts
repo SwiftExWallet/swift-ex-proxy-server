@@ -11,6 +11,8 @@ export type DbResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string };
 
+const PUBLIC_ORDER_SELECT = '-deviceId -deviceFcmToken';
+
 @Injectable()
 export class SwapOrderRepository {
   private readonly logger = new Logger(SwapOrderRepository.name);
@@ -50,17 +52,40 @@ export class SwapOrderRepository {
     }
   }
 
+  async findByTxHashForWallet(txHash: string, walletAddress: string): Promise<DbResult<SwapOrders | null>> {
+    try {
+      const data = await this.model
+        .findOne({ txHash, walletAddress })
+        .select(PUBLIC_ORDER_SELECT)
+        .exec();
+      return { ok: true, data };
+    } catch (err) {
+      this.logger.error('findByTxHashForWallet failed', { txHash, walletAddress, err });
+      return { ok: false, error: 'findByTxHashForWallet failed' };
+    }
+  }
+
   async findByWallet(walletAddress: string): Promise<DbResult<SwapOrders[]>> {
     try {
       const data = await this.model
         .find({ walletAddress })
         .sort({ _id: -1 })
-        .select('-deviceId -deviceFcmToken')
+        .select(PUBLIC_ORDER_SELECT)
         .exec();
       return { ok: true, data };
     } catch (err) {
       this.logger.error('findByWallet failed', { walletAddress, err });
       return { ok: false, error: 'findByWallet failed' };
+    }
+  }
+
+  async walletBelongsToDevice(deviceId: string, walletAddress: string): Promise<DbResult<boolean>> {
+    try {
+      const data = await this.model.exists({ deviceId, walletAddress }).exec();
+      return { ok: true, data: Boolean(data) };
+    } catch (err) {
+      this.logger.error('walletBelongsToDevice failed', { deviceId, walletAddress, err });
+      return { ok: false, error: 'walletBelongsToDevice failed' };
     }
   }
 
@@ -153,7 +178,7 @@ export class SwapOrderRepository {
         this.model.countDocuments({ walletAddress }),
         this.model
           .find({ walletAddress })
-          .select('-deviceId -deviceFcmToken')
+          .select(PUBLIC_ORDER_SELECT)
           .sort({ _id: -1 })
           .skip(skip)
           .limit(limit)

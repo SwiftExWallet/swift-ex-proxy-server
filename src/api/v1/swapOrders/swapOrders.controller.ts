@@ -1,7 +1,6 @@
 import { Body, Controller, Get, Param, Post, Put, Query, Req, Res } from '@nestjs/common';
 import { SwapOrderService } from './swapOrders.service';
-import { BridgeTxStatusDto, MultiChainWalletAddressDto, StoreSwapOrderDto, UpdateTxStatusDto } from './dto/updateOrder.dto';
-import { PaginationDto } from './dto/pagination.dto';
+import { BridgeTxStatusDto, MultiChainWalletAddressDto, OrderByWalletQueryDto, StoreSwapOrderDto, UpdateTxStatusDto } from './dto/updateOrder.dto';
 
 @Controller('api/v1/swapOrders')
 export class SwapOrdersController {
@@ -14,8 +13,8 @@ export class SwapOrdersController {
   }
 
   @Get('/orderByWallet')
-  async orderByWallet(@Query() multiChainWalletAddressDto: MultiChainWalletAddressDto,@Query() pagination: PaginationDto) {
-   return await this.swapOrderService.findByWalletWithPagination(multiChainWalletAddressDto,pagination);
+  async orderByWallet(@Req() req: any, @Query() query: OrderByWalletQueryDto) {
+   return await this.swapOrderService.findOrdersForDeviceWallet(req.device._id, query);
   }
 
   @Post('/bridgeOrderStatus')
@@ -29,7 +28,7 @@ export class SwapOrdersController {
   }
 
   @Get('/:orderHash')
-  async getOrderByOrderhash(@Param('orderHash') orderHash: string) {
-    return await this.swapOrderService.findByTxHash(orderHash);
+  async getOrderByOrderhash(@Req() req: any, @Param('orderHash') orderHash: string, @Query() query: MultiChainWalletAddressDto) {
+    return await this.swapOrderService.findOrderByHashForDeviceWallet(req.device._id, orderHash, query.address);
   }
 }
