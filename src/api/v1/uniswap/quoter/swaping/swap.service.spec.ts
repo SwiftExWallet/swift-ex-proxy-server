@@ -15,6 +15,7 @@ import { SwapQuoteDto } from '../../../common/dto/swapQuote.dto';
 import { CHAIN_CONFIGS } from '../constants/quoter.chain.config';
 import { SupportedChain } from '../dto/quoter.dto';
 import { SwapService } from './swap.service';
+import { ProviderErrorCode } from '../../../common/utils/provider-error.util';
 
 describe('SwapService', () => {
   const wallet = '0x3333333333333333333333333333333333333333';
@@ -155,9 +156,12 @@ describe('SwapService', () => {
   it('throws BadRequestException when no fee tier returns a route', async () => {
     quoterStaticCall.mockRejectedValue(new Error('no pool'));
 
-    await expect(service.getQuote(makeDto())).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(service.getQuote(makeDto())).rejects.toMatchObject({
+      response: {
+        code: ProviderErrorCode.RouteNotFound,
+        message: 'No provider route was found for this request.',
+      },
+    });
   });
 
   it('builds one router transaction for native token input', async () => {

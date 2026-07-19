@@ -1,8 +1,11 @@
+import { Logger } from '@nestjs/common';
 import { FustionNativeService } from './1inch.fusion.native.swap.service';
 import {
   decryptFusionSecretState,
   encryptFusionSecretState,
 } from '../../common/utils/encryption.util';
+import { SwapOrderStatus } from '../../common/enums/order.enum';
+import { ProviderErrorCode } from '../../common/utils/provider-error.util';
 
 jest.mock('@1inch/cross-chain-sdk', () => ({
   Address: jest.fn(),
@@ -26,6 +29,7 @@ jest.mock('@1inch/cross-chain-sdk', () => ({
 }));
 
 jest.mock('@1inch/fusion-sdk', () => ({
+  Address: jest.fn(),
   FusionSDK: jest.fn().mockImplementation(() => ({})),
   OrderStatus: {
     Cancelled: 'Cancelled',
@@ -39,29 +43,43 @@ describe('FustionNativeService secret state TTL', () => {
   const encryptionKey = '12345678901234567890123456789012';
   let service: FustionNativeService;
   let redisService: { setKey: jest.Mock; getKey: jest.Mock; delKey: jest.Mock };
+  let swapOrderService: { updateOrderByHash: jest.Mock };
+  let firebaseNotificationService: { sendNotification: jest.Mock };
 
   beforeEach(() => {
     process.env = {
       ...originalEnv,
       FUSION_SECRETS_ENCRYPTION_KEY: encryptionKey,
+      PROVIDER_RETRY_MAX_ATTEMPTS: '1',
+      PROVIDER_RPC_ALLOWED_HOSTS: 'eth-rpc.example',
     };
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     redisService = {
       setKey: jest.fn().mockResolvedValue(undefined),
       getKey: jest.fn(),
       delKey: jest.fn(),
     };
+    swapOrderService = {
+      updateOrderByHash: jest.fn().mockResolvedValue({}),
+    };
+    firebaseNotificationService = {
+      sendNotification: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new FustionNativeService(
       { get: jest.fn() } as any,
       redisService as any,
-      {} as any,
-      {} as any,
+      swapOrderService as any,
+      firebaseNotificationService as any,
     );
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    jest.clearAllMocks();
+    jest.useRealTimers();
+    jest.restoreAllMocks();
   });
 
   it('sets native Fusion secret state with the default TTL', async () => {
@@ -158,5 +176,83 @@ describe('FustionNativeService secret state TTL', () => {
     expect(result.secrets).toEqual(['0xsecret']);
     expect(result.submittedIdx).toEqual(new Set([0]));
     expect(redisService.setKey).not.toHaveBeenCalled();
+  });
+
+  it('exhausts native Fusion monitoring after the configured max schedules', async () => {
+    process.env.FUSION_NATIVE_SECRET_POLL_MAX_SCHEDULES = '2';
+    jest.useFakeTimers();
+    redisService.getKey.mockResolvedValue(
+      encryptFusionSecretState({
+        secrets: [],
+        secretHashes: [],
+        hashLock: null,
+        submittedIdx: [],
+        isCrossChain: false,
+      }),
+    );
+    const fusionSdk = {
+      getOrderStatus: jest.fn().mockResolvedValue({ status: 'Pending' }),
+    };
+    (service as any).fusionSdkMap.set(1, fusionSdk);
+
+    const loop = (service as any).startSecretSubmissionLoop('order-hash', 1);
+
+    await Promise.resolve();
+    await jest.runOnlyPendingTimersAsync();
+    await loop;
+
+    expect(fusionSdk.getOrderStatus).toHaveBeenCalledTimes(2);
+    expect(swapOrderService.updateOrderByHash).toHaveBeenCalledWith({
+      txHash: 'order-hash',
+      orderStatus: SwapOrderStatus.EXHAUSTED,
+    });
+    expect(redisService.delKey).toHaveBeenCalledWith(
+      'fusion_secrets:order-hash',
+    );
+  });
+
+  it('returns stable provider errors when native Fusion quote creation fails', async () => {
+    const fusionSdk = {
+      getQuote: jest.fn().mockRejectedValue({
+        response: {
+          status: 400,
+          data: 'internal 1inch validation payload',
+        },
+      }),
+    };
+    (service as any).fusionSdkMap.set(1, fusionSdk);
+
+    await expect(
+      service.createSwapOrder({
+        amount: '1',
+        srcChain: 'ETH',
+        dstChain: 'ETH',
+        srcTokenAddress: '0xtoken-in',
+        dstTokenAddress: '0xtoken-out',
+        walletAddress: '0x1234567890123456789012345678901234567890',
+      } as any),
+    ).rejects.toMatchObject({
+      response: {
+        code: ProviderErrorCode.BadResponse,
+        message: 'Provider rejected the request.',
+      },
+    });
+  });
+
+  it('rejects unallowlisted native Fusion RPC URLs', () => {
+    const rejectedService = new FustionNativeService(
+      {
+        get: jest.fn((key: string) =>
+          key === 'PROVIDER_RPC_ETH_1' ? 'https://evil.example/rpc' : undefined,
+        ),
+      } as any,
+      redisService as any,
+      swapOrderService as any,
+      firebaseNotificationService as any,
+    );
+
+    expect(() => rejectedService.getProvider(1)).toThrow(
+      'PROVIDER_RPC_ETH_1 host is not allowlisted',
+    );
   });
 });

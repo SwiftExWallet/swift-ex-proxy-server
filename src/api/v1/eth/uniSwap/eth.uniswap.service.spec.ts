@@ -1,9 +1,10 @@
-import { BadRequestException, Logger } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { parseUnits } from 'ethers';
 import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
 import { ChainId } from '../../common/enums/chain.enum';
 import { ProviderService } from '../../provider/provider.service';
 import { UniSwapService } from './eth.uniswap.service';
+import { ProviderErrorCode } from '../../common/utils/provider-error.util';
 
 const mockProvider = {
   getFeeData: jest.fn(),
@@ -183,9 +184,12 @@ describe('UniSwapService', () => {
       .mockReturnValueOnce(singleHopContract)
       .mockReturnValueOnce(multiHopContract);
 
-    await expect(service.getQuote(createQuoteDto())).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(service.getQuote(createQuoteDto())).rejects.toMatchObject({
+      response: {
+        code: ProviderErrorCode.RouteNotFound,
+        message: 'No provider route was found for this request.',
+      },
+    });
     expect(
       singleHopContract.quoteExactInputSingle.staticCall,
     ).toHaveBeenCalledTimes(3);

@@ -8,6 +8,10 @@ jest.mock('@uniswap/smart-order-router', () => ({
 import { QuoterController } from './quoter.controller';
 import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
 import { RATE_LIMIT_KEY } from '../../common/decorators/rate-limit.decorator';
+import {
+  BODY_SIZE_LIMIT_KEY,
+  BODY_SIZE_LIMITS,
+} from '../../common/decorators/body-size-limit.decorator';
 
 describe('QuoterController', () => {
   const quoterService = {
@@ -106,5 +110,20 @@ describe('QuoterController', () => {
         keyBy: 'wallet',
       },
     ]);
+  });
+
+  it('applies route-specific body size limits to quote and swap build requests', () => {
+    expect(
+      Reflect.getMetadata(BODY_SIZE_LIMIT_KEY, controller.getQuote),
+    ).toEqual({
+      maxBytes: BODY_SIZE_LIMITS.standard,
+      key: 'quoter-quote',
+    });
+    expect(
+      Reflect.getMetadata(BODY_SIZE_LIMIT_KEY, controller.swapBuild),
+    ).toEqual({
+      maxBytes: BODY_SIZE_LIMITS.standard,
+      key: 'quoter-swap',
+    });
   });
 });

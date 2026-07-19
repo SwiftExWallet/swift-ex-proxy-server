@@ -10,6 +10,10 @@ import { QuoterService } from './quoter.service';
 import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
 import { withVerifiedWalletAddress } from '../../common/helpers/requestWallet';
 import { RateLimit } from '../../common/decorators/rate-limit.decorator';
+import {
+  BodySizeLimit,
+  BODY_SIZE_LIMITS,
+} from '../../common/decorators/body-size-limit.decorator';
 
 @Controller('api/v1/quoter')
 export class QuoterController {
@@ -17,6 +21,7 @@ export class QuoterController {
 
   @Post('quote')
   @HttpCode(HttpStatus.OK)
+  @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'quoter-quote')
   @RateLimit(
     { points: 60, duration: 60, key: 'quoter-quote-ip', keyBy: 'ip' },
     {
@@ -40,6 +45,7 @@ export class QuoterController {
 
   @Post('swap')
   @HttpCode(HttpStatus.OK)
+  @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'quoter-swap')
   @RateLimit(
     { points: 30, duration: 60, key: 'quoter-swap-ip', keyBy: 'ip' },
     {

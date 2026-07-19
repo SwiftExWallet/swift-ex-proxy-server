@@ -1,5 +1,9 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { UsdtController } from './usdt.controller';
+import {
+  BODY_SIZE_LIMIT_KEY,
+  BODY_SIZE_LIMITS,
+} from '../common/decorators/body-size-limit.decorator';
 
 describe('UsdtController', () => {
   const ethService = {
@@ -102,5 +106,14 @@ describe('UsdtController', () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(ethService.prepareUsdtSwapTransaction).not.toHaveBeenCalled();
     expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('applies a route-specific body size limit to prepare', () => {
+    expect(
+      Reflect.getMetadata(BODY_SIZE_LIMIT_KEY, controller.swapPrepare),
+    ).toEqual({
+      maxBytes: BODY_SIZE_LIMITS.standard,
+      key: 'usdt-swap-transaction-prepare',
+    });
   });
 });

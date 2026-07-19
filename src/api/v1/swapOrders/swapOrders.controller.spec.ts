@@ -1,4 +1,9 @@
 import { SwapOrdersController } from './swapOrders.controller';
+import { RATE_LIMIT_KEY } from '../common/decorators/rate-limit.decorator';
+import {
+  BODY_SIZE_LIMIT_KEY,
+  BODY_SIZE_LIMITS,
+} from '../common/decorators/body-size-limit.decorator';
 
 describe('SwapOrdersController', () => {
   const swapOrderService = {
@@ -55,5 +60,59 @@ describe('SwapOrdersController', () => {
     expect(
       swapOrderService.findOrderByHashForDeviceWallet,
     ).toHaveBeenCalledWith('device-id', '0xorderhash', req.wallet.address);
+  });
+
+  it('applies wallet-scoped limits to order reads and device limits to bridge status', () => {
+    expect(
+      Reflect.getMetadata(RATE_LIMIT_KEY, controller.orderByWallet),
+    ).toEqual([
+      {
+        points: 120,
+        duration: 60,
+        key: 'swap-orders-by-wallet-ip',
+        keyBy: 'ip',
+      },
+      {
+        points: 60,
+        duration: 60,
+        key: 'swap-orders-by-wallet-device',
+        keyBy: 'device',
+      },
+      {
+        points: 60,
+        duration: 60,
+        key: 'swap-orders-by-wallet-wallet',
+        keyBy: 'wallet',
+      },
+    ]);
+    expect(
+      Reflect.getMetadata(RATE_LIMIT_KEY, controller.bridgeOrderStatus),
+    ).toEqual([
+      {
+        points: 60,
+        duration: 60,
+        key: 'swap-orders-bridge-status-ip',
+        keyBy: 'ip',
+      },
+      {
+        points: 30,
+        duration: 60,
+        key: 'swap-orders-bridge-status-device',
+        keyBy: 'device',
+      },
+    ]);
+  });
+
+  it('applies route-specific body size limits to write routes', () => {
+    expect(Reflect.getMetadata(BODY_SIZE_LIMIT_KEY, controller.store)).toEqual({
+      maxBytes: BODY_SIZE_LIMITS.swapOrder,
+      key: 'swap-orders-store',
+    });
+    expect(
+      Reflect.getMetadata(BODY_SIZE_LIMIT_KEY, controller.bridgeOrderStatus),
+    ).toEqual({
+      maxBytes: BODY_SIZE_LIMITS.simple,
+      key: 'swap-orders-bridge-status',
+    });
   });
 });

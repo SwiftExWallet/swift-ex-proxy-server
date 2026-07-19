@@ -23,6 +23,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { getMongoConnectionConfig } from './api/v1/common/config/datastore.config';
 import { WalletModule } from './api/v1/wallet/wallet.module';
 import { DeviceWalletMiddleware } from './api/v1/common/middleware/device-wallet.middleware';
+import { BodySizeLimitGuard } from './api/v1/common/guard/body-size-limit.guard';
 
 @Module({
   imports: [
@@ -68,7 +69,11 @@ import { DeviceWalletMiddleware } from './api/v1/common/middleware/device-wallet
     WalletModule,
   ],
   controllers: [AppController],
-  providers: [AppService, { provide: APP_GUARD, useClass: RateLimitGuard }],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: BodySizeLimitGuard },
+    { provide: APP_GUARD, useClass: RateLimitGuard },
+  ],
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer): any {

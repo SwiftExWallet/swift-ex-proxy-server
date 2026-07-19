@@ -40,6 +40,7 @@ describe('UniswapTxPollerService', () => {
     process.env = {
       ...originalEnv,
       BLOCKSCOUT_ETH: 'https://blockscout.eth',
+      BLOCKSCOUT_ALLOWED_HOSTS: 'blockscout.eth',
     };
     (global as any).fetch = jest.fn();
 

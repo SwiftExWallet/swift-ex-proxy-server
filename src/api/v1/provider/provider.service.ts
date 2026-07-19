@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { JsonRpcProvider, Contract, Network } from 'ethers';
 import { ChainEnum } from '../common/enums/chain.enum';
+import {
+  getProviderRpcAllowedHosts,
+  validateOptionalProviderUrl,
+  validateProviderUrlList,
+} from '../common/config/provider-url.config';
 
 @Injectable()
 export class ProviderService {
@@ -11,67 +16,104 @@ export class ProviderService {
   private readonly chainCounters: Partial<Record<ChainEnum, number>> = {};
 
   constructor() {
-    this.rpcUrls = [
-      process.env.PROVIDER_RPC_ETH_1,
-      process.env.PROVIDER_RPC_ETH_2,
-      process.env.PROVIDER_RPC_ETH_3,
-      process.env.PROVIDER_RPC_ETH_4,
-      process.env.PROVIDER_RPC_ETH_5,
-    ].filter(Boolean) as string[];
-
-    this.bscProvider = new JsonRpcProvider(process.env.PROVIDER_RPC_BSC || '');
-    this.chainRpcUrls = {
-      [ChainEnum.ETH]: [
+    const rpcAllowedHosts = getProviderRpcAllowedHosts();
+    this.rpcUrls = this.getValidatedRpcUrls(
+      [
         process.env.PROVIDER_RPC_ETH_1,
         process.env.PROVIDER_RPC_ETH_2,
         process.env.PROVIDER_RPC_ETH_3,
         process.env.PROVIDER_RPC_ETH_4,
         process.env.PROVIDER_RPC_ETH_5,
-      ].filter(Boolean) as string[],
+      ],
+      'PROVIDER_RPC_ETH',
+      rpcAllowedHosts,
+    );
 
-      [ChainEnum.BSC]: [process.env.PROVIDER_RPC_BSC].filter(
-        Boolean,
-      ) as string[],
+    const bscRpcUrl = validateOptionalProviderUrl(
+      process.env.PROVIDER_RPC_BSC,
+      {
+        source: 'PROVIDER_RPC_BSC',
+        allowedHosts: rpcAllowedHosts,
+      },
+    );
+    this.bscProvider = new JsonRpcProvider(bscRpcUrl || '');
+    this.chainRpcUrls = {
+      [ChainEnum.ETH]: this.rpcUrls,
 
-      [ChainEnum.BNB]: [process.env.PROVIDER_RPC_BSC].filter(
-        Boolean,
-      ) as string[],
+      [ChainEnum.BSC]: [bscRpcUrl].filter(Boolean) as string[],
 
-      [ChainEnum.POL]: [
-        process.env.PROVIDER_RPC_POL_1,
-        process.env.PROVIDER_RPC_POL_2,
-        process.env.PROVIDER_RPC_POL_3,
-      ].filter(Boolean) as string[],
-      [ChainEnum.MATIC]: [
-        process.env.PROVIDER_RPC_POL_1,
-        process.env.PROVIDER_RPC_POL_2,
-        process.env.PROVIDER_RPC_POL_3,
-      ].filter(Boolean) as string[],
+      [ChainEnum.BNB]: [bscRpcUrl].filter(Boolean) as string[],
 
-      [ChainEnum.ARB]: [
-        process.env.PROVIDER_RPC_ARB_1,
-        process.env.PROVIDER_RPC_ARB_2,
-        process.env.PROVIDER_RPC_ARB_3,
-      ].filter(Boolean) as string[],
+      [ChainEnum.POL]: this.getValidatedRpcUrls(
+        [
+          process.env.PROVIDER_RPC_POL_1,
+          process.env.PROVIDER_RPC_POL_2,
+          process.env.PROVIDER_RPC_POL_3,
+        ],
+        'PROVIDER_RPC_POL',
+        rpcAllowedHosts,
+      ),
+      [ChainEnum.MATIC]: this.getValidatedRpcUrls(
+        [
+          process.env.PROVIDER_RPC_POL_1,
+          process.env.PROVIDER_RPC_POL_2,
+          process.env.PROVIDER_RPC_POL_3,
+        ],
+        'PROVIDER_RPC_POL',
+        rpcAllowedHosts,
+      ),
 
-      [ChainEnum.BASE]: [
-        process.env.PROVIDER_RPC_BASE_1,
-        process.env.PROVIDER_RPC_BASE_2,
-        process.env.PROVIDER_RPC_BASE_3,
-      ].filter(Boolean) as string[],
+      [ChainEnum.ARB]: this.getValidatedRpcUrls(
+        [
+          process.env.PROVIDER_RPC_ARB_1,
+          process.env.PROVIDER_RPC_ARB_2,
+          process.env.PROVIDER_RPC_ARB_3,
+        ],
+        'PROVIDER_RPC_ARB',
+        rpcAllowedHosts,
+      ),
 
-      [ChainEnum.AVAX]: [
-        process.env.PROVIDER_RPC_AVAX_1,
-        process.env.PROVIDER_RPC_AVAX_2,
-        process.env.PROVIDER_RPC_AVAX_3,
-      ].filter(Boolean) as string[],
+      [ChainEnum.BASE]: this.getValidatedRpcUrls(
+        [
+          process.env.PROVIDER_RPC_BASE_1,
+          process.env.PROVIDER_RPC_BASE_2,
+          process.env.PROVIDER_RPC_BASE_3,
+        ],
+        'PROVIDER_RPC_BASE',
+        rpcAllowedHosts,
+      ),
 
-      [ChainEnum.OP]: [
-        process.env.PROVIDER_RPC_OPT_1,
-        process.env.PROVIDER_RPC_OPT_2,
-        process.env.PROVIDER_RPC_OPT_3,
-      ].filter(Boolean) as string[],
+      [ChainEnum.AVAX]: this.getValidatedRpcUrls(
+        [
+          process.env.PROVIDER_RPC_AVAX_1,
+          process.env.PROVIDER_RPC_AVAX_2,
+          process.env.PROVIDER_RPC_AVAX_3,
+        ],
+        'PROVIDER_RPC_AVAX',
+        rpcAllowedHosts,
+      ),
+
+      [ChainEnum.OP]: this.getValidatedRpcUrls(
+        [
+          process.env.PROVIDER_RPC_OPT_1,
+          process.env.PROVIDER_RPC_OPT_2,
+          process.env.PROVIDER_RPC_OPT_3,
+        ],
+        'PROVIDER_RPC_OPT',
+        rpcAllowedHosts,
+      ),
     };
+  }
+
+  private getValidatedRpcUrls(
+    urls: Array<string | undefined>,
+    source: string,
+    allowedHosts: readonly string[],
+  ): string[] {
+    return validateProviderUrlList(urls, {
+      source,
+      allowedHosts,
+    });
   }
 
   private getChainNetworkId: Partial<Record<ChainEnum, number>> = {

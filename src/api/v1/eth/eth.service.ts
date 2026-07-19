@@ -48,6 +48,11 @@ import {
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 import { UniSwapService } from './uniSwap/eth.uniswap.service';
 import { EthTestnetSwapService } from './eth.testnet.service';
+import {
+  createProviderBadRequestException,
+  ProviderErrorCode,
+  throwIfHttpException,
+} from '../common/utils/provider-error.util';
 @Injectable()
 export class EthService {
   provider(chain: ChainEnum = ChainEnum.ETH): JsonRpcProvider {
@@ -83,9 +88,14 @@ export class EthService {
   }
 
   async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
-    return process.env.ENVIRONMENT === 'dev'
-      ? await this.ethTestnetSwapService.getQuote(swapQuoteDto)
-      : await this.uniSwapService.getQuote(swapQuoteDto);
+    try {
+      return process.env.ENVIRONMENT === 'dev'
+        ? await this.ethTestnetSwapService.getQuote(swapQuoteDto)
+        : await this.uniSwapService.getQuote(swapQuoteDto);
+    } catch (error) {
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
+    }
   }
 
   async prepareUsdtSwapTransaction(
@@ -148,28 +158,28 @@ export class EthService {
 
       return unsignedTx;
     } catch (error: any) {
-      const message =
-        error.info?.error?.message ||
-        error.shortMessage ||
-        error.message ||
-        'Failed to get swap quotes.';
-      throw new BadRequestException(message);
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
     }
   }
 
   async getWalletAddressInfo(
     walletAddressDto: WalletAddressDto,
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
-    const { walletAddress } = walletAddressDto;
-    const [transactionCount, gasFeeData] = await Promise.all([
-      getTransactionCount(this.provider(), walletAddress),
-      getFeeData(this.provider()),
-    ]);
+    try {
+      const { walletAddress } = walletAddressDto;
+      const [transactionCount, gasFeeData] = await Promise.all([
+        getTransactionCount(this.provider(), walletAddress),
+        getFeeData(this.provider()),
+      ]);
 
-    return {
-      transactionCount,
-      gasFeeData,
-    };
+      return {
+        transactionCount,
+        gasFeeData,
+      };
+    } catch (error) {
+      throw createProviderBadRequestException(error);
+    }
   }
 
   // eth.service.ts or allbridge.service.ts
@@ -231,13 +241,11 @@ export class EthService {
         results,
       };
     } catch (error) {
-      const message =
-        error.info?.error?.message ||
-        error.shortMessage ||
-        error.message ||
-        'Transaction broadcast failed';
-
-      throw new BadRequestException(message);
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(
+        error,
+        ProviderErrorCode.TransactionRejected,
+      );
     }
   }
 
@@ -272,7 +280,12 @@ export class EthService {
   async prepareSwapTransaction(
     dto: SwapPrepareDto | SwapQuoteDto,
   ): Promise<any> {
-    return this.buildSwapTransaction(dto);
+    try {
+      return await this.buildSwapTransaction(dto);
+    } catch (error) {
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
+    }
   }
 
   async executeSwapTransactions(
@@ -290,12 +303,10 @@ export class EthService {
       }
       return txResponses;
     } catch (error) {
-      const message =
-        error.info?.error?.message ||
-        error.shortMessage ||
-        error.message ||
-        'Failed to execute swap transactions';
-      throw new BadRequestException(message);
+      throw createProviderBadRequestException(
+        error,
+        ProviderErrorCode.TransactionRejected,
+      );
     }
   }
 
@@ -305,7 +316,7 @@ export class EthService {
       const validAddresses: string[] = ValidateAddress(addresses);
 
       if (validAddresses.length === 0) {
-        throw new Error('No valid token addresses provided');
+        throw new BadRequestException('No valid token addresses provided');
       }
 
       const tokenInfos = await Promise.all(
@@ -332,39 +343,43 @@ export class EthService {
 
       return tokenInfos;
     } catch (error) {
-      const message =
-        error.info?.error?.message ||
-        error.shortMessage ||
-        error.message ||
-        'Failed to get token Info';
-      throw new BadRequestException(message);
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
     }
   }
 
   async prepareTransaction(
     prepareTransactionDto: PrepareTransactionDto,
   ): Promise<FullTransaction> {
-    const { unsignedTx, walletAddress } = prepareTransactionDto;
-    const [nonce, gasLimit, feeData, network] = await Promise.all([
-      getTransactionCount(this.provider(), walletAddress),
-      getEstimateGas(this.provider(), walletAddress, unsignedTx),
-      getFeeData(this.provider()),
-      getNetwork(this.provider()),
-    ]);
+    try {
+      const { unsignedTx, walletAddress } = prepareTransactionDto;
+      const [nonce, gasLimit, feeData, network] = await Promise.all([
+        getTransactionCount(this.provider(), walletAddress),
+        getEstimateGas(this.provider(), walletAddress, unsignedTx),
+        getFeeData(this.provider()),
+        getNetwork(this.provider()),
+      ]);
 
-    const transaction: FullTransaction = {
-      unsignedTx,
-      nonce,
-      gasLimit,
-      gasPrice: feeData?.maxFeePerGas,
-      chainId: network.chainId,
-    };
-    return transaction;
+      const transaction: FullTransaction = {
+        unsignedTx,
+        nonce,
+        gasLimit,
+        gasPrice: feeData?.maxFeePerGas,
+        chainId: network.chainId,
+      };
+      return transaction;
+    } catch (error) {
+      throw createProviderBadRequestException(error);
+    }
   }
 
-  getBalance(walletAddressDto: WalletAddressDto): Promise<bigint> {
-    const { walletAddress } = walletAddressDto;
-    return getNativeCurrencyBalance(walletAddress, this.provider());
+  async getBalance(walletAddressDto: WalletAddressDto): Promise<bigint> {
+    try {
+      const { walletAddress } = walletAddressDto;
+      return await getNativeCurrencyBalance(walletAddress, this.provider());
+    } catch (error) {
+      throw createProviderBadRequestException(error);
+    }
   }
 
   private async buildSwapTransaction(

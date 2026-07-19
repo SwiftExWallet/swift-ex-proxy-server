@@ -5,18 +5,20 @@ import {
   Get,
   Query,
   Req,
-  Delete,
   UseGuards,
 } from '@nestjs/common';
 import { SwapQuoteDto } from '../dto/swapQuote';
 import { InchService } from './1inch.service';
 import { FusionOrderDto } from '../dto/fusionOrder';
 import { SubmitOrderDto } from '../dto/submitOrder';
-import { RateLimit } from '../../common/decorators/rate-limit.decorator';
+import {
+  RateLimit,
+  rateLimitByIpAndDevice,
+  rateLimitByIpDeviceAndWallet,
+} from '../../common/decorators/rate-limit.decorator';
 import { FusionPlusSwapQuoteDto } from '../dto/fusionPlusSwapQuote';
 import { FusionPlusOrderDto } from '../dto/fusionPlusOrder';
 import { InchOrderStatusDto } from '../dto/1inchsOrderStatus';
-import { CancelFusionOrderDto } from '../dto/cancelFusionOrder';
 import { FustionNativeService } from './1inch.fusion.native.swap.service';
 import { ConfirmSwapOrderDto } from '../dto/prepareTxDto';
 import { NotificationDto } from '../../notification/dto/notification.dto';
@@ -26,6 +28,10 @@ import {
   getVerifiedWalletAddress,
   withVerifiedWalletAddress,
 } from '../../common/helpers/requestWallet';
+import {
+  BodySizeLimit,
+  BODY_SIZE_LIMITS,
+} from '../../common/decorators/body-size-limit.decorator';
 
 @Controller('api/v1/swap/1inch')
 export class inchController {
@@ -34,12 +40,15 @@ export class inchController {
     private readonly fustionNativeService: FustionNativeService,
   ) {}
 
-  @RateLimit(
-    { points: 20, duration: 60, key: 'per-minute' }, // max 5 per minute
-    { points: 20, duration: 3600, key: 'per-hour' }, // max 20 per hour
-    { points: 100, duration: 86400, key: 'per-day' }, // max 100 per day
-  )
   @Post('/getSwapQuote')
+  @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'inch-swap-quote')
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('inch-swap-quote', {
+      ip: 60,
+      device: 30,
+      wallet: 30,
+    }),
+  )
   async getQuote(@Req() req: any, @Body() swapQuote: SwapQuoteDto) {
     const data = await this.inchService.getSwapQuote(
       withVerifiedWalletAddress(swapQuote, req),
@@ -48,6 +57,14 @@ export class inchController {
   }
 
   @Post('/fusion-plus/getSwapQuote')
+  @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'inch-fusion-plus-quote')
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('inch-fusion-plus-quote', {
+      ip: 60,
+      device: 30,
+      wallet: 30,
+    }),
+  )
   async getFusionPlusQuote(
     @Req() req: any,
     @Body() swapQuote: FusionPlusSwapQuoteDto,
@@ -59,6 +76,17 @@ export class inchController {
   }
 
   @Post('/buildFusionOrder')
+  @BodySizeLimit(
+    BODY_SIZE_LIMITS.providerOrderPayload,
+    'inch-build-fusion-order',
+  )
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('inch-build-fusion-order', {
+      ip: 30,
+      device: 15,
+      wallet: 15,
+    }),
+  )
   async createFusionOrder(
     @Req() req: any,
     @Body() fusionOrder: FusionOrderDto,
@@ -70,6 +98,14 @@ export class inchController {
   }
 
   @Post('/buildFusionPlusOrder')
+  @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'inch-build-fusion-plus-order')
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('inch-build-fusion-plus-order', {
+      ip: 30,
+      device: 15,
+      wallet: 15,
+    }),
+  )
   async createFusionPlusOrder(
     @Req() req: any,
     @Body() fusionPlusOrder: FusionPlusOrderDto,
@@ -81,6 +117,14 @@ export class inchController {
   }
 
   @Post('/submitOrder')
+  @BodySizeLimit(BODY_SIZE_LIMITS.providerOrderPayload, 'inch-submit-order')
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('inch-submit-order', {
+      ip: 20,
+      device: 10,
+      wallet: 10,
+    }),
+  )
   async submitOrder(@Req() req: any, @Body() submitOrderDto: SubmitOrderDto) {
     assertWalletAddressMatches(
       submitOrderDto.order?.maker,
@@ -95,6 +139,17 @@ export class inchController {
   }
 
   @Post('/submitFusionPlusOrder')
+  @BodySizeLimit(
+    BODY_SIZE_LIMITS.providerOrderPayload,
+    'inch-submit-fusion-plus-order',
+  )
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('inch-submit-fusion-plus-order', {
+      ip: 20,
+      device: 10,
+      wallet: 10,
+    }),
+  )
   async submitFusionPlusOrder(
     @Req() req: any,
     @Body() submitOrderDto: SubmitOrderDto,
@@ -112,18 +167,30 @@ export class inchController {
   }
 
   @Get('/orderStatus')
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('inch-order-status', {
+      ip: 60,
+      device: 30,
+      wallet: 30,
+    }),
+  )
   async orderStatus(@Query() inchOrderStatusDto: InchOrderStatusDto) {
     const data = await this.inchService.orderStatus(inchOrderStatusDto);
     return data;
   }
 
-  @Delete('/cancelorder')
-  async cancelOrder(@Body() cancelFusionOrderDto: CancelFusionOrderDto) {
-    const data = await this.inchService.cancelOrder(cancelFusionOrderDto);
-    return data;
-  }
-
   @Post('/buildFusionPlusNativeOrder')
+  @BodySizeLimit(
+    BODY_SIZE_LIMITS.providerOrderPayload,
+    'inch-build-fusion-plus-native-order',
+  )
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('inch-build-fusion-plus-native-order', {
+      ip: 30,
+      device: 15,
+      wallet: 15,
+    }),
+  )
   async buildFusionPlusNativeOrder(
     @Req() req: any,
     @Body() body: FusionPlusSwapQuoteDto,
@@ -134,15 +201,37 @@ export class inchController {
   }
 
   @Post('/submitFusionPlusNativeOrder')
+  @BodySizeLimit(
+    BODY_SIZE_LIMITS.simple,
+    'inch-submit-fusion-plus-native-order',
+  )
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('inch-submit-fusion-plus-native-order', {
+      ip: 20,
+      device: 10,
+      wallet: 10,
+    }),
+  )
   async confirmOrder(@Body() confirmSwapOrderDto: ConfirmSwapOrderDto) {
     return this.fustionNativeService.confirmSwapOrder(confirmSwapOrderDto);
   }
 
   @Post('/customNotification')
   @UseGuards(CustomNotificationOriginGuard)
+  @BodySizeLimit(BODY_SIZE_LIMITS.notification, 'custom-notification')
   @RateLimit(
-    { points: 10, duration: 60, key: 'custom-notification-minute' },
-    { points: 50, duration: 3600, key: 'custom-notification-hour' },
+    ...rateLimitByIpAndDevice('custom-notification-minute', {
+      ip: 10,
+      device: 10,
+    }),
+    ...rateLimitByIpAndDevice(
+      'custom-notification-hour',
+      {
+        ip: 50,
+        device: 50,
+      },
+      3600,
+    ),
   )
   async customNotification(
     @Req() req: any,

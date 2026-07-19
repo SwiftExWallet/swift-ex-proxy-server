@@ -17,6 +17,7 @@ import {
 } from '../../common/helpers/blockchainUtilityMethods';
 import { ProviderService } from '../../provider/provider.service';
 import { AllBridgeService } from './all-bridge.service';
+import { ProviderErrorCode } from '../../common/utils/provider-error.util';
 
 const mockSdk = {
   chainDetailsMap: jest.fn(),
@@ -323,12 +324,15 @@ describe('AllBridgeService', () => {
 
   it('wraps simulation failures as bad request exceptions', async () => {
     provider.call.mockRejectedValue({
-      reason: 'simulation reverted',
+      reason: 'simulation reverted with provider internals',
     });
 
-    await expect(service.prepareTransaction(swapDto())).rejects.toThrow(
-      BadRequestException,
-    );
+    await expect(service.prepareTransaction(swapDto())).rejects.toMatchObject({
+      response: {
+        code: ProviderErrorCode.TransactionRejected,
+        message: 'Provider rejected the transaction.',
+      },
+    });
   });
 
   it('returns swap details with conversion, fee, timing, and route metadata', async () => {

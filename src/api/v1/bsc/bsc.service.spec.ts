@@ -1,4 +1,5 @@
 import { BscService } from './bsc.service';
+import { ProviderErrorCode } from '../common/utils/provider-error.util';
 
 describe('BscService', () => {
   const originalEnv = process.env;
@@ -56,5 +57,26 @@ describe('BscService', () => {
     expect(
       pancakeSwapService.createUnsignedSwapTransaction,
     ).toHaveBeenCalledWith({});
+  });
+
+  it('returns a stable provider error when broadcast fails', async () => {
+    provider.broadcastTransaction.mockRejectedValue({
+      info: {
+        error: {
+          message: 'private BSC RPC rejection detail',
+        },
+      },
+    });
+
+    await expect(
+      service.broadcastTransaction({
+        signedTx: '0xsigned',
+      } as any),
+    ).rejects.toMatchObject({
+      response: {
+        code: ProviderErrorCode.TransactionRejected,
+        message: 'Provider rejected the transaction.',
+      },
+    });
   });
 });

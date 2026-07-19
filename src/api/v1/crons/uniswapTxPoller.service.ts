@@ -6,6 +6,14 @@ import { swapProvider } from '../common/enums/chain.enum';
 import { SwapOrders } from '../swapOrders/schema/swapOrder.schema';
 import { NotificationDto } from '../notification/dto/notification.dto';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';
+import {
+  getProviderHttpTimeoutMs,
+  withProviderRetry,
+} from '../common/utils/retry.util';
+import {
+  getBlockscoutAllowedHosts,
+  validateOptionalProviderUrl,
+} from '../common/config/provider-url.config';
 
 const BATCH_SIZE = 10;
 
@@ -39,22 +47,50 @@ function mapBlockscoutStatus(
 
 @Injectable()
 export class UniswapTxPollerService {
-  private readonly BLOCKSCOUT_URLS: Record<string, string> = {
-    ETH: process.env.BLOCKSCOUT_ETH as string,
-    BSC: process.env.BLOCKSCOUT_BSC as string,
-    POL: process.env.BLOCKSCOUT_POL as string,
-    ARB: process.env.BLOCKSCOUT_ARB as string,
-    OPT: process.env.BLOCKSCOUT_OPT as string,
-    BASE: process.env.BLOCKSCOUT_BAS as string,
-    AVAX: process.env.BLOCKSCOUT_AVA as string,
-  };
+  private readonly BLOCKSCOUT_URLS: Partial<Record<string, string>>;
   private readonly logger = new Logger(UniswapTxPollerService.name);
   private isRunning = false;
 
   constructor(
     private readonly repo: SwapOrderRepository,
     private readonly firebaseNotificationService: FirebaseNotificationService,
-  ) {}
+  ) {
+    this.BLOCKSCOUT_URLS = this.getValidatedBlockscoutUrls();
+  }
+
+  private getValidatedBlockscoutUrls(): Partial<Record<string, string>> {
+    const allowedHosts = getBlockscoutAllowedHosts();
+    return {
+      ETH: validateOptionalProviderUrl(process.env.BLOCKSCOUT_ETH, {
+        source: 'BLOCKSCOUT_ETH',
+        allowedHosts,
+      }),
+      BSC: validateOptionalProviderUrl(process.env.BLOCKSCOUT_BSC, {
+        source: 'BLOCKSCOUT_BSC',
+        allowedHosts,
+      }),
+      POL: validateOptionalProviderUrl(process.env.BLOCKSCOUT_POL, {
+        source: 'BLOCKSCOUT_POL',
+        allowedHosts,
+      }),
+      ARB: validateOptionalProviderUrl(process.env.BLOCKSCOUT_ARB, {
+        source: 'BLOCKSCOUT_ARB',
+        allowedHosts,
+      }),
+      OPT: validateOptionalProviderUrl(process.env.BLOCKSCOUT_OPT, {
+        source: 'BLOCKSCOUT_OPT',
+        allowedHosts,
+      }),
+      BASE: validateOptionalProviderUrl(process.env.BLOCKSCOUT_BAS, {
+        source: 'BLOCKSCOUT_BAS',
+        allowedHosts,
+      }),
+      AVAX: validateOptionalProviderUrl(process.env.BLOCKSCOUT_AVA, {
+        source: 'BLOCKSCOUT_AVA',
+        allowedHosts,
+      }),
+    };
+  }
 
   @Cron('*/15 * * * * *', { name: 'Uniswap-Cron' })
   async poll(): Promise<void> {
@@ -117,9 +153,23 @@ export class UniswapTxPollerService {
         `&action=gettxreceiptstatus` +
         `&txhash=${encodeURIComponent(tx.txHash)}`;
 
-      const res = await fetch(url, {
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(8_000),
+      const res = await withProviderRetry(async () => {
+        const response = await fetch(url, {
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(getProviderHttpTimeoutMs()),
+        });
+        if (
+          !response.ok &&
+          (response.status === 408 ||
+            response.status === 429 ||
+            response.status >= 500)
+        ) {
+          const error = new Error(`blockscout HTTP ${response.status}`);
+          (error as any).response = { status: response.status };
+          throw error;
+        }
+
+        return response;
       });
 
       if (!res.ok) {

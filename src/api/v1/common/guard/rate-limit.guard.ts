@@ -42,19 +42,31 @@ function createLimiter(
 }
 
 const routeLimiters = new Map<string, RateLimiterAbstract>();
+const GLOBAL_RATE_LIMIT_POINTS = 100;
+const GLOBAL_RATE_LIMIT_DURATION_SECONDS = 60;
 
 @Injectable()
 export class RateLimitGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
-  private globalLimiter: RateLimiterAbstract | null = null;
+  private readonly globalLimiters = new Map<
+    RateLimitKeyBy,
+    RateLimiterAbstract
+  >();
 
-  private getGlobalLimiter(): RateLimiterAbstract {
-    if (!this.globalLimiter) {
-      // runs on first request, .env is ready ✅
-      this.globalLimiter = createLimiter(100, 60, 'rl_global');
+  private getGlobalLimiter(keyBy: RateLimitKeyBy): RateLimiterAbstract {
+    if (!this.globalLimiters.has(keyBy)) {
+      this.globalLimiters.set(
+        keyBy,
+        createLimiter(
+          GLOBAL_RATE_LIMIT_POINTS,
+          GLOBAL_RATE_LIMIT_DURATION_SECONDS,
+          `rl_global_${keyBy}`,
+        ),
+      );
     }
-    return this.globalLimiter;
+
+    return this.globalLimiters.get(keyBy)!;
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -64,22 +76,18 @@ export class RateLimitGuard implements CanActivate {
     );
 
     const request = context.switchToHttp().getRequest();
-    const ip = request.ip ?? 'unknown';
 
     // no decorator → use global limiter
     if (!configs || configs.length === 0) {
-      try {
-        await this.getGlobalLimiter().consume(ip);
-        return true;
-      } catch (err) {
-        const retryAfter = Math.ceil(
-          (err as RateLimiterRes).msBeforeNext / 1000,
-        );
-        throw new HttpException(
-          { message: 'Too Many Requests', retryAfter },
-          HttpStatus.TOO_MANY_REQUESTS,
+      for (const keyBy of this.getGlobalKeyTypes(request)) {
+        await this.consumeLimit(
+          this.getGlobalLimiter(keyBy),
+          this.getConsumeKey(request, keyBy),
+          `global-${keyBy}`,
         );
       }
+
+      return true;
     }
 
     // ✅ run ALL limiters — all must pass
@@ -93,24 +101,30 @@ export class RateLimitGuard implements CanActivate {
         keyBy,
       );
       const consumeKey = this.getConsumeKey(request, keyBy);
-      try {
-        await limiter.consume(consumeKey);
-      } catch (err) {
-        const retryAfter = Math.ceil(
-          (err as RateLimiterRes).msBeforeNext / 1000,
-        );
-        throw new HttpException(
-          {
-            message: 'Too Many Requests',
-            limit: label, // tells you which limit was hit
-            retryAfter,
-          },
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
-      }
+      await this.consumeLimit(limiter, consumeKey, label);
     }
 
     return true;
+  }
+
+  private async consumeLimit(
+    limiter: RateLimiterAbstract,
+    consumeKey: string,
+    label: string,
+  ): Promise<void> {
+    try {
+      await limiter.consume(consumeKey);
+    } catch (err) {
+      const retryAfter = Math.ceil((err as RateLimiterRes).msBeforeNext / 1000);
+      throw new HttpException(
+        {
+          message: 'Too Many Requests',
+          limit: label,
+          retryAfter,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
   }
 
   private getRouteLimiter(
@@ -127,6 +141,20 @@ export class RateLimitGuard implements CanActivate {
       );
     }
     return routeLimiters.get(key)!;
+  }
+
+  private getGlobalKeyTypes(request: any): RateLimitKeyBy[] {
+    const keyTypes: RateLimitKeyBy[] = ['ip'];
+
+    if (request.device?._id) {
+      keyTypes.push('device');
+    }
+
+    if (request.wallet?.address) {
+      keyTypes.push('wallet');
+    }
+
+    return keyTypes;
   }
 
   private getConsumeKey(request: any, keyBy: RateLimitKeyBy): string {

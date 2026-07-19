@@ -12,6 +12,14 @@ import {
   getVerifiedWalletAddress,
   withVerifiedWalletAddress,
 } from '../common/helpers/requestWallet';
+import {
+  RateLimit,
+  rateLimitByIpDeviceAndWallet,
+} from '../common/decorators/rate-limit.decorator';
+import {
+  BodySizeLimit,
+  BODY_SIZE_LIMITS,
+} from '../common/decorators/body-size-limit.decorator';
 
 @Controller('/api/v1/bsc')
 export class BscController {
@@ -20,6 +28,14 @@ export class BscController {
     private readonly tokenMetadataService: TokenMetadataService,
   ) {}
   @Post('swap-quote')
+  @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'bsc-swap-quote')
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('bsc-swap-quote', {
+      ip: 60,
+      device: 30,
+      wallet: 30,
+    }),
+  )
   async getSwapQuote(
     @Req() req: any,
     @Res() res,
@@ -33,6 +49,17 @@ export class BscController {
   }
 
   @Post('transaction/broadcast')
+  @BodySizeLimit(
+    BODY_SIZE_LIMITS.signedTransactionBatch,
+    'bsc-transaction-broadcast',
+  )
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('bsc-transaction-broadcast', {
+      ip: 20,
+      device: 10,
+      wallet: 10,
+    }),
+  )
   async broadcastTransaction(
     @Res() res,
     @Body() broadcastTransactionDto: BroadcastTransactionDto,
@@ -44,6 +71,14 @@ export class BscController {
   }
 
   @Post('swap-transaction/prepare')
+  @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'bsc-swap-transaction-prepare')
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('bsc-swap-transaction-prepare', {
+      ip: 30,
+      device: 15,
+      wallet: 15,
+    }),
+  )
   async swapPrepare(
     @Req() req: any,
     @Res() res,
@@ -57,6 +92,14 @@ export class BscController {
   }
 
   @Post('token/info')
+  @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'bsc-token-info')
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('bsc-token-info', {
+      ip: 60,
+      device: 30,
+      wallet: 30,
+    }),
+  )
   async fetchTokenInfo(
     @Req() req: any,
     @Res() res,
@@ -69,6 +112,13 @@ export class BscController {
   }
 
   @Get('/:walletAddress/balance')
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('bsc-balance', {
+      ip: 120,
+      device: 60,
+      wallet: 60,
+    }),
+  )
   async getBalance(
     @Req() req: any,
     @Res() res,
@@ -86,6 +136,13 @@ export class BscController {
   }
 
   @Get('wallet-address/:walletAddress/info')
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('bsc-wallet-info', {
+      ip: 120,
+      device: 60,
+      wallet: 60,
+    }),
+  )
   async getAddressInfo(
     @Req() req: any,
     @Res() res,
@@ -103,6 +160,13 @@ export class BscController {
   }
 
   @Get('/:walletAddress/token/:tokenAddress/balance')
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('bsc-token-balance', {
+      ip: 120,
+      device: 60,
+      wallet: 60,
+    }),
+  )
   async getUsdtBalance(
     @Req() req: any,
     @Res() res,
@@ -115,6 +179,14 @@ export class BscController {
   }
 
   @Post('transaction/prepare')
+  @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'bsc-transaction-prepare')
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('bsc-transaction-prepare', {
+      ip: 30,
+      device: 15,
+      wallet: 15,
+    }),
+  )
   async prepareTransaction(
     @Req() req: any,
     @Res() res,

@@ -27,6 +27,15 @@ import * as crypto from 'crypto';
 import { CancelFusionOrderDto } from '../dto/cancelFusionOrder';
 import { FirebaseNotificationService } from '../../notification/firebase/notification.service';
 import { NotificationDto } from '../../notification/dto/notification.dto';
+import {
+  getProviderHttpTimeoutMs,
+  withProviderRetry,
+} from '../../common/utils/retry.util';
+import { createProviderBadRequestException } from '../../common/utils/provider-error.util';
+import {
+  getOneInchAllowedHosts,
+  validateProviderUrl,
+} from '../../common/config/provider-url.config';
 
 interface RedisOrderSecretState {
   secrets: string[];
@@ -61,6 +70,7 @@ const FINAL_ORDER_STATUSES: ReadonlySet<SDKOrderStatus> = new Set([
 @Injectable()
 export class InchService implements OnModuleInit {
   private readonly sdk: SDK;
+  private readonly oneInchAllowedHosts = getOneInchAllowedHosts();
   private readonly activeSecretPollers = new Map<string, NodeJS.Timeout>();
   private readonly secretPollReschedules = new Map<string, number>();
   private isRecoveringPendingOrders = false;
@@ -71,7 +81,10 @@ export class InchService implements OnModuleInit {
     private readonly firebaseNotificationService: FirebaseNotificationService,
   ) {
     this.sdk = new SDK({
-      url: 'https://api.1inch.com/fusion-plus',
+      url: validateProviderUrl('https://api.1inch.com/fusion-plus', {
+        source: 'INCH_FUSION_PLUS_SDK_URL',
+        allowedHosts: this.oneInchAllowedHosts,
+      }),
       authKey: process.env.INCH_API_KEY,
     });
   }
@@ -153,9 +166,63 @@ export class InchService implements OnModuleInit {
     };
   }
 
+  private withProviderAxiosConfig(
+    config: AxiosRequestConfig,
+  ): AxiosRequestConfig {
+    return {
+      ...config,
+      timeout: config.timeout ?? getProviderHttpTimeoutMs(),
+    };
+  }
+
+  private getOneInchBaseUrl(envName: string): string {
+    return validateProviderUrl(process.env[envName], {
+      source: envName,
+      allowedHosts: this.oneInchAllowedHosts,
+    });
+  }
+
+  private validateOneInchProviderUrl(url: string): string {
+    return validateProviderUrl(url, {
+      source: 'INCH_PROVIDER_URL',
+      allowedHosts: this.oneInchAllowedHosts,
+    });
+  }
+
+  private buildOneInchUrl(envName: string, path: string): string {
+    const baseUrl = this.getOneInchBaseUrl(envName);
+    return `${baseUrl}/${path.replace(/^\//, '')}`;
+  }
+
+  private async providerGet<T = any>(
+    url: string,
+    config: AxiosRequestConfig,
+  ): Promise<T> {
+    const safeUrl = this.validateOneInchProviderUrl(url);
+    const response = await withProviderRetry(() =>
+      axios.get<T>(safeUrl, this.withProviderAxiosConfig(config)),
+    );
+    return response.data;
+  }
+
+  private async providerPost<T = any>(
+    url: string,
+    body: unknown,
+    config: AxiosRequestConfig,
+  ): Promise<T> {
+    const safeUrl = this.validateOneInchProviderUrl(url);
+    const response = await withProviderRetry(() =>
+      axios.post<T>(safeUrl, body, this.withProviderAxiosConfig(config)),
+    );
+    return response.data;
+  }
+
   async getSwapQuote(swapQuote: SwapQuoteDto) {
     const { tokenIn, tokenOut, amount, walletAddress, chain } = swapQuote;
-    const url = `${process.env.QUOTER_BASE}/${ChainId[chain]}/quote/receive`;
+    const url = this.buildOneInchUrl(
+      'QUOTER_BASE',
+      `${ChainId[chain]}/quote/receive`,
+    );
     const config: AxiosRequestConfig = {
       headers: { Authorization: `Bearer ${process.env.INCH_API_KEY}` },
       params: {
@@ -170,14 +237,9 @@ export class InchService implements OnModuleInit {
     };
 
     try {
-      const response = await axios.get(url, config);
-      return response.data;
+      return await this.providerGet(url, config);
     } catch (error) {
-      const message =
-        error.response?.data?.description ||
-        error.response?.data ||
-        'unable to get swap quote';
-      throw new BadRequestException(message);
+      throw createProviderBadRequestException(error);
     }
   }
 
@@ -190,7 +252,10 @@ export class InchService implements OnModuleInit {
       amount,
       walletAddress,
     } = fusionPlusSwapQuote;
-    const url = `${process.env.FUSION_PLUS_QUOTER_BASE}/quote/receive`;
+    const url = this.buildOneInchUrl(
+      'FUSION_PLUS_QUOTER_BASE',
+      'quote/receive',
+    );
     const config: AxiosRequestConfig = {
       headers: { Authorization: `Bearer ${process.env.INCH_API_KEY}` },
       params: {
@@ -207,14 +272,9 @@ export class InchService implements OnModuleInit {
     };
 
     try {
-      const response = await axios.get(url, config);
-      return response.data;
+      return await this.providerGet(url, config);
     } catch (error) {
-      const message =
-        error.response?.data?.description ||
-        error.response?.data ||
-        'unable to get swap quote';
-      throw new BadRequestException(message);
+      throw createProviderBadRequestException(error);
     }
   }
 
@@ -234,12 +294,15 @@ export class InchService implements OnModuleInit {
       },
       paramsSerializer: { indexes: null },
     };
-    const response = await axios.post(
-      `${process.env.QUOTER_BASE}/${ChainId[chain]}/quote/build`,
-      quote,
-      config,
-    );
-    return response.data;
+    try {
+      return await this.providerPost(
+        this.buildOneInchUrl('QUOTER_BASE', `${ChainId[chain]}/quote/build`),
+        quote,
+        config,
+      );
+    } catch (error) {
+      throw createProviderBadRequestException(error);
+    }
   }
 
   async buildFusionPlusOrder(fusionPlusOrder: FusionPlusOrderDto) {
@@ -270,20 +333,14 @@ export class InchService implements OnModuleInit {
         source: 'APP',
       };
 
-      const response = await axios.post(
-        `${process.env.FUSION_PLUS_QUOTER_BASE}/quote/build/evm`,
+      return await this.providerPost(
+        this.buildOneInchUrl('FUSION_PLUS_QUOTER_BASE', 'quote/build/evm'),
         body,
         config,
       );
-
-      return response.data;
     } catch (error) {
       await this.delSecretState(`quote:${fusionPlusOrder.quoteId}`);
-      const message =
-        error.response?.data?.description ||
-        error.response?.data ||
-        'unable to build swap';
-      throw new BadRequestException(message);
+      throw createProviderBadRequestException(error);
     }
   }
 
@@ -296,18 +353,16 @@ export class InchService implements OnModuleInit {
         paramsSerializer: { indexes: null },
       };
       const body = { order, signature, quoteId, extension };
-      const response = await axios.post(
-        `${process.env.INCH_RELAYER_BASE}/${ChainId[chain]}/order/submit`,
+      return await this.providerPost(
+        this.buildOneInchUrl(
+          'INCH_RELAYER_BASE',
+          `${ChainId[chain]}/order/submit`,
+        ),
         body,
         config,
       );
-      return response.data;
     } catch (error: any) {
-      const message =
-        error.response?.data?.description ||
-        error.response?.data ||
-        'unable to submit order';
-      throw new BadRequestException(message);
+      throw createProviderBadRequestException(error);
     }
   }
 
@@ -337,8 +392,8 @@ export class InchService implements OnModuleInit {
         extension,
       };
 
-      const response = await axios.post(
-        `${process.env.FUSION_PLUS_RELAYER_BASE}/submit`,
+      const data = await this.providerPost(
+        this.buildOneInchUrl('FUSION_PLUS_RELAYER_BASE', 'submit'),
         body,
         config,
       );
@@ -361,15 +416,11 @@ export class InchService implements OnModuleInit {
 
       this.startSecretRevealPoller(orderHash);
 
-      return response.data;
+      return data;
     } catch (error: any) {
       await this.delSecretState(tempKey);
       await this.delSecretState(orderHash);
-      const message =
-        error.response?.data?.description ||
-        error.response?.data ||
-        'unable to submit order';
-      throw new BadRequestException(message);
+      throw createProviderBadRequestException(error);
     }
   }
 
@@ -593,15 +644,21 @@ export class InchService implements OnModuleInit {
 
   async cancelOrder(cancelFusionOrderDto: CancelFusionOrderDto) {
     const { chain, orderHash } = cancelFusionOrderDto;
-    const url = `${process.env.QUOTER_BASE}/${ChainId[chain]}/order/cancel`;
+    const url = this.buildOneInchUrl(
+      'QUOTER_BASE',
+      `${ChainId[chain]}/order/cancel`,
+    );
 
     const config: AxiosRequestConfig = {
       headers: { Authorization: `Bearer ${process.env.INCH_API_KEY}` },
       params: {},
       paramsSerializer: { indexes: null },
     };
-    const response = await axios.post(url, { orderHash }, config);
-    return response.data;
+    try {
+      return await this.providerPost(url, { orderHash }, config);
+    } catch (error) {
+      throw createProviderBadRequestException(error);
+    }
   }
 
   private generateSecrets(count: number): {
@@ -642,7 +699,10 @@ export class InchService implements OnModuleInit {
     ) {
       return await this.fusionPlusOrderStatus(inchOrderStatusDto);
     }
-    const url = `${process.env.INCH_ORDER_BASE}/${ChainId[inchOrderStatusDto.chain]}/order/status/${inchOrderStatusDto.orderHash}`;
+    const url = this.buildOneInchUrl(
+      'INCH_ORDER_BASE',
+      `${ChainId[inchOrderStatusDto.chain]}/order/status/${inchOrderStatusDto.orderHash}`,
+    );
     const config: AxiosRequestConfig = {
       headers: { Authorization: `Bearer ${process.env.INCH_API_KEY}` },
       params: {},
@@ -650,11 +710,11 @@ export class InchService implements OnModuleInit {
     };
 
     try {
-      const response = await axios.get(url, config);
-      if (response.data.status) {
+      const data = await this.providerGet<any>(url, config);
+      if (data.status) {
         await this.swapOrderService.updateOrderByHash({
           txHash: inchOrderStatusDto.orderHash,
-          orderStatus: SwapOrderStatus[response.data.status.toUpperCase()],
+          orderStatus: SwapOrderStatus[data.status.toUpperCase()],
         });
         // await this.firebaseNotificationService.sendNotification(
         //   orderStatusUpdate?.deviceFcmToken as string,
@@ -665,18 +725,17 @@ export class InchService implements OnModuleInit {
         //   },
         // );
       }
-      return response.data;
+      return data;
     } catch (error) {
-      const message =
-        error.response?.data?.description ||
-        error.response?.data ||
-        'unable to get order status';
-      throw new BadRequestException(message);
+      throw createProviderBadRequestException(error);
     }
   }
 
   async fusionPlusOrderStatus(inchOrderStatusDto: InchOrderStatusDto) {
-    const url = `${process.env.FUSION_PLUS_ORDER_BASE}${inchOrderStatusDto.orderHash}`;
+    const url = this.buildOneInchUrl(
+      'FUSION_PLUS_ORDER_BASE',
+      inchOrderStatusDto.orderHash,
+    );
     const config: AxiosRequestConfig = {
       headers: { Authorization: `Bearer ${process.env.INCH_API_KEY}` },
       params: {},
@@ -684,11 +743,11 @@ export class InchService implements OnModuleInit {
     };
 
     try {
-      const response = await axios.get(url, config);
-      if (response.data.status) {
+      const data = await this.providerGet<any>(url, config);
+      if (data.status) {
         await this.swapOrderService.updateOrderByHash({
           txHash: inchOrderStatusDto.orderHash,
-          orderStatus: SwapOrderStatus[response.data.status.toUpperCase()],
+          orderStatus: SwapOrderStatus[data.status.toUpperCase()],
         });
         // await this.firebaseNotificationService.sendNotification(
         //   orderStatusUpdate?.deviceFcmToken as string,
@@ -699,13 +758,9 @@ export class InchService implements OnModuleInit {
         //   },
         // );
       }
-      return response.data;
+      return data;
     } catch (error) {
-      const message =
-        error.response?.data?.description ||
-        error.response?.data ||
-        'unable to get order status';
-      throw new BadRequestException(message);
+      throw createProviderBadRequestException(error);
     }
   }
 

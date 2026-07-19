@@ -35,6 +35,16 @@ import {
   encryptFusionSecretState,
   isFusionSecretStateEnvelope,
 } from '../../common/utils/encryption.util';
+import { withProviderRetry } from '../../common/utils/retry.util';
+import {
+  createProviderBadRequestException,
+  throwIfHttpException,
+} from '../../common/utils/provider-error.util';
+import {
+  getOneInchAllowedHosts,
+  getProviderRpcAllowedHosts,
+  validateProviderUrl,
+} from '../../common/config/provider-url.config';
 
 interface RedisOrderSecretState {
   secrets: string[];
@@ -50,10 +60,14 @@ interface ParsedRedisOrderSecretState {
 }
 
 const DEFAULT_FUSION_SECRET_STATE_TTL_SECONDS = 2 * 60 * 60;
+const FUSION_NATIVE_SECRET_POLL_INTERVAL_MS = 5_000;
+const DEFAULT_FUSION_NATIVE_SECRET_POLL_MAX_SCHEDULES = 1_440;
 
 @Injectable()
 export class FustionNativeService {
   private readonly logger = new Logger(FustionNativeService.name);
+  private readonly oneInchAllowedHosts = getOneInchAllowedHosts();
+  private readonly rpcAllowedHosts = getProviderRpcAllowedHosts();
   private readonly providers = new Map<number, ethers.JsonRpcProvider>();
   private crossChainSdk: CrossChainSDK;
   private fusionSdkMap = new Map<number, FusionSDK>();
@@ -130,6 +144,15 @@ export class FustionNativeService {
       : DEFAULT_FUSION_SECRET_STATE_TTL_SECONDS;
   }
 
+  private getSecretSubmissionMaxSchedules(): number {
+    const configuredMaxSchedules = Number(
+      process.env.FUSION_NATIVE_SECRET_POLL_MAX_SCHEDULES,
+    );
+    return Number.isFinite(configuredMaxSchedules) && configuredMaxSchedules > 0
+      ? Math.floor(configuredMaxSchedules)
+      : DEFAULT_FUSION_NATIVE_SECRET_POLL_MAX_SCHEDULES;
+  }
+
   private parseSecretState(rawStr: string): ParsedRedisOrderSecretState | null {
     try {
       const parsed = JSON.parse(rawStr);
@@ -179,7 +202,10 @@ export class FustionNativeService {
     };
 
     this.crossChainSdk = new CrossChainSDK({
-      url: 'https://api.1inch.com/fusion-plus',
+      url: validateProviderUrl('https://api.1inch.com/fusion-plus', {
+        source: 'INCH_FUSION_PLUS_SDK_URL',
+        allowedHosts: this.oneInchAllowedHosts,
+      }),
       authKey: authKey,
       blockchainProvider: dynamicConnector as any,
     });
@@ -189,7 +215,10 @@ export class FustionNativeService {
     if (!this.fusionSdkMap.has(chainId)) {
       const authKey = this.configService.get<string>('INCH_API_KEY');
       const instance = new FusionSDK({
-        url: 'https://api.1inch.com/fusion',
+        url: validateProviderUrl('https://api.1inch.com/fusion', {
+          source: 'INCH_FUSION_SDK_URL',
+          allowedHosts: this.oneInchAllowedHosts,
+        }),
         authKey: authKey,
         network: chainId,
       });
@@ -211,11 +240,16 @@ export class FustionNativeService {
 
       if (!rpcUrl) {
         throw new BadRequestException(
-          `RPC configuration missing for ${envKey}. Please add it to your .env file.`,
+          'RPC configuration missing for requested chain.',
         );
       }
 
-      this.providers.set(chainId, new ethers.JsonRpcProvider(rpcUrl));
+      const safeRpcUrl = validateProviderUrl(rpcUrl, {
+        source: envKey,
+        allowedHosts: this.rpcAllowedHosts,
+      });
+
+      this.providers.set(chainId, new ethers.JsonRpcProvider(safeRpcUrl));
     }
 
     const provider = this.providers.get(chainId);
@@ -254,14 +288,20 @@ export class FustionNativeService {
           amount: amount,
           walletAddress: walletAddress,
         };
-        const quote = await fusionSdk.getQuote(quoteParams);
-        const preparedOrder = await fusionSdk.createOrder(quoteParams);
+        const quote = await withProviderRetry(() =>
+          fusionSdk.getQuote(quoteParams),
+        );
+        const preparedOrder = await withProviderRetry(() =>
+          fusionSdk.createOrder(quoteParams),
+        );
         const makerAddress = new FusionAddress(walletAddress);
         const nativeMakerAddress = new Address(walletAddress);
-        const orderInfo = await fusionSdk.submitNativeOrder(
-          preparedOrder.order,
-          makerAddress,
-          preparedOrder.quoteId,
+        const orderInfo = await withProviderRetry(() =>
+          fusionSdk.submitNativeOrder(
+            preparedOrder.order,
+            makerAddress,
+            preparedOrder.quoteId,
+          ),
         );
         this.logger.debug(
           `Single-Chain Order Submitted! Hash: ${orderInfo.orderHash}`,
@@ -293,15 +333,17 @@ export class FustionNativeService {
       this.logger.log(
         `Executing Cross-Chain Fusion+ flow from ${srcChainId} to ${dstChainId}`,
       );
-      const quote = await this.crossChainSdk.getQuote({
-        amount: amount,
-        srcChainId: srcChainId,
-        dstChainId: dstChainId,
-        enableEstimate: true,
-        srcTokenAddress,
-        dstTokenAddress,
-        walletAddress: walletAddress,
-      });
+      const quote = await withProviderRetry(() =>
+        this.crossChainSdk.getQuote({
+          amount: amount,
+          srcChainId: srcChainId,
+          dstChainId: dstChainId,
+          enableEstimate: true,
+          srcTokenAddress,
+          dstTokenAddress,
+          walletAddress: walletAddress,
+        }),
+      );
 
       const preset = quote.recommendedPreset;
       const secretCount = quote.presets[PresetEnum['fast']].secretsCount;
@@ -331,12 +373,14 @@ export class FustionNativeService {
 
       assert(order instanceof EvmCrossChainOrder);
 
-      const orderInfo = await this.crossChainSdk.submitNativeOrder(
-        quote.srcChainId,
-        order,
-        EvmAddress.fromString(walletAddress),
-        quoteId,
-        secretHashes,
+      const orderInfo = await withProviderRetry(() =>
+        this.crossChainSdk.submitNativeOrder(
+          quote.srcChainId,
+          order,
+          EvmAddress.fromString(walletAddress),
+          quoteId,
+          secretHashes,
+        ),
       );
 
       await this.setSecretState(hash, {
@@ -360,12 +404,9 @@ export class FustionNativeService {
         quote: quote,
       };
     } catch (error: any) {
+      throwIfHttpException(error);
       this.logger.error(error);
-      const message =
-        error.response?.data?.description ||
-        error.message ||
-        'unable to build swap';
-      throw new BadRequestException(message);
+      throw createProviderBadRequestException(error);
     }
   }
 
@@ -405,56 +446,166 @@ export class FustionNativeService {
         message: 'Fulfillment loop initiated on backend.',
       };
     } catch (error: any) {
+      throwIfHttpException(error);
       this.logger.error(error);
-      const message =
-        error.response?.data?.description ||
-        error.message ||
-        'unable to confirm swap';
-      throw new BadRequestException(message);
+      throw createProviderBadRequestException(error);
     }
+  }
+
+  private async exhaustSecretSubmissionLoop(hash: string): Promise<void> {
+    try {
+      await this.swapOrderService.updateOrderByHash({
+        txHash: hash,
+        orderStatus: SwapOrderStatus.EXHAUSTED,
+      });
+      await this.delSecretState(hash);
+    } catch (error) {
+      this.logger.error(
+        `[Loop Error] Failed to exhaust native Fusion order ${hash}:`,
+        error,
+      );
+    }
+  }
+
+  private async waitBeforeNextSecretSubmissionPoll(
+    scheduleCount: number,
+    maxSchedules: number,
+  ): Promise<void> {
+    if (scheduleCount >= maxSchedules) {
+      return;
+    }
+
+    await new Promise((resolve) =>
+      setTimeout(resolve, FUSION_NATIVE_SECRET_POLL_INTERVAL_MS),
+    );
   }
 
   private async startSecretSubmissionLoop(hash: string, chainId: number) {
     this.logger.log(`[Loop] Monitoring swap target states for order: ${hash}`);
-    const POLL_INTERVAL_MS = 5000;
+    const maxSchedules = this.getSecretSubmissionMaxSchedules();
+    let scheduleCount = 0;
 
     try {
-      while (true) {
+      while (scheduleCount < maxSchedules) {
+        scheduleCount += 1;
         const secretState = await this.getSecretState(hash);
         if (!secretState) {
           this.logger.warn(
             `[Loop] Stopping loop for ${hash}. State cleared from Redis.`,
           );
-          break;
+          return;
         }
 
-        // SINGLE-CHAIN MONITORING
-        if (!secretState.isCrossChain) {
-          const fusionSdk = this.getFusionSdk(chainId);
-          const orderStatus = await fusionSdk.getOrderStatus(hash);
+        try {
+          // SINGLE-CHAIN MONITORING
+          if (!secretState.isCrossChain) {
+            const fusionSdk = this.getFusionSdk(chainId);
+            const orderStatus = await withProviderRetry(() =>
+              fusionSdk.getOrderStatus(hash),
+            );
+            this.logger.log(
+              `[Loop-SingleChain] Order ${hash} current status: ${orderStatus.status}`,
+            );
+
+            if (
+              orderStatus.status === SingleChainOrderStatus.Filled ||
+              orderStatus.status === SingleChainOrderStatus.Expired ||
+              orderStatus.status === SingleChainOrderStatus.Cancelled
+            ) {
+              let targetDbStatus = SwapOrderStatus.EXECUTED;
+              if (orderStatus.status === SingleChainOrderStatus.Expired)
+                targetDbStatus = SwapOrderStatus.EXPIRED;
+              if (orderStatus.status === SingleChainOrderStatus.Cancelled)
+                targetDbStatus = SwapOrderStatus.REFUNDED;
+
+              const orderStatusUpdate =
+                await this.swapOrderService.updateOrderByHash({
+                  txHash: hash,
+                  orderStatus: targetDbStatus,
+                });
+
+              this.logger.log(
+                `[Loop-SingleChain] Sequence finalized with status: ${orderStatus.status}. Cleaning Redis.`,
+                'DB status:',
+                orderStatusUpdate,
+              );
+
+              if (orderStatusUpdate?.deviceFcmToken) {
+                await this.firebaseNotificationService.sendNotification(
+                  orderStatusUpdate.deviceFcmToken,
+                  {
+                    title: `Order Completed: ${orderStatusUpdate.amountOut} ${orderStatusUpdate.toToken}`,
+                    body: `From ${orderStatusUpdate.walletAddress?.slice(0, 4)}.....${orderStatusUpdate.walletAddress?.slice(-4)}`,
+                    data: {
+                      network: orderStatusUpdate.fromChain,
+                      txHash: orderStatusUpdate.txHash,
+                    },
+                  },
+                );
+              }
+              await this.delSecretState(hash);
+              return;
+            }
+
+            await this.waitBeforeNextSecretSubmissionPoll(
+              scheduleCount,
+              maxSchedules,
+            );
+            continue;
+          }
+
+          // CROSS-CHAIN MONITORING
+          const secretsToShare = await withProviderRetry(() =>
+            this.crossChainSdk.getReadyToAcceptSecretFills(hash),
+          );
+          let stateUpdated = false;
+
+          if (secretsToShare.fills.length) {
+            for (const { idx } of secretsToShare.fills) {
+              if (secretState.submittedIdx.has(idx)) {
+                continue;
+              }
+
+              const secret = secretState.secrets[idx];
+              if (!secret) {
+                this.logger.warn(`[${hash}] No secret found at index ${idx}`);
+                continue;
+              }
+
+              await withProviderRetry(() =>
+                this.crossChainSdk.submitSecret(hash, secret),
+              );
+              secretState.submittedIdx.add(idx);
+              stateUpdated = true;
+              this.logger.log(
+                `[Loop] Shared secret for index ${idx} on order ${hash}`,
+              );
+            }
+          }
+
+          if (stateUpdated) {
+            await this.setSecretState(hash, secretState);
+          }
+
+          const { status } = await withProviderRetry(() =>
+            this.crossChainSdk.getOrderStatus(hash),
+          );
           this.logger.log(
-            `[Loop-SingleChain] Order ${hash} current status: ${orderStatus.status}`,
+            `[Loop-CrossChain] Order ${hash} current status: ${status}`,
           );
 
           if (
-            orderStatus.status === SingleChainOrderStatus.Filled ||
-            orderStatus.status === SingleChainOrderStatus.Expired ||
-            orderStatus.status === SingleChainOrderStatus.Cancelled
+            status === CrossChainOrderStatus.Executed ||
+            status === CrossChainOrderStatus.Expired ||
+            status === CrossChainOrderStatus.Refunded
           ) {
-            let targetDbStatus = SwapOrderStatus.EXECUTED;
-            if (orderStatus.status === SingleChainOrderStatus.Expired)
-              targetDbStatus = SwapOrderStatus.EXPIRED;
-            if (orderStatus.status === SingleChainOrderStatus.Cancelled)
-              targetDbStatus = SwapOrderStatus.REFUNDED;
-
             const orderStatusUpdate =
               await this.swapOrderService.updateOrderByHash({
                 txHash: hash,
-                orderStatus: targetDbStatus,
+                orderStatus: SwapOrderStatus[status.toUpperCase()],
               });
-
             this.logger.log(
-              `[Loop-SingleChain] Sequence finalized with status: ${orderStatus.status}. Cleaning Redis.`,
+              `[Loop-CrossChain] Execution sequence finalized with status: ${status}. Cleaning Redis.`,
               'DB status:',
               orderStatusUpdate,
             );
@@ -473,83 +624,26 @@ export class FustionNativeService {
               );
             }
             await this.delSecretState(hash);
-            break;
+            return;
           }
 
-          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-          continue;
-        }
-
-        // CROSS-CHAIN MONITORING
-        const secretsToShare =
-          await this.crossChainSdk.getReadyToAcceptSecretFills(hash);
-        let stateUpdated = false;
-
-        if (secretsToShare.fills.length) {
-          for (const { idx } of secretsToShare.fills) {
-            if (secretState.submittedIdx.has(idx)) {
-              continue;
-            }
-
-            const secret = secretState.secrets[idx];
-            if (!secret) {
-              this.logger.warn(`[${hash}] No secret found at index ${idx}`);
-              continue;
-            }
-
-            await this.crossChainSdk.submitSecret(hash, secret);
-            secretState.submittedIdx.add(idx);
-            stateUpdated = true;
-            this.logger.log(
-              `[Loop] Shared secret for index ${idx} on order ${hash}`,
-            );
-          }
-        }
-
-        if (stateUpdated) {
-          await this.setSecretState(hash, secretState);
-        }
-
-        const { status } = await this.crossChainSdk.getOrderStatus(hash);
-        this.logger.log(
-          `[Loop-CrossChain] Order ${hash} current status: ${status}`,
-        );
-
-        if (
-          status === CrossChainOrderStatus.Executed ||
-          status === CrossChainOrderStatus.Expired ||
-          status === CrossChainOrderStatus.Refunded
-        ) {
-          const orderStatusUpdate =
-            await this.swapOrderService.updateOrderByHash({
-              txHash: hash,
-              orderStatus: SwapOrderStatus[status.toUpperCase()],
-            });
-          this.logger.log(
-            `[Loop-CrossChain] Execution sequence finalized with status: ${status}. Cleaning Redis.`,
-            'DB status:',
-            orderStatusUpdate,
+          await this.waitBeforeNextSecretSubmissionPoll(
+            scheduleCount,
+            maxSchedules,
           );
-
-          if (orderStatusUpdate?.deviceFcmToken) {
-            await this.firebaseNotificationService.sendNotification(
-              orderStatusUpdate.deviceFcmToken,
-              {
-                title: `Order Completed: ${orderStatusUpdate.amountOut} ${orderStatusUpdate.toToken}`,
-                body: `From ${orderStatusUpdate.walletAddress?.slice(0, 4)}.....${orderStatusUpdate.walletAddress?.slice(-4)}`,
-                data: {
-                  network: orderStatusUpdate.fromChain,
-                  txHash: orderStatusUpdate.txHash,
-                },
-              },
-            );
-          }
-          await this.delSecretState(hash);
-          break;
+        } catch (error) {
+          this.logger.error(
+            `[Loop Retry] Provider/action failure for ${hash}; schedule ${scheduleCount}/${maxSchedules}`,
+            error,
+          );
+          await this.waitBeforeNextSecretSubmissionPoll(
+            scheduleCount,
+            maxSchedules,
+          );
         }
-
-        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
       }
+
+      await this.exhaustSecretSubmissionLoop(hash);
     } catch (error) {
       this.logger.error(
         `[Loop Error] Failure observed executing actions on ${hash}:`,

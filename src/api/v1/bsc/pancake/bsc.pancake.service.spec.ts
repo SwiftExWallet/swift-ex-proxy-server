@@ -4,6 +4,7 @@ import { ethers } from 'ethers';
 import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
 import { ChainId } from '../../common/enums/chain.enum';
 import { PancakeSwapService } from './bsc.pancake.service';
+import { ProviderErrorCode } from '../../common/utils/provider-error.util';
 
 const mockProvider = {
   getFeeData: jest.fn(),
@@ -198,6 +199,7 @@ describe('PancakeSwapService', () => {
     process.env = {
       ...originalEnv,
       PROVIDER_RPC_BSC: 'https://bsc-rpc',
+      PROVIDER_RPC_ALLOWED_HOSTS: 'bsc-rpc',
     };
 
     jest.clearAllMocks();
@@ -277,9 +279,12 @@ describe('PancakeSwapService', () => {
       new Error('no pair'),
     );
 
-    await expect(service.getSwapQuote(createQuoteDto())).rejects.toThrow(
-      BadRequestException,
-    );
+    await expect(service.getSwapQuote(createQuoteDto())).rejects.toMatchObject({
+      response: {
+        code: ProviderErrorCode.RouteNotFound,
+        message: 'No provider route was found for this request.',
+      },
+    });
   });
 
   it('rejects transaction preparation without a recipient', async () => {

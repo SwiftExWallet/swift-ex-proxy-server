@@ -1,5 +1,10 @@
 import { inchController } from './1inch.controller';
 import { SwapNetwork } from '../../common/enums/chain.enum';
+import { RATE_LIMIT_KEY } from '../../common/decorators/rate-limit.decorator';
+import {
+  BODY_SIZE_LIMIT_KEY,
+  BODY_SIZE_LIMITS,
+} from '../../common/decorators/body-size-limit.decorator';
 
 describe('inchController', () => {
   const inchService = {
@@ -151,5 +156,102 @@ describe('inchController', () => {
       req.device,
       notification,
     );
+  });
+
+  it('applies wallet-scoped limits to Fusion submit flows', () => {
+    expect(Reflect.getMetadata(RATE_LIMIT_KEY, controller.submitOrder)).toEqual(
+      [
+        { points: 20, duration: 60, key: 'inch-submit-order-ip', keyBy: 'ip' },
+        {
+          points: 10,
+          duration: 60,
+          key: 'inch-submit-order-device',
+          keyBy: 'device',
+        },
+        {
+          points: 10,
+          duration: 60,
+          key: 'inch-submit-order-wallet',
+          keyBy: 'wallet',
+        },
+      ],
+    );
+    expect(
+      Reflect.getMetadata(RATE_LIMIT_KEY, controller.submitFusionPlusOrder),
+    ).toEqual([
+      {
+        points: 20,
+        duration: 60,
+        key: 'inch-submit-fusion-plus-order-ip',
+        keyBy: 'ip',
+      },
+      {
+        points: 10,
+        duration: 60,
+        key: 'inch-submit-fusion-plus-order-device',
+        keyBy: 'device',
+      },
+      {
+        points: 10,
+        duration: 60,
+        key: 'inch-submit-fusion-plus-order-wallet',
+        keyBy: 'wallet',
+      },
+    ]);
+  });
+
+  it('applies device-scoped limits to custom notifications', () => {
+    expect(
+      Reflect.getMetadata(RATE_LIMIT_KEY, controller.customNotification),
+    ).toEqual([
+      {
+        points: 10,
+        duration: 60,
+        key: 'custom-notification-minute-ip',
+        keyBy: 'ip',
+      },
+      {
+        points: 10,
+        duration: 60,
+        key: 'custom-notification-minute-device',
+        keyBy: 'device',
+      },
+      {
+        points: 50,
+        duration: 3600,
+        key: 'custom-notification-hour-ip',
+        keyBy: 'ip',
+      },
+      {
+        points: 50,
+        duration: 3600,
+        key: 'custom-notification-hour-device',
+        keyBy: 'device',
+      },
+    ]);
+  });
+
+  it('applies route-specific body size limits to provider payload routes', () => {
+    expect(
+      Reflect.getMetadata(BODY_SIZE_LIMIT_KEY, controller.submitOrder),
+    ).toEqual({
+      maxBytes: BODY_SIZE_LIMITS.providerOrderPayload,
+      key: 'inch-submit-order',
+    });
+    expect(
+      Reflect.getMetadata(
+        BODY_SIZE_LIMIT_KEY,
+        controller.submitFusionPlusOrder,
+      ),
+    ).toEqual({
+      maxBytes: BODY_SIZE_LIMITS.providerOrderPayload,
+      key: 'inch-submit-fusion-plus-order',
+    });
+    expect(
+      Reflect.getMetadata(BODY_SIZE_LIMIT_KEY, controller.customNotification),
+    ).toEqual({
+      maxBytes: BODY_SIZE_LIMITS.notification,
+      key: 'custom-notification',
+    });
   });
 });

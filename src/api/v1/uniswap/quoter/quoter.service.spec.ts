@@ -9,6 +9,7 @@ import { BadRequestException } from '@nestjs/common';
 import { QuoterService } from './quoter.service';
 import { ChainId, swapProvider } from '../../common/enums/chain.enum';
 import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
+import { ProviderErrorCode } from '../../common/utils/provider-error.util';
 
 describe('QuoterService', () => {
   const providerService = {
@@ -150,5 +151,18 @@ describe('QuoterService', () => {
       validDto,
     );
     expect(service.buildSwapTx).toHaveBeenCalledWith(validDto);
+  });
+
+  it('returns stable provider errors when swap transaction build fails upstream', async () => {
+    jest
+      .spyOn(service, 'getQuote')
+      .mockRejectedValue(new Error('private provider route failure'));
+
+    await expect(service.buildSwapTx(validDto)).rejects.toMatchObject({
+      response: {
+        code: ProviderErrorCode.RouteNotFound,
+        message: 'No provider route was found for this request.',
+      },
+    });
   });
 });

@@ -23,7 +23,17 @@ jest.mock('ethers', () => {
 });
 
 describe('blockchainUtilityMethods', () => {
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    process.env = {
+      ...originalEnv,
+      PROVIDER_RETRY_MAX_ATTEMPTS: '1',
+    };
+  });
+
   afterEach(() => {
+    process.env = originalEnv;
     jest.restoreAllMocks();
     mockContractFactory.mockReset();
   });

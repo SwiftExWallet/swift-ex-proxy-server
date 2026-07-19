@@ -16,6 +16,10 @@ import {
   WETH_ABI,
 } from '../../common/abi/eth';
 import { ProviderService } from '../../provider/provider.service';
+import {
+  createProviderBadRequestException,
+  throwIfHttpException,
+} from '../../common/utils/provider-error.util';
 
 @Injectable()
 export class UniSwapService {
@@ -264,12 +268,8 @@ export class UniSwapService {
     } catch (error) {
       this.logger.error('Quote error:', error);
       this.logger.error('Error stack:', error.stack);
-      const message =
-        error.info?.error?.message ||
-        error.shortMessage ||
-        error.message ||
-        'Failed to get swap quotes.';
-      throw new BadRequestException(message);
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
     }
   }
 
@@ -572,12 +572,8 @@ export class UniSwapService {
       return txs;
     } catch (error) {
       this.logger.error('Prepare swap tx error:', error);
-      const message =
-        error.info?.error?.message ||
-        error.shortMessage ||
-        error.message ||
-        'Failed prepare swap tx';
-      throw new BadRequestException(message);
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
     }
   }
 }

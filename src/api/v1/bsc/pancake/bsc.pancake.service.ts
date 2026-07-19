@@ -19,6 +19,15 @@ import {
   BSC_SWAP_PREPARE_ABI,
   BSC_TOKEN_ABI,
 } from '../../common/abi/bsc';
+import {
+  createProviderBadRequestException,
+  ProviderErrorCode,
+  throwIfHttpException,
+} from '../../common/utils/provider-error.util';
+import {
+  getProviderRpcAllowedHosts,
+  validateProviderUrl,
+} from '../../common/config/provider-url.config';
 
 @Injectable()
 export class PancakeSwapService {
@@ -42,12 +51,14 @@ export class PancakeSwapService {
   private readonly USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
 
   constructor() {
-    this.ethersProvider = new ethers.JsonRpcProvider(
-      process.env.PROVIDER_RPC_BSC as string,
-    );
+    const bscRpcUrl = validateProviderUrl(process.env.PROVIDER_RPC_BSC, {
+      source: 'PROVIDER_RPC_BSC',
+      allowedHosts: getProviderRpcAllowedHosts(),
+    });
+    this.ethersProvider = new ethers.JsonRpcProvider(bscRpcUrl);
     this.viemProvider = createPublicClient({
       chain: bsc,
-      transport: http(process.env.PROVIDER_RPC_BSC as string),
+      transport: http(bscRpcUrl),
     });
 
     // ✅ Verify WBNB address on startup
@@ -105,10 +116,8 @@ export class PancakeSwapService {
         symbol,
         name,
       );
-    } catch (error) {
-      throw new BadRequestException(
-        `Invalid token address: ${tokenAddress}. Error: ${error.message}`,
-      );
+    } catch {
+      throw new BadRequestException('Invalid token address');
     }
   }
 
@@ -219,8 +228,9 @@ export class PancakeSwapService {
       }
 
       if (!trade) {
-        throw new BadRequestException(
-          `No liquidity pool found for ${tokenIn.symbol} -> ${tokenOut.symbol}. This pair may not be tradeable on PancakeSwap.`,
+        throw createProviderBadRequestException(
+          new Error('No liquidity route found'),
+          ProviderErrorCode.RouteNotFound,
         );
       }
 
@@ -246,8 +256,8 @@ export class PancakeSwapService {
       };
     } catch (error) {
       this.logger.error('Quote error:', error);
-      const message = error.message || 'Failed to get swap quote';
-      throw new BadRequestException(message);
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
     }
   }
 
@@ -368,8 +378,9 @@ export class PancakeSwapService {
       }
 
       if (!trade || actualPath.length === 0) {
-        throw new BadRequestException(
-          `No liquidity route found for ${tokenIn.symbol} → ${tokenOut.symbol}`,
+        throw createProviderBadRequestException(
+          new Error('No liquidity route found'),
+          ProviderErrorCode.RouteNotFound,
         );
       }
 
@@ -607,12 +618,8 @@ export class PancakeSwapService {
       return txs;
     } catch (error) {
       this.logger.error('❌ Transaction preparation failed:', error);
-      const message =
-        error.info?.error?.message ||
-        error.shortMessage ||
-        error.message ||
-        'Failed to prepare swap transaction';
-      throw new BadRequestException(message);
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
     }
   }
 
@@ -656,7 +663,10 @@ export class PancakeSwapService {
       return results;
     } catch (error) {
       this.logger.error('Broadcast error:', error);
-      throw new BadRequestException('Failed to broadcast transaction');
+      throw createProviderBadRequestException(
+        error,
+        ProviderErrorCode.TransactionRejected,
+      );
     }
   }
 

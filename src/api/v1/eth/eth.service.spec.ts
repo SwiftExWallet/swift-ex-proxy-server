@@ -1,8 +1,12 @@
 import { EthService } from './eth.service';
+import { ProviderErrorCode } from '../common/utils/provider-error.util';
 
 describe('EthService', () => {
   const originalEnv = process.env;
   let service: EthService;
+  const provider = {
+    broadcastTransaction: jest.fn(),
+  };
   const providerService = {
     getContract: jest.fn(),
     getProvider: jest.fn(),
@@ -24,6 +28,7 @@ describe('EthService', () => {
     };
     jest.clearAllMocks();
     providerService.getContract.mockReturnValue({});
+    providerService.getProvider.mockReturnValue(provider);
 
     service = new EthService(
       providerService as any,
@@ -58,5 +63,23 @@ describe('EthService', () => {
     await expect(service.getSwapQuote({} as any)).resolves.toBe(quote);
     expect(uniSwapService.getQuote).toHaveBeenCalledWith({});
     expect(ethTestnetSwapService.getQuote).not.toHaveBeenCalled();
+  });
+
+  it('returns a stable provider error when broadcast fails', async () => {
+    provider.broadcastTransaction.mockRejectedValue({
+      message: 'upstream RPC revealed internal node details',
+    });
+
+    await expect(
+      service.broadcastTransaction({
+        signedTx: '0xsigned',
+        broadcastChain: 'ETH',
+      } as any),
+    ).rejects.toMatchObject({
+      response: {
+        code: ProviderErrorCode.TransactionRejected,
+        message: 'Provider rejected the transaction.',
+      },
+    });
   });
 });

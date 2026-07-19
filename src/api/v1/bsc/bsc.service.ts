@@ -32,6 +32,11 @@ import { getErc20ContractInfo } from '../common/helpers/contractUtilityMethod';
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 import { UsdtBalanceDto } from './dto/usdtBalance.dto';
 import { PancakeSwapService } from './pancake/bsc.pancake.service';
+import {
+  createProviderBadRequestException,
+  ProviderErrorCode,
+  throwIfHttpException,
+} from '../common/utils/provider-error.util';
 
 @Injectable()
 export class BscService {
@@ -74,67 +79,74 @@ export class BscService {
 
       return formatUnits(amountsOut[1], tokenIn.decimals);
     } catch (error: any) {
-      throw new Error(`Failed to get swap quote: ${error.message}`);
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
     }
   }
 
   async prepareSwapTransaction(
     prepareSwapTransactionDto: SwapQuoteDto,
   ): Promise<any> {
-    if (process.env.ENVIRONMENT === 'prod') {
-      return await this.pancakeSwapService.createUnsignedSwapTransaction(
-        prepareSwapTransactionDto,
+    try {
+      if (process.env.ENVIRONMENT === 'prod') {
+        return await this.pancakeSwapService.createUnsignedSwapTransaction(
+          prepareSwapTransactionDto,
+        );
+      }
+
+      const { recipient, tokenIn, tokenOut, amount } =
+        prepareSwapTransactionDto;
+      const path: [string, string] = [
+        getAddress(tokenIn.address),
+        getAddress(tokenOut.address),
+      ];
+
+      const amountIn: bigint = parseEther(amount);
+
+      const amountsOut: bigint[] = (await this.routerContract.getAmountsOut(
+        amountIn,
+        path,
+      )) as bigint[];
+
+      const slippagePercent = Number(process.env.BSC_SLIPPAGE ?? '5'); // fallback to 5 if undefined
+      const minOut: bigint =
+        (amountsOut[1] * BigInt(100 - slippagePercent)) / 100n;
+      const deadline: number =
+        Math.floor(Date.now() / 1000) +
+        Number(process.env.BSC_TRANSACTION_WAIT_TIME_IN_SECONDS);
+
+      const iface: Interface = new Interface(BSC_ROUTER_ABI);
+
+      const data = iface.encodeFunctionData('swapExactETHForTokens', [
+        minOut,
+        path,
+        recipient,
+        deadline,
+      ]);
+
+      const nonce: number = await getTransactionCount(this.provider, recipient);
+      const { chainId } = await getNetwork(this.provider);
+
+      const { maxFeePerGas, maxPriorityFeePerGas } = await getFeeData(
+        this.provider,
       );
+
+      const tx: TransactionRequest = {
+        to: getAddress(process.env.BSC_ROUTER_ADDRESS!),
+        value: amountIn,
+        gasLimit: process.env.BSC_TRANSACTION_GAS_LIMIT,
+        nonce,
+        chainId,
+        data,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
+      };
+
+      return tx;
+    } catch (error) {
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
     }
-
-    const { recipient, tokenIn, tokenOut, amount } = prepareSwapTransactionDto;
-    const path: [string, string] = [
-      getAddress(tokenIn.address),
-      getAddress(tokenOut.address),
-    ];
-
-    const amountIn: bigint = parseEther(amount);
-
-    const amountsOut: bigint[] = (await this.routerContract.getAmountsOut(
-      amountIn,
-      path,
-    )) as bigint[];
-
-    const slippagePercent = Number(process.env.BSC_SLIPPAGE ?? '5'); // fallback to 5 if undefined
-    const minOut: bigint =
-      (amountsOut[1] * BigInt(100 - slippagePercent)) / 100n;
-    const deadline: number =
-      Math.floor(Date.now() / 1000) +
-      Number(process.env.BSC_TRANSACTION_WAIT_TIME_IN_SECONDS);
-
-    const iface: Interface = new Interface(BSC_ROUTER_ABI);
-
-    const data = iface.encodeFunctionData('swapExactETHForTokens', [
-      minOut,
-      path,
-      recipient,
-      deadline,
-    ]);
-
-    const nonce: number = await getTransactionCount(this.provider, recipient);
-    const { chainId } = await getNetwork(this.provider);
-
-    const { maxFeePerGas, maxPriorityFeePerGas } = await getFeeData(
-      this.provider,
-    );
-
-    const tx: TransactionRequest = {
-      to: getAddress(process.env.BSC_ROUTER_ADDRESS!),
-      value: amountIn,
-      gasLimit: process.env.BSC_TRANSACTION_GAS_LIMIT,
-      nonce,
-      chainId,
-      data,
-      maxFeePerGas,
-      maxPriorityFeePerGas,
-    };
-
-    return tx;
   }
 
   async broadcastTransaction(
@@ -194,109 +206,126 @@ export class BscService {
       };
     } catch (error) {
       this.logger.error('Broadcast error:', error);
-
-      const message =
-        error.info?.error?.message ||
-        error.shortMessage ||
-        error.message ||
-        'Transaction broadcast failed';
-
-      throw new BadRequestException(message);
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(
+        error,
+        ProviderErrorCode.TransactionRejected,
+      );
     }
   }
 
   async getUsdtTokenBalance(
     usdtBalanceDto: UsdtBalanceDto,
   ): Promise<{ walletBalance: bigint; tokenBalance: bigint }> {
-    const { walletAddress, tokenAddress } = usdtBalanceDto;
-    const walletAddressDto: WalletAddressDto = {
-      walletAddress: walletAddress as string,
-    };
-    const [walletBalance, tokenBalance] = await Promise.all([
-      this.getBalance(walletAddressDto),
-      getErc20ContractTokenBalance(
-        tokenAddress,
-        walletAddress as string,
-        this.provider,
-      ),
-    ]);
+    try {
+      const { walletAddress, tokenAddress } = usdtBalanceDto;
+      const walletAddressDto: WalletAddressDto = {
+        walletAddress: walletAddress as string,
+      };
+      const [walletBalance, tokenBalance] = await Promise.all([
+        this.getBalance(walletAddressDto),
+        getErc20ContractTokenBalance(
+          tokenAddress,
+          walletAddress as string,
+          this.provider,
+        ),
+      ]);
 
-    return { walletBalance, tokenBalance };
+      return { walletBalance, tokenBalance };
+    } catch (error) {
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
+    }
   }
 
   async getBalance(walletAddressDto: WalletAddressDto): Promise<bigint> {
-    const { walletAddress } = walletAddressDto;
-    return getNativeCurrencyBalance(walletAddress, this.provider);
+    try {
+      const { walletAddress } = walletAddressDto;
+      return await getNativeCurrencyBalance(walletAddress, this.provider);
+    } catch (error) {
+      throw createProviderBadRequestException(error);
+    }
   }
 
   async getWalletAddressInfo(
     walletAddressDto: WalletAddressDto,
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
-    const { walletAddress } = walletAddressDto;
-    const [transactionCount, gasFeeData] = await Promise.all([
-      getTransactionCount(this.provider, walletAddress),
-      getFeeData(this.provider),
-    ]);
+    try {
+      const { walletAddress } = walletAddressDto;
+      const [transactionCount, gasFeeData] = await Promise.all([
+        getTransactionCount(this.provider, walletAddress),
+        getFeeData(this.provider),
+      ]);
 
-    return {
-      transactionCount,
-      gasFeeData,
-    };
+      return {
+        transactionCount,
+        gasFeeData,
+      };
+    } catch (error) {
+      throw createProviderBadRequestException(error);
+    }
   }
 
   async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
-    const { addresses, walletAddress } = getTokenInfoDto;
-    const validAddresses: string[] = ValidateAddress(addresses);
+    try {
+      const { addresses, walletAddress } = getTokenInfoDto;
+      const validAddresses: string[] = ValidateAddress(addresses);
 
-    if (validAddresses.length === 0) {
-      throw new Error('No valid token addresses provided');
+      if (validAddresses.length === 0) {
+        throw new BadRequestException('No valid token addresses provided');
+      }
+
+      const tokenInfos = await Promise.all(
+        validAddresses.map(async (address) => {
+          const tokenContract: Contract = this.providerService.getContract(
+            address,
+            BSC_IMPORT_TOKEN_ABI,
+            ChainEnum.BSC,
+          );
+          const { name, symbol, decimals, balance } =
+            await getErc20ContractInfo(tokenContract, walletAddress);
+
+          const formattedBalance: string = formatUnits(balance, decimals);
+          return {
+            name,
+            symbol,
+            balance: formattedBalance,
+            address,
+            imageUrl: '',
+            decimals: decimals,
+          };
+        }),
+      );
+
+      return tokenInfos;
+    } catch (error) {
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
     }
-
-    const tokenInfos = await Promise.all(
-      validAddresses.map(async (address) => {
-        const tokenContract: Contract = this.providerService.getContract(
-          address,
-          BSC_IMPORT_TOKEN_ABI,
-          ChainEnum.BSC,
-        );
-        const { name, symbol, decimals, balance } = await getErc20ContractInfo(
-          tokenContract,
-          walletAddress,
-        );
-
-        const formattedBalance: string = formatUnits(balance, decimals);
-        return {
-          name,
-          symbol,
-          balance: formattedBalance,
-          address,
-          imageUrl: '',
-          decimals: decimals,
-        };
-      }),
-    );
-
-    return tokenInfos;
   }
 
   async prepareTransaction(
     prepareTransactionDto: PrepareTransactionDto,
   ): Promise<FullTransaction> {
-    const { unsignedTx, walletAddress } = prepareTransactionDto;
-    const [nonce, gasLimit, feeData, network] = await Promise.all([
-      getTransactionCount(this.provider, walletAddress),
-      getEstimateGas(this.provider, walletAddress, unsignedTx),
-      getFeeData(this.provider),
-      getNetwork(this.provider),
-    ]);
+    try {
+      const { unsignedTx, walletAddress } = prepareTransactionDto;
+      const [nonce, gasLimit, feeData, network] = await Promise.all([
+        getTransactionCount(this.provider, walletAddress),
+        getEstimateGas(this.provider, walletAddress, unsignedTx),
+        getFeeData(this.provider),
+        getNetwork(this.provider),
+      ]);
 
-    const transaction: FullTransaction = {
-      unsignedTx,
-      nonce,
-      gasLimit,
-      gasPrice: feeData?.gasPrice,
-      chainId: network.chainId,
-    };
-    return transaction;
+      const transaction: FullTransaction = {
+        unsignedTx,
+        nonce,
+        gasLimit,
+        gasPrice: feeData?.gasPrice,
+        chainId: network.chainId,
+      };
+      return transaction;
+    } catch (error) {
+      throw createProviderBadRequestException(error);
+    }
   }
 }

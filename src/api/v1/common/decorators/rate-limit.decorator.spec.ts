@@ -3,6 +3,8 @@ import {
   RATE_LIMIT_KEY,
   RateLimit,
   RateLimitConfig,
+  rateLimitByIpAndDevice,
+  rateLimitByIpDeviceAndWallet,
 } from './rate-limit.decorator';
 
 describe('RateLimit decorator', () => {
@@ -77,5 +79,47 @@ describe('RateLimit decorator', () => {
     expect(
       Reflect.getMetadata(RATE_LIMIT_KEY, TestController.prototype.handler),
     ).toEqual([]);
+  });
+
+  it('creates IP and device scoped limits', () => {
+    expect(
+      rateLimitByIpAndDevice('submit-flow', { ip: 20, device: 10 }),
+    ).toEqual([
+      { points: 20, duration: 60, key: 'submit-flow-ip', keyBy: 'ip' },
+      {
+        points: 10,
+        duration: 60,
+        key: 'submit-flow-device',
+        keyBy: 'device',
+      },
+    ]);
+  });
+
+  it('creates IP, device, and wallet scoped limits', () => {
+    expect(
+      rateLimitByIpDeviceAndWallet(
+        'broadcast-flow',
+        {
+          ip: 20,
+          device: 10,
+          wallet: 10,
+        },
+        120,
+      ),
+    ).toEqual([
+      { points: 20, duration: 120, key: 'broadcast-flow-ip', keyBy: 'ip' },
+      {
+        points: 10,
+        duration: 120,
+        key: 'broadcast-flow-device',
+        keyBy: 'device',
+      },
+      {
+        points: 10,
+        duration: 120,
+        key: 'broadcast-flow-wallet',
+        keyBy: 'wallet',
+      },
+    ]);
   });
 });

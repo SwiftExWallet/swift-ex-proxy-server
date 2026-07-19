@@ -22,6 +22,10 @@ import { ChainEnum } from '../../../common/enums/chain.enum';
 import { CHAIN_CONFIGS, QUOTER_V2_ABI } from '../constants/quoter.chain.config';
 
 import { SupportedChain } from '../dto/quoter.dto';
+import {
+  createProviderBadRequestException,
+  throwIfHttpException,
+} from '../../../common/utils/provider-error.util';
 
 @Injectable()
 export class SwapService {
@@ -225,7 +229,7 @@ export class SwapService {
         networkFee: Number(networkFee),
       };
     } catch (e: any) {
-      throw new BadRequestException(e.message);
+      throw createProviderBadRequestException(e);
     }
   }
 
@@ -457,8 +461,8 @@ export class SwapService {
       return txs;
     } catch (e: any) {
       this.logger.error(e);
-
-      throw new BadRequestException(e.message || 'Failed build tx');
+      throwIfHttpException(e);
+      throw createProviderBadRequestException(e);
     }
   }
 }

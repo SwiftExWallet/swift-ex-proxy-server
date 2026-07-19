@@ -136,4 +136,43 @@ describe('RateLimitGuard', () => {
       guard.canActivate(createContext({ ip: '127.0.0.1' })),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
+
+  it('global fallback limits by available IP, device, and wallet contexts', async () => {
+    reflector.getAllAndOverride.mockReturnValue(undefined);
+    const request = {
+      ip: '10.0.0.1',
+      device: { _id: 'device-a' },
+      wallet: { address: '0x1111111111111111111111111111111111111111' },
+    };
+
+    for (let i = 0; i < 100; i += 1) {
+      await expect(guard.canActivate(createContext(request))).resolves.toBe(
+        true,
+      );
+    }
+
+    await expect(
+      guard.canActivate(
+        createContext({
+          ip: '10.0.0.2',
+          device: { _id: 'device-a' },
+          wallet: { address: '0x2222222222222222222222222222222222222222' },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ limit: 'global-device' }),
+    });
+
+    await expect(
+      guard.canActivate(
+        createContext({
+          ip: '10.0.0.3',
+          device: { _id: 'device-b' },
+          wallet: { address: '0x1111111111111111111111111111111111111111' },
+        }),
+      ),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({ limit: 'global-wallet' }),
+    });
+  });
 });

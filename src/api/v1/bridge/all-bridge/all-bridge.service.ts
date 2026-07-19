@@ -5,14 +5,7 @@ import {
   Messenger,
   RawTransaction,
 } from '@allbridge/bridge-core-sdk';
-import {
-  BadRequestException,
-  HttpException,
-  HttpStatus,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   ValidPayFeeType,
   ValidWalletType,
@@ -28,6 +21,11 @@ import {
 import { FeeData, JsonRpcProvider } from 'ethers';
 import { ProviderService } from '../../provider/provider.service';
 import { ChainEnum } from '../../common/enums/chain.enum';
+import {
+  createProviderBadRequestException,
+  ProviderErrorCode,
+  throwIfHttpException,
+} from '../../common/utils/provider-error.util';
 
 @Injectable()
 export class AllBridgeService {
@@ -204,13 +202,8 @@ export class AllBridgeService {
       };
     } catch (error) {
       this.logger.error('Error in swap prepare:', error);
-      const message =
-        error.info?.error?.message ||
-        error.shortMessage ||
-        error.message ||
-        'Transaction preparation failed';
-
-      throw new BadRequestException(message);
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
     }
   }
 
@@ -230,7 +223,7 @@ export class AllBridgeService {
       const sourceChain = chains[allBridgeQuotes.sourceChain];
       const destinationChain = chains[allBridgeQuotes.destinationChain];
       if (!sourceChain || !destinationChain) {
-        throw new NotFoundException('Chain details not found');
+        throw new BadRequestException('Chain details not found');
       }
 
       const sourceToken = sourceChain.tokens.find(
@@ -241,7 +234,7 @@ export class AllBridgeService {
       );
 
       if (!sourceToken || !destinationToken) {
-        throw new HttpException('Token not found', HttpStatus.BAD_REQUEST);
+        throw new BadRequestException('Token not found');
       }
 
       const minimumReceiveAmount = await this.sdk.getAmountToBeReceived(
@@ -296,13 +289,8 @@ export class AllBridgeService {
       };
     } catch (error) {
       this.logger.error('Error in getSwapDetails:', error);
-      const message =
-        error.info?.error?.message ||
-        error.shortMessage ||
-        error.message ||
-        'Failed to get swap details.';
-
-      throw new BadRequestException(message);
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
     }
   }
 
@@ -331,7 +319,10 @@ export class AllBridgeService {
         `${label} simulation failed`;
 
       this.logger.error(`=== ${label} simulation FAILED: ${revertReason} ===`);
-      throw new BadRequestException(revertReason);
+      throw createProviderBadRequestException(
+        error,
+        ProviderErrorCode.TransactionRejected,
+      );
     }
   }
 

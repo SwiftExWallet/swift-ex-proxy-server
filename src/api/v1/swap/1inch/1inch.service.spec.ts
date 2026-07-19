@@ -7,6 +7,7 @@ import {
   decryptFusionSecretState,
   encryptFusionSecretState,
 } from '../../common/utils/encryption.util';
+import { ProviderErrorCode } from '../../common/utils/provider-error.util';
 
 describe('InchService Fusion+ poller', () => {
   const originalEnv = process.env;
@@ -50,6 +51,12 @@ describe('InchService Fusion+ poller', () => {
     process.env = {
       ...originalEnv,
       FUSION_SECRETS_ENCRYPTION_KEY: encryptionKey,
+      QUOTER_BASE: 'https://api.1inch.dev/swap/v6.0',
+      FUSION_PLUS_QUOTER_BASE: 'https://api.1inch.dev/fusion-plus/quoter',
+      INCH_RELAYER_BASE: 'https://api.1inch.dev/fusion/relayer',
+      FUSION_PLUS_RELAYER_BASE: 'https://api.1inch.dev/fusion-plus/relayer',
+      INCH_ORDER_BASE: 'https://api.1inch.dev/fusion/orders',
+      FUSION_PLUS_ORDER_BASE: 'https://api.1inch.dev/fusion-plus/orders/',
     };
     jest.useFakeTimers();
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
@@ -237,5 +244,50 @@ describe('InchService Fusion+ poller', () => {
     );
     expect(startPoller).toHaveBeenCalledWith(pendingOrder.txHash);
     expect(startPoller).toHaveBeenCalledWith(refundingOrder.txHash);
+  });
+
+  it('returns stable provider errors for quote failures', async () => {
+    jest.spyOn(service as any, 'providerGet').mockRejectedValue({
+      response: {
+        status: 429,
+        data: {
+          description: 'quota exhausted for private 1inch route',
+        },
+      },
+    });
+
+    const error = await service
+      .getSwapQuote({
+        tokenIn: '0xtoken-in',
+        tokenOut: '0xtoken-out',
+        amount: '1',
+        walletAddress: '0xwallet',
+        chain: 'ETH',
+      } as any)
+      .catch((err) => err);
+
+    expect(error).toMatchObject({
+      response: {
+        code: ProviderErrorCode.RateLimited,
+        message: 'Provider rate limit exceeded. Please try again later.',
+      },
+    });
+    expect(JSON.stringify(error.response)).not.toContain('private 1inch route');
+  });
+
+  it('rejects redirected 1inch base URLs before provider calls', async () => {
+    const providerGet = jest.spyOn(service as any, 'providerGet');
+    process.env.QUOTER_BASE = 'https://evil.example/swap/v6.0';
+
+    await expect(
+      service.getSwapQuote({
+        tokenIn: '0xtoken-in',
+        tokenOut: '0xtoken-out',
+        amount: '1',
+        walletAddress: '0xwallet',
+        chain: 'ETH',
+      } as any),
+    ).rejects.toThrow('QUOTER_BASE host is not allowlisted');
+    expect(providerGet).not.toHaveBeenCalled();
   });
 });

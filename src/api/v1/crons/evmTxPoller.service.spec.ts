@@ -40,6 +40,7 @@ describe('EvmTxPollerService', () => {
     process.env = {
       ...originalEnv,
       BLOCKSCOUT_ETH: 'https://blockscout.eth',
+      BLOCKSCOUT_ALLOWED_HOSTS: 'blockscout.eth',
     };
     (global as any).fetch = jest.fn();
 
@@ -74,6 +75,16 @@ describe('EvmTxPollerService', () => {
 
     expect(repo.findPendingByProvider).toHaveBeenCalledWith(swapProvider.EVMTX);
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects unallowlisted Blockscout URLs during construction', () => {
+    process.env.BLOCKSCOUT_ALLOWED_HOSTS = 'blockscout.eth';
+    process.env.BLOCKSCOUT_ETH = 'https://evil.example';
+
+    expect(
+      () =>
+        new EvmTxPollerService(repo as any, firebaseNotificationService as any),
+    ).toThrow('BLOCKSCOUT_ETH host is not allowlisted');
   });
 
   it('returns without polling when repository fetch fails', async () => {
@@ -145,6 +156,37 @@ describe('EvmTxPollerService', () => {
     expect(repo.updateOrderStatus).toHaveBeenCalledWith(
       tx.txHash,
       SwapOrderStatus.FAILED,
+    );
+  });
+
+  it('retries retryable Blockscout HTTP failures before processing a receipt', async () => {
+    process.env.PROVIDER_RETRY_MAX_ATTEMPTS = '2';
+    process.env.PROVIDER_RETRY_BASE_DELAY_MS = '1';
+    process.env.PROVIDER_RETRY_MAX_DELAY_MS = '1';
+    const tx = createTx();
+    repo.findPendingByProvider.mockResolvedValue({ ok: true, data: [tx] });
+    repo.updateOrderStatus.mockResolvedValue({ ...tx, txType: 'Swap' });
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: jest.fn().mockResolvedValue({
+          status: '1',
+          message: 'OK',
+          result: { status: '1' },
+        }),
+      });
+
+    await service.poll();
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(repo.updateOrderStatus).toHaveBeenCalledWith(
+      tx.txHash,
+      SwapOrderStatus.COMPLETED,
     );
   });
 });

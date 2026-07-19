@@ -22,6 +22,11 @@ import { SwapProviderResolver } from './dto/swap-provider.resolver';
 import { TokenMetadataService } from '../../common/services/tokenMetadata.service';
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
+import {
+  createProviderBadRequestException,
+  ProviderErrorCode,
+  throwIfHttpException,
+} from '../../common/utils/provider-error.util';
 
 type UniswapSwapRoute = NonNullable<Awaited<ReturnType<AlphaRouter['route']>>>;
 
@@ -188,7 +193,10 @@ export class QuoterService {
       );
       if (!route) {
         this.logger.error('No route found');
-        throw new BadRequestException('No route found');
+        throw createProviderBadRequestException(
+          new Error('No route found'),
+          ProviderErrorCode.RouteNotFound,
+        );
       }
       const outputSwapAmt = route.quote.toExact();
       const slippage = 0.5;
@@ -220,7 +228,8 @@ export class QuoterService {
           };
     } catch (e) {
       this.logger.error('error', e);
-      throw new BadRequestException(e.message);
+      throwIfHttpException(e);
+      throw createProviderBadRequestException(e);
     }
   }
 
@@ -273,7 +282,8 @@ export class QuoterService {
       });
       return txs;
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
     }
   }
 }
