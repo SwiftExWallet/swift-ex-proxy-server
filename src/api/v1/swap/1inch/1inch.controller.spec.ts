@@ -1,0 +1,136 @@
+import { inchController } from './1inch.controller';
+import { SwapNetwork } from '../../common/enums/chain.enum';
+
+describe('inchController', () => {
+  const inchService = {
+    getFusionPlusSwapQuote: jest.fn(),
+    buildFusionPlusOrder: jest.fn(),
+    submitFusionOrder: jest.fn(),
+    submitFusionPlusOrder: jest.fn(),
+    fireCustomNotification: jest.fn(),
+  };
+  const fustionNativeService = {
+    createSwapOrder: jest.fn(),
+    confirmSwapOrder: jest.fn(),
+  };
+
+  let controller: inchController;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    controller = new inchController(
+      inchService as any,
+      fustionNativeService as any,
+    );
+  });
+
+  it('passes the authenticated device when submitting a Fusion order', async () => {
+    const req = { device: { _id: 'device-id' } };
+    const dto = {
+      order: { salt: '1' },
+      signature: '0xsignature',
+      extension: '0xextension',
+      quoteId: 'quote-id',
+      chain: SwapNetwork.ETH,
+    };
+    const result = { orderHash: '0xorderhash' };
+    inchService.submitFusionOrder.mockResolvedValue(result);
+
+    await expect(controller.submitOrder(req, dto as any)).resolves.toBe(result);
+
+    expect(inchService.submitFusionOrder).toHaveBeenCalledWith(req.device, dto);
+  });
+
+  it('passes the authenticated device when submitting a Fusion+ order', async () => {
+    const req = { device: { _id: 'device-id' } };
+    const dto = {
+      order: { salt: '1' },
+      signature: '0xsignature',
+      extension: '0xextension',
+      quoteId: 'quote-id',
+      chain: SwapNetwork.ETH,
+      orderHash: '0xorderhash',
+    };
+    const result = { accepted: true };
+    inchService.submitFusionPlusOrder.mockResolvedValue(result);
+
+    await expect(
+      controller.submitFusionPlusOrder(req, dto as any),
+    ).resolves.toBe(result);
+
+    expect(inchService.submitFusionPlusOrder).toHaveBeenCalledWith(
+      req.device,
+      dto,
+    );
+  });
+
+  it('delegates Fusion+ quote requests to the Inch service', async () => {
+    const dto = {
+      srcChain: SwapNetwork.ETH,
+      dstChain: SwapNetwork.BSC,
+      srcTokenAddress: '0x1111111111111111111111111111111111111111',
+      dstTokenAddress: '0x2222222222222222222222222222222222222222',
+      walletAddress: '0x3333333333333333333333333333333333333333',
+      amount: '100',
+    };
+    const result = { quoteId: 'quote-id' };
+    inchService.getFusionPlusSwapQuote.mockResolvedValue(result);
+
+    await expect(controller.getFusionPlusQuote(dto)).resolves.toBe(result);
+
+    expect(inchService.getFusionPlusSwapQuote).toHaveBeenCalledWith(dto);
+  });
+
+  it('delegates native Fusion+ order creation and confirmation', async () => {
+    const createDto = {
+      srcChain: SwapNetwork.ETH,
+      dstChain: SwapNetwork.BSC,
+      srcTokenAddress: '0x1111111111111111111111111111111111111111',
+      dstTokenAddress: '0x2222222222222222222222222222222222222222',
+      walletAddress: '0x3333333333333333333333333333333333333333',
+      amount: '100',
+    };
+    const confirmDto = {
+      orderHash: '0xorderhash',
+      txHash: '0xtxhash',
+      srcChain: SwapNetwork.ETH,
+    };
+    fustionNativeService.createSwapOrder.mockResolvedValue({
+      order: 'native-order',
+    });
+    fustionNativeService.confirmSwapOrder.mockResolvedValue({
+      confirmed: true,
+    });
+
+    await expect(
+      controller.buildFusionPlusNativeOrder(createDto),
+    ).resolves.toEqual({
+      order: 'native-order',
+    });
+    await expect(controller.confirmOrder(confirmDto)).resolves.toEqual({
+      confirmed: true,
+    });
+
+    expect(fustionNativeService.createSwapOrder).toHaveBeenCalledWith(
+      createDto,
+    );
+    expect(fustionNativeService.confirmSwapOrder).toHaveBeenCalledWith(
+      confirmDto,
+    );
+  });
+
+  it('passes the authenticated device when firing a custom notification', async () => {
+    const req = { device: { _id: 'device-id' } };
+    const notification = { title: 'Swap', body: 'Updated' };
+    inchService.fireCustomNotification.mockResolvedValue({ sent: true });
+
+    await expect(
+      controller.customNotification(req, notification as any),
+    ).resolves.toEqual({ sent: true });
+
+    expect(inchService.fireCustomNotification).toHaveBeenCalledWith(
+      req.device,
+      notification,
+    );
+  });
+});

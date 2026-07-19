@@ -67,7 +67,6 @@ export enum ChainId {
 }
 
 export enum swapProvider {
-  RANGO = 'RANGO',
   UNISWAP = 'UNISWAP',
   ONEINCH_FUSION = 'ONEINCH_FUSION',
   ONEINCH_FUSION_PLUS = 'ONEINCH_FUSION_PLUS',
@@ -76,26 +75,3 @@ export enum swapProvider {
   DYDX = 'DYDX',
   SRBTODYDX = 'SRBTODYDX',
 }
-
-export const ChainIdToRango: Record<number, string> = {
-  1: 'ETH',
-  56: 'BSC',
-  137: 'POLYGON',
-  42161: 'ARBITRUM',
-  10: 'OPTIMISM',
-  8453: 'BASE',
-  43114: 'AVAX_CCHAIN',
-  250: 'FANTOM',
-  25: 'CRONOS',
-  100: 'GNOSIS',
-  1088: 'METIS',
-  1101: 'POLYGONZK',
-  324: 'ZKSYNC',
-  59144: 'LINEA',
-  534352: 'SCROLL',
-  81457: 'BLAST',
-  167000: 'TAIKO',
-  7777777: 'ZORA',
-  34443: 'MODE',
-  80094: 'BERACHAIN',
-};

@@ -16,15 +16,6 @@ export class StoreSwapOrderDto {
   })
   quoteId: string;
 
-  @ValidateIf((o) => o.provider === swapProvider.RANGO)
-  @IsString({
-    message: 'requestId must be a string',
-  })
-  @IsNotEmpty({
-    message: `requestId is required for this provider`,
-  })
-  requestId?: string;
-  
   @IsString()
   @IsNotEmpty()
   txHash: string;
@@ -78,17 +69,6 @@ export class StoreSwapOrderDto {
   @IsNumber()
   @IsOptional()
   usdValue?: number;
-}
-
-export class UpdateSwapOrderStatusDto {
-  @IsEnum(OrderStatus)
-  status: OrderStatus;
-
-  @IsOptional()
-  blockNumber?: number | null;
-
-  @IsOptional()
-  confirmedAt?: Date | null;
 }
 
 export class MultiChainWalletAddressDto{

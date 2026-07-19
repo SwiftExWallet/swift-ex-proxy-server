@@ -5,16 +5,16 @@ import { Type } from 'class-transformer';
 export class PrepareSwapTransactionDto {
   @IsNotEmpty()
   @IsEthereumAddress()
-  address: string;
+  address!: string;
 
   @IsNotEmpty()
-  bnbAmount: string;
-
-  @IsNotEmpty()
-  @Type(() => TokenInfoDto)
-  tokenIn: TokenInfoDto;
+  bnbAmount!: string;
 
   @IsNotEmpty()
   @Type(() => TokenInfoDto)
-  tokenOut: TokenInfoDto;
+  tokenIn!: TokenInfoDto;
+
+  @IsNotEmpty()
+  @Type(() => TokenInfoDto)
+  tokenOut!: TokenInfoDto;
 }

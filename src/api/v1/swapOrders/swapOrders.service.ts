@@ -148,10 +148,6 @@ export class SwapOrderService {
     }
   }
 
-  async updateOrder(updateTxStatusDto: UpdateTxStatusDto): Promise<DbResult<void>>  {
-    return await this.swapOrderRepository.updateStatus(updateTxStatusDto.txHash,updateTxStatusDto.orderStatus);
-  }
-
   async updateOrderByHash(updateTxStatusDto: UpdateTxStatusDto): Promise<SwapOrders|null>  {
     return await this.swapOrderRepository.updateOrderStatus(updateTxStatusDto.txHash,updateTxStatusDto.orderStatus);
   }

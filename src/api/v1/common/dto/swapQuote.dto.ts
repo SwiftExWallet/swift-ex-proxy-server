@@ -13,7 +13,7 @@ import { ChainId } from '../enums/chain.enum';
 export class TokenInfoDto {
   @Matches(
     /^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$|^[A-Z0-9]{1,12}-G[A-Z0-9]{55}$/,
-    { message: 'Invalid public key format' }
+    { message: 'Invalid public key format' },
   )
   address: string;
 
@@ -45,8 +45,9 @@ export class SwapQuoteDto {
   amount: string;
 
   @IsNotEmpty()
-  recipient:string;
+  @IsString()
+  recipient: string;
 
   @IsOptional()
-  slippage?:number
+  slippage?: number;
 }

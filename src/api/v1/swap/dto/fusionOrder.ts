@@ -9,24 +9,24 @@ import { SwapNetwork } from '../../common/enums/chain.enum';
 export class FusionOrderDto {
   @IsNotEmpty()
   @IsEnum(SwapNetwork)
-  chain: SwapNetwork;
+  chain!: SwapNetwork;
 
   @IsNotEmpty()
-  quote: any;
-
-  @IsNotEmpty()
-  @IsEthereumAddress()
-  tokenIn: string;
+  quote!: any;
 
   @IsNotEmpty()
   @IsEthereumAddress()
-  tokenOut: string;
+  tokenIn!: string;
 
   @IsNotEmpty()
   @IsEthereumAddress()
-  walletAddress: string;
+  tokenOut!: string;
+
+  @IsNotEmpty()
+  @IsEthereumAddress()
+  walletAddress!: string;
 
   @IsNotEmpty()
   @IsString()
-  amount: string;
+  amount!: string;
 }

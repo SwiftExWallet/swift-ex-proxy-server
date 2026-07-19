@@ -9,21 +9,21 @@ import { SwapNetwork } from '../../common/enums/chain.enum';
 export class SwapQuoteDto {
   @IsNotEmpty()
   @IsEnum(SwapNetwork)
-  chain: SwapNetwork;
+  chain!: SwapNetwork;
 
   @IsNotEmpty()
   @IsEthereumAddress()
-  tokenIn: string;
+  tokenIn!: string;
 
   @IsNotEmpty()
   @IsEthereumAddress()
-  tokenOut: string;
+  tokenOut!: string;
 
   @IsNotEmpty()
   @IsEthereumAddress()
-  walletAddress: string;
+  walletAddress!: string;
 
   @IsNotEmpty()
   @IsString()
-  amount: string;
+  amount!: string;
 }

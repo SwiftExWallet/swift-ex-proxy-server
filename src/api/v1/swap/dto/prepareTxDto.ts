@@ -1,13 +1,5 @@
-import { IsEnum, IsEthereumAddress, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
 import { SwapNetwork } from '../../common/enums/chain.enum';
-
-export class PrepareTxDto {
-  @IsNotEmpty()
-  requestId: string;
-
-  @IsNotEmpty()
-  swaps: number;
-}
 
 export class ConfirmSwapOrderDto {
   @IsNotEmpty()

@@ -8,11 +8,8 @@ import { DeviceAuthTokenMiddleware } from './api/v1/common/middleware/device-aut
 import { MongooseModule } from '@nestjs/mongoose';
 import { JwtModule } from '@nestjs/jwt';
 import { BscModule } from './api/v1/bsc/bsc.module';
-import { AlchemyModule } from './api/v1/alchemy/alchemy.module';
 import { ProviderModule } from './api/v1/provider/provider.module';
 import { NotificationModule } from './api/v1/notification/notification.module';
-import { WebhookModule } from './api/v1/webhook/webhook.module';
-import { OrdersModule } from './api/v1/orders/orders.module';
 import { DeviceModule } from './api/v1/device/device.module';
 import { AllBridgeModule } from './api/v1/bridge/all-bridge/all-bridge.module';
 import { BridgeModule } from './api/v1/bridge/bridge.module';
@@ -57,18 +54,15 @@ import { getMongoConnectionConfig } from './api/v1/common/config/datastore.confi
     EthModule,
     UsersModule,
     BscModule,
-    AlchemyModule,
     ProviderModule,
     NotificationModule,
-    WebhookModule,
-    OrdersModule,
     DeviceModule,
     AllBridgeModule,
     BridgeModule,
     RedisModule,
     SwapModule,
     QuoterModule,
-    SwapOrdersModule
+    SwapOrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: RateLimitGuard }],
@@ -85,30 +79,6 @@ export class AppModule {
         {
           path: 'health',
           method: RequestMethod.GET,
-        },
-        {
-          path: 'api/v1/webhook/stellar-transactions',
-          method: RequestMethod.POST,
-        },
-        {
-          path: '/api/v1/webhook/moralis-transactions',
-          method: RequestMethod.POST,
-        },
-        {
-          path: '/api/v1/webhook/alchemy-on-ramp',
-          method: RequestMethod.POST,
-        },
-        {
-          path: '/api/v1/webhook/alchemy-off-ramp',
-          method: RequestMethod.POST,
-        },
-        {
-          path: '/api/v1/quoter/quote',
-          method: RequestMethod.POST,
-        },
-        {
-          path: '/api/v1/webhook/banxa',
-          method: RequestMethod.POST,
         },
       )
       .forRoutes('*');

@@ -12,12 +12,100 @@ import { JsonRpcProvider } from '@ethersproject/providers';
 import { ProviderService } from '../../provider/provider.service';
 import { SwapQuoteDto, TokenInfoDto } from '../../common/dto/swapQuote.dto';
 import { SwapQuote } from '../../common/interface/swap.interface';
-import { ChainEnum, ChainId } from '../../common/enums/chain.enum';
+import { ChainEnum, ChainId, swapProvider } from '../../common/enums/chain.enum';
+import { InchService } from '../../swap/1inch/1inch.service';
+import { SwapProviderResolver } from './dto/swap-provider.resolver';
+import { TokenMetadataService } from '../../common/services/tokenMetadata.service';
+import { plainToInstance } from 'class-transformer';
+import { validate, ValidationError } from 'class-validator';
 
 @Injectable()
 export class QuoterService {
   private readonly logger = new Logger(QuoterService.name);
-  constructor(private readonly rpcService: ProviderService) {}
+  constructor(
+    private readonly rpcService: ProviderService,
+    private readonly inchService: InchService,
+    private readonly swapProviderResolver: SwapProviderResolver,
+    private readonly tokenMetadataService: TokenMetadataService,
+  ) {}
+
+  async getQuoteResponse(body: SwapQuoteDto) {
+    const normalizedBody =
+      await this.tokenMetadataService.normalizeSwapQuote(body);
+    const { provider, transformed } =
+      this.swapProviderResolver.resolve(normalizedBody);
+
+    switch (provider) {
+      case swapProvider.UNISWAP:
+        return await this.handleValidationAndRun(
+          SwapQuoteDto,
+          transformed,
+          this.getQuote.bind(this),
+          provider,
+        );
+
+      case swapProvider.ONEINCH_FUSION:
+        return await this.handleValidationAndRun(
+          SwapQuoteDto,
+          transformed,
+          this.inchService.getSwapQuote.bind(this.inchService),
+          provider,
+        );
+
+      default:
+        throw new BadRequestException('Invalid provider');
+    }
+  }
+
+  async buildSwapResponse(dto: SwapQuoteDto) {
+    const normalizedDto = await this.tokenMetadataService.normalizeSwapQuote(dto);
+    const quote = await this.buildSwapTx(normalizedDto);
+    return {
+      success: true,
+      data: quote,
+    };
+  }
+
+  private async handleValidationAndRun(
+    dtoClass: any,
+    payload: any,
+    serviceMethod: (data: any) => Promise<any>,
+    typeOfProvider: any,
+  ) {
+    const dto = plainToInstance(dtoClass, payload);
+
+    const errors = await validate(dto);
+
+    if (errors.length > 0) {
+      const messages = this.extractErrors(errors);
+
+      throw new BadRequestException(messages);
+    }
+
+    const result = await serviceMethod(dto);
+
+    return {
+      success: true,
+      provider: typeOfProvider,
+      data: result,
+    };
+  }
+
+  private extractErrors(errors: ValidationError[]): string[] {
+    const messages: string[] = [];
+
+    for (const error of errors) {
+      if (error.constraints) {
+        messages.push(...Object.values(error.constraints));
+      }
+
+      if (error.children?.length) {
+        messages.push(...this.extractErrors(error.children));
+      }
+    }
+
+    return messages;
+  }
 
   private isZeroAddress(value: string): boolean {
     const list = [

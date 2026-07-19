@@ -1,5 +1,4 @@
 import { IsEnum, IsNotEmpty, IsString, IsOptional } from 'class-validator';
-import { Order } from '../../orders/schema/order.schema';
 import { Type } from 'class-transformer';
 import { SwapNetwork } from '../../common/enums/chain.enum';
 

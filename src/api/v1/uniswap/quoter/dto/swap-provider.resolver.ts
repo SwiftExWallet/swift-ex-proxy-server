@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
-import { SwapQuoteDto } from "src/api/v1/common/dto/swapQuote.dto";
-import { ChainIdToRango, swapProvider } from "src/api/v1/common/enums/chain.enum";
+import { SwapQuoteDto } from "../../../common/dto/swapQuote.dto";
+import { swapProvider } from "../../../common/enums/chain.enum";
 
 interface ProviderRule {
   provider: swapProvider;
@@ -10,11 +10,6 @@ interface ProviderRule {
 @Injectable()
 export class SwapProviderResolver {
   private readonly rules: ProviderRule[] = [
-    {
-      provider: swapProvider.RANGO,
-      matches: (data) =>
-        String(data.tokenIn?.chainId) !== String(data.tokenOut?.chainId),
-    },
     {
       provider: swapProvider.UNISWAP,
       matches: (data) =>
@@ -37,21 +32,6 @@ export class SwapProviderResolver {
 
   private transform(provider: swapProvider, data: SwapQuoteDto): any {
     switch (provider) {
-      case swapProvider.RANGO:
-        return {
-          from: {
-            blockchain: ChainIdToRango[data.tokenIn.chainId],
-            symbol: data.tokenIn.symbol,
-            address: data.tokenIn.address,
-          },
-          to: {
-            blockchain: ChainIdToRango[data.tokenOut.chainId],
-            symbol: data.tokenOut.symbol,
-            address: data.tokenOut.address,
-          },
-          amount: data.amount,
-        };
-
       case swapProvider.UNISWAP:
       case swapProvider.ONEINCH_FUSION:
         return data;

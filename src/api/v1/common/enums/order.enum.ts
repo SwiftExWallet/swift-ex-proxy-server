@@ -19,14 +19,6 @@ export enum SwapOrderStatus {
   FILLED = "filled",
 }
 
-export enum RangoOrderStatus{
-  RUNNING = 'running',
-  SUCCEEDED = 'succeeded',
-  FAILED = 'failed',
-  WAITING = 'waiting',
-  SUCCESS = 'success',
-}
-
 export enum OrderTxType {
   NATIVE_TRANSFER = 'Native Transfer',
   TOKEN_TRANSFER = 'Token Transfer',

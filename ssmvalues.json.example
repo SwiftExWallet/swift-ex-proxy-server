@@ -69,11 +69,6 @@
     "type": "String",
     "description": "Maximum JSON/urlencoded request body size for general API routes"
   },
-  "WEBHOOK_BODY_LIMIT": {
-    "value": "128kb",
-    "type": "String",
-    "description": "Maximum JSON/urlencoded request body size for webhook routes"
-  },
   "CORS_ALLOWED_ORIGINS": {
     "value": "https://app.example.com",
     "type": "String",
