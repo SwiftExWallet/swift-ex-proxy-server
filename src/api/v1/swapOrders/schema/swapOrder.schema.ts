@@ -87,6 +87,9 @@ export class SwapOrders {
 
   @Prop({ default: 0 })
   usdValue: number;
+
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export const SwapOrderSchema = SchemaFactory.createForClass(SwapOrders);

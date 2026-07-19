@@ -15,6 +15,7 @@ export enum SwapOrderStatus {
   EXECUTED = "executed",
   REFUNDING = "refunding",
   REFUNDED = "refunded",
+  EXHAUSTED = "exhausted",
   FILLED = "filled",
 }
 
