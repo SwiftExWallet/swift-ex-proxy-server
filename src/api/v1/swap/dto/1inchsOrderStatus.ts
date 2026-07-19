@@ -1,8 +1,4 @@
-import {
-  IsEnum,
-  IsNotEmpty,
-  IsString,
-} from 'class-validator';
+import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
 import { SwapNetwork, swapProvider } from '../../common/enums/chain.enum';
 
 export class InchOrderStatusDto {

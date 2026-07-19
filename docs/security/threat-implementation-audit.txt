@@ -1,0 +1,213 @@
+Threat Implementation Audit
+Audit date: 2026-07-19
+Scope: current src/, scripts, and .github workflow. dist/ was ignored.
+
+No code or configuration changes are included in this file. This is a plain-text
+interpretation of which threats from docs/security/threat-model.md appear
+implemented, partially implemented, open, or stale against the current source.
+
+Summary
+Implemented: T04, T08
+Mostly implemented / partial: T01, T03, T06, T07, T09, T13, T18, T21, T23, T24, T26, T28, T33
+Open: T05, T12, T14, T15, T16, T17, T19, T20, T22, T25, T27, T31
+Stale / not present in current source: T02, T10, T11, T29, T30, T32
+
+Threat Status
+
+T01 - Partial
+JWT now uses verifyAsync and requires exp, but issuer/audience are only enforced
+if JWT_ISSUER/JWT_AUDIENCE env vars exist. Device has no active/revoked flag.
+Evidence: src/api/v1/common/middleware/device-auth-token.middleware.ts
+
+T02 - Stale / not present
+Webhook directories are empty; no Stellar/Moralis/Alchemy/Banxa webhook
+controllers are present in current src/.
+Evidence: src/api/v1/alchemy, src/api/v1/webhook
+
+T03 - Mostly implemented
+Swap order reads now require verified device wallet via middleware/service.
+Repository still queries by wallet rather than deviceId, but arbitrary wallet
+lookup is blocked at the controller path.
+Evidence: src/api/v1/swapOrders/swapOrders.controller.ts
+
+T04 - Implemented
+The public swapOrders updateStatus controller route is gone. Remaining update
+methods are internal/service calls.
+Evidence: src/api/v1/swapOrders/swapOrders.controller.ts
+
+T05 - Open
+start.sh still logs decrypted SSM parameter values.
+Evidence: start.sh
+
+T06 - Partial
+InchService secret state has TTL, but native Fusion secret state still calls
+Redis without TTL and stores plaintext.
+Evidence:
+- src/api/v1/swap/1inch/1inch.service.ts
+- src/api/v1/swap/1inch/1inch.fusion.native.swap.service.ts
+
+T07 - Partial
+Global whitelist and forbidNonWhitelisted validation is enabled. Some union or
+object-style DTO paths still need review.
+Evidence: src/main.ts
+
+T08 - Implemented
+CORS is allowlisted and helmet is enabled.
+Evidence:
+- src/api/v1/common/config/cors.config.ts
+- src/main.ts
+
+T09 - Partial
+Quoter is no longer unauthenticated and wallet middleware applies. Quote-specific
+rate/caching controls are still limited.
+Evidence: src/app.module.ts
+
+T10 - Stale / not present
+No current webhook implementation is present to replay-protect.
+Evidence: src/api/v1/webhook
+
+T11 - Stale / not present
+No current Alchemy/Banxa webhook payload processing is present in src/.
+Evidence: src/api/v1/alchemy, src/api/v1/webhook
+
+T12 - Open
+Pollers still trust Blockscout, Allbridge, and 1inch statuses without
+independent reconciliation.
+Evidence:
+- src/api/v1/crons/evmTxPoller.service.ts
+- src/api/v1/crons/uniswapTxPoller.service.ts
+- src/api/v1/crons/allbridgePoller.service.ts
+- src/api/v1/swap/1inch/1inch.service.ts
+
+T13 - Partial
+Transaction arrays now have max size and string length limits. Per-device
+broadcast rate, idempotency, and queueing are not implemented.
+Evidence:
+- src/api/v1/common/dto/broadcastTransaction.dto.ts
+- src/api/v1/eth/dto/executeSwapTransactions.dto.ts
+
+T14 - Open
+Some Blockscout fetches have timeout, but most axios/provider calls still lack a
+shared timeout, retry budget, or circuit breaker.
+Evidence:
+- src/api/v1/swap/1inch/1inch.service.ts
+- src/api/v1/bridge/all-bridge/all-bridge.service.ts
+
+T15 - Open
+Rate limiting is still IP-based.
+Evidence: src/api/v1/common/guard/rate-limit.guard.ts
+
+T16 - Open
+Many raw logs remain, including transaction hashes, wallet addresses, provider
+errors, and startup values.
+Evidence:
+- src/api/v1/crons/*.service.ts
+- src/api/v1/bsc/bsc.service.ts
+- src/api/v1/swap/1inch/1inch.fusion.native.swap.service.ts
+- start.sh
+
+T17 - Open
+Provider error data and messages are still returned via BadRequestException in
+many services.
+Evidence:
+- src/api/v1/swap/1inch/1inch.service.ts
+- src/api/v1/eth/eth.service.ts
+- src/api/v1/bsc/bsc.service.ts
+- src/api/v1/bridge/all-bridge/all-bridge.service.ts
+
+T18 - Partial
+customNotification has origin guard and stricter rate limits, but still accepts
+arbitrary client title/body.
+Evidence:
+- src/api/v1/swap/1inch/1inch.controller.ts
+- src/api/v1/common/guard/custom-notification-origin.guard.ts
+
+T19 - Open
+No request ID/idempotency key store is present. SwapOrders.txHash uniqueness only
+helps after a tx hash exists.
+Evidence:
+- src/api/v1/eth/eth.service.ts
+- src/api/v1/bsc/bsc.service.ts
+- src/api/v1/swapOrders/schema/swapOrder.schema.ts
+
+T20 - Open
+Uniswap quoter still builds approve transactions with ethers.MaxUint256.
+Evidence: src/api/v1/uniswap/quoter/quoter.service.ts
+
+T21 - Partial
+Wallet-device middleware is applied broadly, but some submit/status flows still
+do not bind orderHash to the verified wallet.
+Evidence:
+- src/app.module.ts
+- src/api/v1/common/middleware/device-wallet.middleware.ts
+- src/api/v1/swap/1inch/1inch.controller.ts
+
+T22 - Open
+No allowlist validation is present for provider/env base URLs.
+Evidence:
+- src/api/v1/provider/provider.service.ts
+- src/api/v1/swap/1inch/1inch.service.ts
+- src/api/v1/crons/evmTxPoller.service.ts
+
+T23 - Partial
+Redis has TLS/auth validation and offline queue disabled for rate limiter
+clients. There is no route-level fail-open/fail-closed behavior or fallback
+limiter.
+Evidence:
+- src/api/v1/common/config/datastore.config.ts
+- src/api/v1/common/guard/rate-limit.guard.ts
+
+T24 - Partial
+InchService poller has max reschedules. Native Fusion monitoring loop remains
+unbounded.
+Evidence:
+- src/api/v1/swap/1inch/1inch.service.ts
+- src/api/v1/swap/1inch/1inch.fusion.native.swap.service.ts
+
+T25 - Open
+Firebase service account is still copied from a hardcoded S3 path to the runtime
+filesystem.
+Evidence: start.sh
+
+T26 - Partial
+Mongo/Redis TLS/auth validation exists in code, but actual ACL/IAM/network
+isolation is production configuration and is not fully repo-verifiable.
+Evidence: src/api/v1/common/config/datastore.config.ts
+
+T27 - Open / external
+Workflow still deploys on main/devops. Branch protection and AWS OIDC trust
+conditions cannot be verified from the repo. Actions are version tags, not
+pinned SHAs.
+Evidence: .github/workflows/deploy.yml
+
+T28 - Partial
+Token symbol/decimals are resolved server-side for common quote paths, but DTOs
+still accept client metadata.
+Evidence:
+- src/api/v1/common/dto/swapQuote.dto.ts
+- src/api/v1/common/services/tokenMetadata.service.ts
+
+T29 - Stale / not present
+No Banxa webhook service/controller is present in current source.
+Evidence: src/
+
+T30 - Stale / not present
+No Alchemy webhook service/controller is present in current source.
+Evidence: src/api/v1/alchemy
+
+T31 - Open
+No separate internal/admin authorization model is present. Client-accessible
+status refresh and cancel-style routes remain.
+Evidence: src/api/v1/swap/1inch/1inch.controller.ts
+
+T32 - Stale / not present
+No Rango implementation/API-key query usage was found in current src/.
+Evidence: src/
+
+T33 - Partial
+Global body limit exists and transaction arrays are bounded. There are no stricter
+route-specific body limits.
+Evidence:
+- src/main.ts
+- src/api/v1/common/dto/broadcastTransaction.dto.ts
+- src/api/v1/eth/dto/executeSwapTransactions.dto.ts

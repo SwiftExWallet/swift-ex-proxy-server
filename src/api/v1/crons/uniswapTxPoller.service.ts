@@ -7,152 +7,166 @@ import { SwapOrders } from '../swapOrders/schema/swapOrder.schema';
 import { NotificationDto } from '../notification/dto/notification.dto';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';
 
-
 const BATCH_SIZE = 10;
 
 interface BlockscoutReceiptResponse {
+  status: '0' | '1';
+  message: string;
+  result: {
     status: '0' | '1';
-    message: string;
-    result: {
-        status: '0' | '1';
-    } | null;
+  } | null;
 }
 
-function mapBlockscoutStatus(result: BlockscoutReceiptResponse): SwapOrderStatus | null {
-    if (result.status === '0' || !result.result) {
-        return SwapOrderStatus.FAILED;
-    }
+function mapBlockscoutStatus(
+  result: BlockscoutReceiptResponse,
+): SwapOrderStatus | null {
+  if (result.status === '0' || !result.result) {
+    return SwapOrderStatus.FAILED;
+  }
 
-    const txStatus = result.result.status;
+  const txStatus = result.result.status;
 
-    if (txStatus === '0') {
-        return SwapOrderStatus.FAILED;
-    }
+  if (txStatus === '0') {
+    return SwapOrderStatus.FAILED;
+  }
 
-    if (txStatus === '1' || txStatus === '') {
-        return SwapOrderStatus.COMPLETED;
-    }
+  if (txStatus === '1' || txStatus === '') {
+    return SwapOrderStatus.COMPLETED;
+  }
 
-    return null;
+  return null;
 }
 
 @Injectable()
 export class UniswapTxPollerService {
-    private readonly BLOCKSCOUT_URLS: Record<string, string> = {
-        ETH: process.env.BLOCKSCOUT_ETH as string,
-        BSC: process.env.BLOCKSCOUT_BSC as string,
-        POL: process.env.BLOCKSCOUT_POL as string,
-        ARB: process.env.BLOCKSCOUT_ARB as string,
-        OPT: process.env.BLOCKSCOUT_OPT as string,
-        BASE: process.env.BLOCKSCOUT_BAS as string,
-        AVAX: process.env.BLOCKSCOUT_AVA as string,
-    };
-    private readonly logger = new Logger(UniswapTxPollerService.name);
-    private isRunning = false;
+  private readonly BLOCKSCOUT_URLS: Record<string, string> = {
+    ETH: process.env.BLOCKSCOUT_ETH as string,
+    BSC: process.env.BLOCKSCOUT_BSC as string,
+    POL: process.env.BLOCKSCOUT_POL as string,
+    ARB: process.env.BLOCKSCOUT_ARB as string,
+    OPT: process.env.BLOCKSCOUT_OPT as string,
+    BASE: process.env.BLOCKSCOUT_BAS as string,
+    AVAX: process.env.BLOCKSCOUT_AVA as string,
+  };
+  private readonly logger = new Logger(UniswapTxPollerService.name);
+  private isRunning = false;
 
-    constructor(
-        private readonly repo: SwapOrderRepository,
-        private readonly firebaseNotificationService: FirebaseNotificationService
-    ) { }
+  constructor(
+    private readonly repo: SwapOrderRepository,
+    private readonly firebaseNotificationService: FirebaseNotificationService,
+  ) {}
 
-    @Cron('*/15 * * * * *', { name: 'Uniswap-Cron' })
-    async poll(): Promise<void> {
-        if (this.isRunning) {
-            this.logger.warn('uniswap previous tick still running');
-            return;
-        }
-
-        this.isRunning = true;
-        try {
-            const result = await this.repo.findPendingByProvider(swapProvider.UNISWAP);
-            if (!result.ok) {
-                this.logger.error(`uniswap fetch failed: ${result.error}`);
-                return;
-            }
-
-            const { data: pending } = result;
-            if (!pending.length) return;
-
-            this.logger.debug(`${pending.length} pending uniswap found`);
-
-            for (let i = 0; i < pending.length; i += BATCH_SIZE) {
-                const batch = pending.slice(i, i + BATCH_SIZE);
-                const results = await Promise.allSettled(
-                    batch.map((tx) => this.processTx(tx)),
-                );
-
-                results.forEach((r, idx) => {
-                    if (r.status === 'rejected') {
-                        this.logger.error(`uniswap batch ${i + idx} unexpected rejection`, r.reason,);
-                    }
-                });
-            }
-        } finally {
-            this.isRunning = false;
-        }
+  @Cron('*/15 * * * * *', { name: 'Uniswap-Cron' })
+  async poll(): Promise<void> {
+    if (this.isRunning) {
+      this.logger.warn('uniswap previous tick still running');
+      return;
     }
 
+    this.isRunning = true;
+    try {
+      const result = await this.repo.findPendingByProvider(
+        swapProvider.UNISWAP,
+      );
+      if (!result.ok) {
+        this.logger.error(`uniswap fetch failed: ${result.error}`);
+        return;
+      }
 
-    private async processTx(tx: SwapOrders): Promise<void> {
-        const chainKey = tx.fromChain?.toUpperCase();
-        const baseUrl = this.BLOCKSCOUT_URLS[chainKey];
+      const { data: pending } = result;
+      if (!pending.length) return;
 
-        if (!baseUrl) {
-            this.logger.warn(`No blockscout URL for chain ${tx.fromChain} txHash ${tx.txHash}`,);
-            return;
-        }
+      this.logger.debug(`${pending.length} pending uniswap found`);
 
-        let response: BlockscoutReceiptResponse;
-        try {
-            const url =
-                `${baseUrl}/api` +
-                `?module=transaction` +
-                `&action=gettxreceiptstatus` +
-                `&txhash=${encodeURIComponent(tx.txHash)}`;
-
-            const res = await fetch(url, {
-                headers: { 'Content-Type': 'application/json' },
-                signal: AbortSignal.timeout(8_000),
-            });
-
-            if (!res.ok) {
-                this.logger.warn(
-                    `blockscout HTTP ${res.status} for txHash ${tx.txHash} chain ${tx.fromChain}`,
-                );
-                return;
-            }
-
-            response = (await res.json()) as BlockscoutReceiptResponse;
-        } catch (err) {
-            this.logger.error(`blockscout fetch error txHash ${tx.txHash} chain ${tx.fromChain}`, err,);
-            return;
-        }
-
-        const newStatus = mapBlockscoutStatus(response);
-        if (!newStatus) {
-            this.logger.debug(`uniswap ${tx.txHash} not yet mined on ${tx.fromChain}`,);
-            return;
-        }
-
-        const dbResult = await this.repo.updateOrderStatus(tx.txHash, newStatus);
-        if (!dbResult) {
-            this.logger.error(`uniswap failed to update txHash ${tx.txHash} ${dbResult}`,);
-            return;
-        }
-
-        this.logger.log(`uniswap ${tx.txHash} ${tx.fromChain} to ${newStatus}`,);
-        this.processTxNotification(tx, newStatus, dbResult.txType);
-    }
-
-    private async processTxNotification(tx: SwapOrders, status: string, txType: string): Promise<void> {
-        const notificationPayload: NotificationDto = {
-                title: `Order Completed: ${tx.amountOut} ${tx.toToken}`,
-                body: `From ${tx.walletAddress?.slice(0, 4)}.....${tx.walletAddress?.slice(-4)}`,
-                data: {"network":tx.fromChain,"txHash":tx.txHash},
-            };
-        await this.firebaseNotificationService.sendNotification(
-            tx.deviceFcmToken as string,
-            notificationPayload,
+      for (let i = 0; i < pending.length; i += BATCH_SIZE) {
+        const batch = pending.slice(i, i + BATCH_SIZE);
+        const results = await Promise.allSettled(
+          batch.map((tx) => this.processTx(tx)),
         );
+
+        results.forEach((r, idx) => {
+          if (r.status === 'rejected') {
+            this.logger.error(
+              `uniswap batch ${i + idx} unexpected rejection`,
+              r.reason,
+            );
+          }
+        });
+      }
+    } finally {
+      this.isRunning = false;
     }
+  }
+
+  private async processTx(tx: SwapOrders): Promise<void> {
+    const chainKey = tx.fromChain?.toUpperCase();
+    const baseUrl = this.BLOCKSCOUT_URLS[chainKey];
+
+    if (!baseUrl) {
+      this.logger.warn(
+        `No blockscout URL for chain ${tx.fromChain} txHash ${tx.txHash}`,
+      );
+      return;
+    }
+
+    let response: BlockscoutReceiptResponse;
+    try {
+      const url =
+        `${baseUrl}/api` +
+        `?module=transaction` +
+        `&action=gettxreceiptstatus` +
+        `&txhash=${encodeURIComponent(tx.txHash)}`;
+
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(8_000),
+      });
+
+      if (!res.ok) {
+        this.logger.warn(
+          `blockscout HTTP ${res.status} for txHash ${tx.txHash} chain ${tx.fromChain}`,
+        );
+        return;
+      }
+
+      response = (await res.json()) as BlockscoutReceiptResponse;
+    } catch (err) {
+      this.logger.error(
+        `blockscout fetch error txHash ${tx.txHash} chain ${tx.fromChain}`,
+        err,
+      );
+      return;
+    }
+
+    const newStatus = mapBlockscoutStatus(response);
+    if (!newStatus) {
+      this.logger.debug(
+        `uniswap ${tx.txHash} not yet mined on ${tx.fromChain}`,
+      );
+      return;
+    }
+
+    const dbResult = await this.repo.updateOrderStatus(tx.txHash, newStatus);
+    if (!dbResult) {
+      this.logger.error(
+        `uniswap failed to update txHash ${tx.txHash} ${dbResult}`,
+      );
+      return;
+    }
+
+    this.logger.log(`uniswap ${tx.txHash} ${tx.fromChain} to ${newStatus}`);
+    this.processTxNotification(tx);
+  }
+
+  private async processTxNotification(tx: SwapOrders): Promise<void> {
+    const notificationPayload: NotificationDto = {
+      title: `Order Completed: ${tx.amountOut} ${tx.toToken}`,
+      body: `From ${tx.walletAddress?.slice(0, 4)}.....${tx.walletAddress?.slice(-4)}`,
+      data: { network: tx.fromChain, txHash: tx.txHash },
+    };
+    await this.firebaseNotificationService.sendNotification(
+      tx.deviceFcmToken,
+      notificationPayload,
+    );
+  }
 }

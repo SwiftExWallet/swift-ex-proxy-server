@@ -19,11 +19,11 @@ export class PaginationDto {
 }
 
 export interface PaginatedResult<T> {
-  data:       T[];
-  total:      number;
-  page:       number;
-  limit:      number;
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
   totalPages: number;
-  hasNext:    boolean;
-  hasPrev:    boolean;
+  hasNext: boolean;
+  hasPrev: boolean;
 }

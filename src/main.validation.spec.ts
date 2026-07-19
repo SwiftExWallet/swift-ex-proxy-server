@@ -1,4 +1,8 @@
-import { ArgumentMetadata, BadRequestException, ValidationPipe } from '@nestjs/common';
+import {
+  ArgumentMetadata,
+  BadRequestException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { IsString } from 'class-validator';
 import { BroadcastTransactionDto } from './api/v1/common/dto/broadcastTransaction.dto';
 import { ExecuteSwapTransactionsDto } from './api/v1/eth/dto/executeSwapTransactions.dto';

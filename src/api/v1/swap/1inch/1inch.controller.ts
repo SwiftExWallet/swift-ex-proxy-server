@@ -6,7 +6,6 @@ import {
   Query,
   Req,
   Delete,
-  Param,
   UseGuards,
 } from '@nestjs/common';
 import { SwapQuoteDto } from '../dto/swapQuote';
@@ -60,7 +59,10 @@ export class inchController {
   }
 
   @Post('/buildFusionOrder')
-  async createFusionOrder(@Req() req: any, @Body() fusionOrder: FusionOrderDto) {
+  async createFusionOrder(
+    @Req() req: any,
+    @Body() fusionOrder: FusionOrderDto,
+  ) {
     const data = await this.inchService.buildFusionOrder(
       withVerifiedWalletAddress(fusionOrder, req),
     );

@@ -21,11 +21,14 @@ export class EthController {
     private readonly tokenMetadataService: TokenMetadataService,
   ) {}
   @Post('swap-quote')
-  async getSwapQuote(@Req() req: any, @Res() res, @Body() swapQuoteDto: SwapQuoteDto) {
-    const normalizedDto =
-      await this.tokenMetadataService.normalizeSwapQuote(
-        withVerifiedWalletAddress(swapQuoteDto, req, 'recipient'),
-      );
+  async getSwapQuote(
+    @Req() req: any,
+    @Res() res,
+    @Body() swapQuoteDto: SwapQuoteDto,
+  ) {
+    const normalizedDto = await this.tokenMetadataService.normalizeSwapQuote(
+      withVerifiedWalletAddress(swapQuoteDto, req, 'recipient'),
+    );
     const data = await this.ethService.getSwapQuote(normalizedDto);
     res.status(200).json(data);
   }
@@ -49,13 +52,11 @@ export class EthController {
   ) {
     const verifiedDto =
       'tokenIn' in swapPrepareDto && 'tokenOut' in swapPrepareDto
-        ? withVerifiedWalletAddress(swapPrepareDto as SwapQuoteDto, req, 'recipient')
-        : withVerifiedWalletAddress(swapPrepareDto as SwapPrepareDto, req, 'address');
+        ? withVerifiedWalletAddress(swapPrepareDto, req, 'recipient')
+        : withVerifiedWalletAddress(swapPrepareDto, req, 'address');
     const normalizedDto =
       'tokenIn' in verifiedDto && 'tokenOut' in verifiedDto
-        ? await this.tokenMetadataService.normalizeSwapQuote(
-            verifiedDto as SwapQuoteDto,
-          )
+        ? await this.tokenMetadataService.normalizeSwapQuote(verifiedDto)
         : verifiedDto;
     const data = await this.ethService.prepareSwapTransaction(normalizedDto);
     res.status(200).json(data);

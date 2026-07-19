@@ -3,8 +3,14 @@ import { OrderStatus as SDKOrderStatus } from '@1inch/cross-chain-sdk';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { swapProvider } from '../../common/enums/chain.enum';
 import { InchService } from './1inch.service';
+import {
+  decryptFusionSecretState,
+  encryptFusionSecretState,
+} from '../../common/utils/encryption.util';
 
 describe('InchService Fusion+ poller', () => {
+  const originalEnv = process.env;
+  const encryptionKey = '12345678901234567890123456789012';
   const orderHash = '0xorder';
   const secretState = {
     secrets: ['0xsecret0', '0xsecret1'],
@@ -41,6 +47,10 @@ describe('InchService Fusion+ poller', () => {
   };
 
   beforeEach(() => {
+    process.env = {
+      ...originalEnv,
+      FUSION_SECRETS_ENCRYPTION_KEY: encryptionKey,
+    };
     jest.useFakeTimers();
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
@@ -56,7 +66,11 @@ describe('InchService Fusion+ poller', () => {
       findByProviderAndStatusesSince: jest.fn(),
     };
     redisService = {
-      getKey: jest.fn().mockResolvedValue(JSON.stringify(secretState)),
+      getKey: jest
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(encryptFusionSecretState(secretState)),
+        ),
       setKey: jest.fn().mockResolvedValue(undefined),
       delKey: jest.fn().mockResolvedValue(undefined),
     };
@@ -73,11 +87,14 @@ describe('InchService Fusion+ poller', () => {
   });
 
   afterEach(() => {
-    for (const order of Array.from((service as any).activeSecretPollers.keys())) {
+    for (const order of Array.from(
+      (service as any).activeSecretPollers.keys(),
+    )) {
       (service as any).stopSecretRevealPoller(order);
     }
     jest.restoreAllMocks();
     jest.useRealTimers();
+    process.env = originalEnv;
   });
 
   it('submits ready secrets for pending orders and keeps polling', async () => {
@@ -89,13 +106,38 @@ describe('InchService Fusion+ poller', () => {
     await jest.advanceTimersByTimeAsync(10_000);
 
     expect(sdk.submitSecret).toHaveBeenCalledWith(orderHash, '0xsecret0');
-    expect(redisService.setKey).toHaveBeenCalledWith(
-      `fusion_secrets:${orderHash}`,
-      expect.stringContaining('"submittedIdx":[0]'),
-      7200,
+    const setCall = redisService.setKey.mock.calls.find(
+      ([key]) => key === `fusion_secrets:${orderHash}`,
     );
+    expect(setCall).toBeDefined();
+    expect(setCall![1]).not.toContain('0xsecret0');
+    expect(decryptFusionSecretState(setCall![1]) as any).toMatchObject({
+      secrets: secretState.secrets,
+      submittedIdx: [0],
+    });
+    expect(setCall![2]).toBe(7200);
     expect(swapOrderService.updateOrderByHash).not.toHaveBeenCalled();
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(true);
+  });
+
+  it('rewrites legacy plaintext secret states as encrypted Redis envelopes', async () => {
+    redisService.getKey.mockResolvedValueOnce(JSON.stringify(secretState));
+
+    const result = await (service as any).getSecretState(orderHash);
+
+    expect(result.secrets).toEqual(secretState.secrets);
+    expect(result.submittedIdx).toEqual(new Set(secretState.submittedIdx));
+    expect(redisService.setKey).toHaveBeenCalledWith(
+      `fusion_secrets:${orderHash}`,
+      expect.any(String),
+      7200,
+    );
+
+    const redisValue = redisService.setKey.mock.calls[0][1];
+    expect(redisValue).not.toContain('0xsecret0');
+    expect(decryptFusionSecretState(redisValue) as any).toMatchObject(
+      secretState,
+    );
   });
 
   it('updates refunding orders without notification and keeps polling', async () => {
@@ -123,8 +165,12 @@ describe('InchService Fusion+ poller', () => {
       txHash: orderHash,
       orderStatus: SwapOrderStatus.REFUNDED,
     });
-    expect(firebaseNotificationService.sendNotification).toHaveBeenCalledTimes(1);
-    expect(redisService.delKey).toHaveBeenCalledWith(`fusion_secrets:${orderHash}`);
+    expect(firebaseNotificationService.sendNotification).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(redisService.delKey).toHaveBeenCalledWith(
+      `fusion_secrets:${orderHash}`,
+    );
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(false);
   });
 
@@ -142,7 +188,9 @@ describe('InchService Fusion+ poller', () => {
       txHash: orderHash,
       orderStatus: SwapOrderStatus.EXHAUSTED,
     });
-    expect(firebaseNotificationService.sendNotification).toHaveBeenCalledTimes(1);
+    expect(firebaseNotificationService.sendNotification).toHaveBeenCalledTimes(
+      1,
+    );
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(false);
   });
 
@@ -161,7 +209,9 @@ describe('InchService Fusion+ poller', () => {
       txHash: orderHash,
       orderStatus: SwapOrderStatus.EXHAUSTED,
     });
-    expect(firebaseNotificationService.sendNotification).toHaveBeenCalledTimes(1);
+    expect(firebaseNotificationService.sendNotification).toHaveBeenCalledTimes(
+      1,
+    );
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(false);
   });
 
@@ -178,7 +228,9 @@ describe('InchService Fusion+ poller', () => {
 
     await service.recoverPendingFusionPlusOrders();
 
-    expect(swapOrderService.findByProviderAndStatusesSince).toHaveBeenCalledWith(
+    expect(
+      swapOrderService.findByProviderAndStatusesSince,
+    ).toHaveBeenCalledWith(
       swapProvider.ONEINCH_FUSION_PLUS,
       [SwapOrderStatus.PENDING, SwapOrderStatus.REFUNDING],
       expect.any(Date),

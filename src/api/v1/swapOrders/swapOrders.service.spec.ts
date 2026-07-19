@@ -1,4 +1,7 @@
-import { ForbiddenException, InternalServerErrorException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { SwapOrderService } from './swapOrders.service';
 
 describe('SwapOrderService wallet ownership', () => {
@@ -21,7 +24,7 @@ describe('SwapOrderService wallet ownership', () => {
     );
   });
 
-  it('returns all orders for a wallet after the wallet is associated with the device', async () => {
+  it('returns device-scoped orders for a wallet after the wallet is associated with the device', async () => {
     const query = {
       address: '0x1234567890123456789012345678901234567890',
       page: 1,
@@ -34,7 +37,9 @@ describe('SwapOrderService wallet ownership', () => {
     });
     repository.findByWalletWithPagination.mockResolvedValue(result);
 
-    await expect(service.findOrdersForDeviceWallet('device-id', query)).resolves.toBe(result);
+    await expect(
+      service.findOrdersForDeviceWallet('device-id', query),
+    ).resolves.toBe(result);
 
     expect(walletService.verifyWalletForDevice).toHaveBeenCalledWith(
       'device-id',
@@ -43,6 +48,7 @@ describe('SwapOrderService wallet ownership', () => {
     expect(repository.findByWalletWithPagination).toHaveBeenCalledWith(
       query.address,
       query,
+      'device-id',
     );
   });
 
@@ -54,7 +60,9 @@ describe('SwapOrderService wallet ownership', () => {
     };
     walletService.verifyWalletForDevice.mockResolvedValue(null);
 
-    await expect(service.findOrdersForDeviceWallet('device-id', query)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.findOrdersForDeviceWallet('device-id', query),
+    ).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(repository.findByWalletWithPagination).not.toHaveBeenCalled();
   });
@@ -78,6 +86,7 @@ describe('SwapOrderService wallet ownership', () => {
     expect(repository.findByTxHashForWallet).toHaveBeenCalledWith(
       '0xorderhash',
       '0x1234567890123456789012345678901234567890',
+      'device-id',
     );
   });
 
@@ -87,9 +96,13 @@ describe('SwapOrderService wallet ownership', () => {
       page: 1,
       limit: 10,
     };
-    walletService.verifyWalletForDevice.mockRejectedValue(new Error('lookup failed'));
+    walletService.verifyWalletForDevice.mockRejectedValue(
+      new Error('lookup failed'),
+    );
 
-    await expect(service.findOrdersForDeviceWallet('device-id', query)).rejects.toBeInstanceOf(InternalServerErrorException);
+    await expect(
+      service.findOrdersForDeviceWallet('device-id', query),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
 
     expect(repository.findByWalletWithPagination).not.toHaveBeenCalled();
   });

@@ -3,7 +3,7 @@ export const ETH_ERC20_ABI = [
   'function symbol() view returns (string)',
   'function decimals() view returns (uint8)',
   'function balanceOf(address owner) view returns (uint256)',
-  "function allowance(address owner, address spender) view returns (uint256)"
+  'function allowance(address owner, address spender) view returns (uint256)',
 ];
 
 export const ETH_FACTORY_ABI = [
@@ -141,15 +141,17 @@ export const ETH_FACTORY_ABI = [
   },
 ];
 export const ETH_PREPARE_ABI = [
-    // Single-hop swap
-    'function exactInputSingle((address tokenIn,address tokenOut,uint24 fee,address recipient,uint256 deadline,uint256 amountIn,uint256 amountOutMinimum,uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)',
-    // Multi-hop swap
-    "function quoteExactInputSingle(tuple(address tokenIn,address tokenOut,uint256 amountIn,uint24 fee,uint160 sqrtPriceLimitX96) params) external returns (uint256 amountOut,uint160 sqrtPriceX96After,uint32 initializedTicksCrossed,uint256 gasEstimate)",
-    'function multicall(bytes[] calldata data) external payable returns (bytes[] memory results)',
-    'function unwrapWETH9(uint256 amountMinimum,address recipient) external payable',
+  // Single-hop swap
+  'function exactInputSingle((address tokenIn,address tokenOut,uint24 fee,address recipient,uint256 deadline,uint256 amountIn,uint256 amountOutMinimum,uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)',
+  // Multi-hop swap
+  'function quoteExactInputSingle(tuple(address tokenIn,address tokenOut,uint256 amountIn,uint24 fee,uint160 sqrtPriceLimitX96) params) external returns (uint256 amountOut,uint160 sqrtPriceX96After,uint32 initializedTicksCrossed,uint256 gasEstimate)',
+  'function multicall(bytes[] calldata data) external payable returns (bytes[] memory results)',
+  'function unwrapWETH9(uint256 amountMinimum,address recipient) external payable',
 ];
 
-export const ETH_UNI_POOL_ABI = ['function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)'];
+export const ETH_UNI_POOL_ABI = [
+  'function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)',
+];
 export const ETH_POOL_ABI = [
   { inputs: [], stateMutability: 'nonpayable', type: 'constructor' },
   {
@@ -858,8 +860,6 @@ export const ETH_QUOTER_ABI = [
 ];
 // export const ETH_QUOTER_ABI = ["function quoteExactInputSingle(address tokenIn,address tokenOut,uint24 fee,uint256 amountIn,uint160 sqrtPriceLimitX96) external returns (uint256)"];
 
-const SWAP_ROUTER_ABI = ["function exactInputSingle(tuple(address tokenIn,address tokenOut,uint24 fee,address recipient,uint256 deadline,uint256 amountIn,uint256 amountOutMinimum,uint160 sqrtPriceLimitX96)) payable returns (uint256)"];
-
 export const ETH_SWAP_ROUTER_ABI = [
   {
     inputs: [
@@ -1347,10 +1347,9 @@ export const ETH_SWAP_ROUTER_ABI = [
   { stateMutability: 'payable', type: 'receive' },
 ];
 
-
 export const WETH_ABI = [
-  "function deposit() payable",
-  "function withdraw(uint256 wad)",
-  "function balanceOf(address) view returns (uint256)",
-  "function approve(address guy, uint256 wad) returns (bool)",
+  'function deposit() payable',
+  'function withdraw(uint256 wad)',
+  'function balanceOf(address) view returns (uint256)',
+  'function approve(address guy, uint256 wad) returns (bool)',
 ];

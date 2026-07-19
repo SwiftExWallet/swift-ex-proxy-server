@@ -4,7 +4,6 @@ import {
   formatUnits,
   Interface,
   parseEther,
-  TransactionReceipt,
   TransactionResponse,
   ZeroAddress,
 } from 'ethers';
@@ -18,7 +17,6 @@ import {
 import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import {
-  broadcastTransactionToNetwork,
   getEstimateGas,
   getFeeData,
   getNativeCurrencyBalance,
@@ -26,7 +24,6 @@ import {
   getTransactionCount,
 } from '../common/helpers/blockchainUtilityMethods';
 import { SwapPrepareDto } from './dto/swapPrepare.dto';
-import { EthSwapEnum } from '../common/enums/ethSwap.enum';
 
 import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
 import { TokenInfo } from '../common/interface/tokenInfo.interface';
@@ -62,7 +59,7 @@ export class EthService {
   constructor(
     private readonly providerService: ProviderService,
     private readonly uniSwapService: UniSwapService,
-    private readonly ethTestnetSwapService: EthTestnetSwapService
+    private readonly ethTestnetSwapService: EthTestnetSwapService,
   ) {
     const factoryAddress = process.env.POOL_FACTORY_CONTRACT_ADDRESS;
     const quoterAddress = process.env.QUOTER_CONTRACT_ADDRESS;
@@ -71,8 +68,6 @@ export class EthService {
     if (!factoryAddress || !quoterAddress || !swapRouterAddress) {
       throw new Error('Missing contract address in environment variables');
     }
-
-
 
     this.factoryContract = this.providerService.getContract(
       factoryAddress,
@@ -88,7 +83,9 @@ export class EthService {
   }
 
   async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
-    return process.env.ENVIRONMENT==="dev"?await this.ethTestnetSwapService.getQuote(swapQuoteDto):await this.uniSwapService.getQuote(swapQuoteDto);
+    return process.env.ENVIRONMENT === 'dev'
+      ? await this.ethTestnetSwapService.getQuote(swapQuoteDto)
+      : await this.uniSwapService.getQuote(swapQuoteDto);
   }
 
   async prepareUsdtSwapTransaction(
@@ -152,10 +149,10 @@ export class EthService {
       return unsignedTx;
     } catch (error: any) {
       const message =
-      error.info?.error?.message ||
-      error.shortMessage ||
-      error.message ||
-      'Failed to get swap quotes.';
+        error.info?.error?.message ||
+        error.shortMessage ||
+        error.message ||
+        'Failed to get swap quotes.';
       throw new BadRequestException(message);
     }
   }
@@ -175,73 +172,74 @@ export class EthService {
     };
   }
 
- // eth.service.ts or allbridge.service.ts
+  // eth.service.ts or allbridge.service.ts
 
-async broadcastTransaction(
-  broadcastTransactionDto: BroadcastTransactionDto,
-): Promise<any> {
-  try {
-    const { signedTx, signedTransactions, broadcastChain } = broadcastTransactionDto;
-    
-    const txArray: string[] = signedTransactions 
-      ? signedTransactions 
-      : signedTx 
-        ? [signedTx] 
-        : [];
-    
-    if (txArray.length === 0) {
-      throw new BadRequestException('No signed transaction provided');
-    }
-    
-    interface BroadcastResult {
-      transactionHash: string;
-      type: string;
-      status: string;
-    }
-    
-    const results: BroadcastResult[] = [];
-    
-    for (let i = 0; i < txArray.length; i++) {
-      const signedTransaction = txArray[i];
-      
-      const txResponse: TransactionResponse = 
-        await this.provider(ChainEnum[broadcastChain]).broadcastTransaction(signedTransaction);
+  async broadcastTransaction(
+    broadcastTransactionDto: BroadcastTransactionDto,
+  ): Promise<any> {
+    try {
+      const { signedTx, signedTransactions, broadcastChain } =
+        broadcastTransactionDto;
 
-      results.push({
-        transactionHash: txResponse.hash,
-        type: i === 0 && txArray.length > 1 ? 'approve' : 'transfer',
-        status: 'pending',
-      });
-      
-      // Wait 2 seconds before next broadcast (except for last transaction)
-      if (i < txArray.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
+      const txArray: string[] = signedTransactions
+        ? signedTransactions
+        : signedTx
+          ? [signedTx]
+          : [];
+
+      if (txArray.length === 0) {
+        throw new BadRequestException('No signed transaction provided');
       }
-    }
-    
-    if (signedTx && !signedTransactions) {
+
+      interface BroadcastResult {
+        transactionHash: string;
+        type: string;
+        status: string;
+      }
+
+      const results: BroadcastResult[] = [];
+
+      for (let i = 0; i < txArray.length; i++) {
+        const signedTransaction = txArray[i];
+
+        const txResponse: TransactionResponse = await this.provider(
+          ChainEnum[broadcastChain],
+        ).broadcastTransaction(signedTransaction);
+
+        results.push({
+          transactionHash: txResponse.hash,
+          type: i === 0 && txArray.length > 1 ? 'approve' : 'transfer',
+          status: 'pending',
+        });
+
+        // Wait 2 seconds before next broadcast (except for last transaction)
+        if (i < txArray.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+
+      if (signedTx && !signedTransactions) {
+        return {
+          txHash: results[0].transactionHash,
+          receipt: null,
+        };
+      }
+
       return {
-        txHash: results[0].transactionHash,
-        receipt: null,
+        success: true,
+        totalTransactions: txArray.length,
+        results,
       };
+    } catch (error) {
+      const message =
+        error.info?.error?.message ||
+        error.shortMessage ||
+        error.message ||
+        'Transaction broadcast failed';
+
+      throw new BadRequestException(message);
     }
-    
-    return {
-      success: true,
-      totalTransactions: txArray.length,
-      results,
-    };
-    
-  } catch (error) {
-    const message =
-      error.info?.error?.message ||
-      error.shortMessage ||
-      error.message ||
-      'Transaction broadcast failed';
-    
-    throw new BadRequestException(message);
   }
-}
 
   async estimateGas(
     to: string,
@@ -263,7 +261,7 @@ async broadcastTransaction(
       });
 
       return Number((estimated * 130n) / 100n);
-    } catch (error: any) {
+    } catch {
       if (data.includes('0xa9059cbb') || data.includes('0x095ea7b3'))
         return 100000;
       if (to === process.env.SWAP_ROUTER_ADDRESS) return 400000;
@@ -271,28 +269,32 @@ async broadcastTransaction(
     }
   }
 
-  async prepareSwapTransaction(dto: SwapPrepareDto | SwapQuoteDto): Promise<any> {
+  async prepareSwapTransaction(
+    dto: SwapPrepareDto | SwapQuoteDto,
+  ): Promise<any> {
     return this.buildSwapTransaction(dto);
   }
 
   async executeSwapTransactions(
     txs: string[],
-    broadcastChain:string
+    broadcastChain: string,
   ): Promise<ExecutedTransaction[]> {
     try {
       const txResponses: ExecutedTransaction[] = [];
-  
-    for (const signedTx of txs) {
-      const txResponse: TransactionResponse =  await this.provider(ChainEnum[broadcastChain]).broadcastTransaction(signedTx);      
-      txResponses.push({ txResponse });
-    }
-    return txResponses;
+
+      for (const signedTx of txs) {
+        const txResponse: TransactionResponse = await this.provider(
+          ChainEnum[broadcastChain],
+        ).broadcastTransaction(signedTx);
+        txResponses.push({ txResponse });
+      }
+      return txResponses;
     } catch (error) {
       const message =
-      error.info?.error?.message ||
-      error.shortMessage ||
-      error.message ||
-      'Failed to execute swap transactions';
+        error.info?.error?.message ||
+        error.shortMessage ||
+        error.message ||
+        'Failed to execute swap transactions';
       throw new BadRequestException(message);
     }
   }
@@ -300,43 +302,41 @@ async broadcastTransaction(
   async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
     try {
       const { addresses, walletAddress } = getTokenInfoDto;
-    const validAddresses: string[] = ValidateAddress(addresses);
+      const validAddresses: string[] = ValidateAddress(addresses);
 
-    if (validAddresses.length === 0) {
-      throw new Error('No valid token addresses provided');
-    }
+      if (validAddresses.length === 0) {
+        throw new Error('No valid token addresses provided');
+      }
 
-    const tokenInfos = await Promise.all(
-      validAddresses.map(async (address) => {
-        const tokenContract: Contract = this.providerService.getContract(
-          address,
-          ETH_ERC20_ABI,
-          ChainEnum.ETH,
-        );
-        const { name, symbol, decimals, balance } = await getErc20ContractInfo(
-          tokenContract,
-          walletAddress,
-        );
+      const tokenInfos = await Promise.all(
+        validAddresses.map(async (address) => {
+          const tokenContract: Contract = this.providerService.getContract(
+            address,
+            ETH_ERC20_ABI,
+            ChainEnum.ETH,
+          );
+          const { name, symbol, decimals, balance } =
+            await getErc20ContractInfo(tokenContract, walletAddress);
 
-        const formattedBalance: string = formatUnits(balance, decimals);
-        return {
-          name,
-          symbol,
-          balance: formattedBalance,
-          address,
-          imageUrl: '',
-          decimals: decimals,
-        };
-      }),
-    );
+          const formattedBalance: string = formatUnits(balance, decimals);
+          return {
+            name,
+            symbol,
+            balance: formattedBalance,
+            address,
+            imageUrl: '',
+            decimals: decimals,
+          };
+        }),
+      );
 
-    return tokenInfos;
+      return tokenInfos;
     } catch (error) {
       const message =
-      error.info?.error?.message ||
-      error.shortMessage ||
-      error.message ||
-      'Failed to get token Info';
+        error.info?.error?.message ||
+        error.shortMessage ||
+        error.message ||
+        'Failed to get token Info';
       throw new BadRequestException(message);
     }
   }
@@ -367,9 +367,13 @@ async broadcastTransaction(
     return getNativeCurrencyBalance(walletAddress, this.provider());
   }
 
-  private async buildSwapTransaction(dto: SwapPrepareDto | SwapQuoteDto): Promise<any> {
-    if (process.env.ENVIRONMENT === "dev") {
-      return this.ethTestnetSwapService.prepareSwapTransaction(dto as SwapPrepareDto);
+  private async buildSwapTransaction(
+    dto: SwapPrepareDto | SwapQuoteDto,
+  ): Promise<any> {
+    if (process.env.ENVIRONMENT === 'dev') {
+      return this.ethTestnetSwapService.prepareSwapTransaction(
+        dto as SwapPrepareDto,
+      );
     }
     return this.uniSwapService.buildSwapTx(dto as SwapQuoteDto);
   }

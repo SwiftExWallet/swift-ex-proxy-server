@@ -1,8 +1,4 @@
-import {
-  registerDecorator,
-  ValidationOptions,
-  ValidationArguments,
-} from 'class-validator';
+import { registerDecorator, ValidationOptions } from 'class-validator';
 import { isAddress } from 'ethers';
 
 export function ValidateEthereumAddresses(
@@ -15,7 +11,7 @@ export function ValidateEthereumAddresses(
       propertyName,
       options: validationOptions,
       validator: {
-        validate(value: any, _: ValidationArguments) {
+        validate(value: any) {
           if (typeof value === 'string') return isAddress(value);
           if (Array.isArray(value)) return value.every((v) => isAddress(v));
           return false;

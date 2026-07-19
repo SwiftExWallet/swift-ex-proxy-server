@@ -13,10 +13,9 @@ export class UsdtController {
     @Res() res,
     @Body() usdtSwapQuoteDto: UsdtSwapQuoteDto,
   ) {
-    const data =
-      await this.ethService.prepareUsdtSwapTransaction(
-        withVerifiedWalletAddress(usdtSwapQuoteDto, req, 'fromAddress'),
-      );
+    const data = await this.ethService.prepareUsdtSwapTransaction(
+      withVerifiedWalletAddress(usdtSwapQuoteDto, req, 'fromAddress'),
+    );
     res.status(200).json(data);
   }
 }

@@ -1,4 +1,4 @@
-import { TransactionReceipt, TransactionResponse } from "ethers";
+import { TransactionReceipt, TransactionResponse } from 'ethers';
 
 export interface SwapTransaction {
   to: string;
@@ -43,59 +43,59 @@ export interface QuotedOutput {
 }
 
 export interface PancakeSwapQuoteParams {
-    fromTokenAddress: string;
-    toTokenAddress: string;
-    amount: string;
-    slippage?: number;
+  fromTokenAddress: string;
+  toTokenAddress: string;
+  amount: string;
+  slippage?: number;
 }
 
 export interface PancakeSwapParams extends PancakeSwapQuoteParams {
-    fromAddress: string;
-    gasPrice?: string;
+  fromAddress: string;
+  gasPrice?: string;
 }
 
 export interface PancakeSwapQuote {
-    fromToken: PancakeTokenInfo;
-    toToken: PancakeTokenInfo;
-    fromTokenAmount: string;
-    toTokenAmount: string;
-    priceImpact: string;
-    minimumReceived: string;
-    route: string[];
-    gasEstimate?: string;
-    transaction?: any;
+  fromToken: PancakeTokenInfo;
+  toToken: PancakeTokenInfo;
+  fromTokenAmount: string;
+  toTokenAmount: string;
+  priceImpact: string;
+  minimumReceived: string;
+  route: string[];
+  gasEstimate?: string;
+  transaction?: any;
 }
 
 export interface PancakeTokenInfo {
-    symbol: string;
-    name: string;
-    address: string;
-    decimals: number;
+  symbol: string;
+  name: string;
+  address: string;
+  decimals: number;
 }
 
 export interface PancakeUnsignedSwapTransaction {
-    transaction: {
-      to: string;
-      value: string;
-      data: string;
-      gasLimit: string;
-      gasPrice: string;
-      nonce: number;
-      chainId: number;
-    };
-    approvalTransaction?: {
-      to: string;
-      value: string;
-      data: string;
-      gasLimit: string;
-      gasPrice: string;
-      nonce: number;
-      chainId: number;
-    } | null;
-    quote: PancakeSwapQuote;
-  }
-  
+  transaction: {
+    to: string;
+    value: string;
+    data: string;
+    gasLimit: string;
+    gasPrice: string;
+    nonce: number;
+    chainId: number;
+  };
+  approvalTransaction?: {
+    to: string;
+    value: string;
+    data: string;
+    gasLimit: string;
+    gasPrice: string;
+    nonce: number;
+    chainId: number;
+  } | null;
+  quote: PancakeSwapQuote;
+}
+
 export interface ExecutedTransaction {
-    txResponse: TransactionResponse;
-    receipt?: TransactionReceipt;
-  }
+  txResponse: TransactionResponse;
+  receipt?: TransactionReceipt;
+}

@@ -13,7 +13,7 @@ export const WALLET_ADDRESS_HEADER = 'x-wallet-address';
 export class DeviceWalletMiddleware implements NestMiddleware {
   constructor(private readonly walletService: WalletService) {}
 
-  async use(req: any, res: Response, next: NextFunction): Promise<void> {
+  async use(req: any, _res: Response, next: NextFunction): Promise<void> {
     const walletAddress = this.getWalletAddress(req);
 
     if (!walletAddress) {

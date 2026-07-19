@@ -1,15 +1,20 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { EthController } from './eth.controller';
 
 describe('EthController', () => {
   let controller: EthController;
+  const ethService = {
+    getSwapQuote: jest.fn(),
+  };
+  const tokenMetadataService = {
+    normalizeSwapQuote: jest.fn(),
+  };
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [EthController],
-    }).compile();
-
-    controller = module.get<EthController>(EthController);
+  beforeEach(() => {
+    jest.clearAllMocks();
+    controller = new EthController(
+      ethService as any,
+      tokenMetadataService as any,
+    );
   });
 
   it('should be defined', () => {

@@ -19,6 +19,7 @@ import {
   MerkleLeaf,
 } from '@1inch/cross-chain-sdk';
 import {
+  Address as FusionAddress,
   FusionSDK,
   OrderStatus as SingleChainOrderStatus,
 } from '@1inch/fusion-sdk';
@@ -29,6 +30,11 @@ import { RedisService } from '../../redis/redis.service';
 import { SwapOrderService } from '../../swapOrders/swapOrders.service';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { FirebaseNotificationService } from '../../notification/firebase/notification.service';
+import {
+  decryptFusionSecretState,
+  encryptFusionSecretState,
+  isFusionSecretStateEnvelope,
+} from '../../common/utils/encryption.util';
 
 interface RedisOrderSecretState {
   secrets: string[];
@@ -37,6 +43,13 @@ interface RedisOrderSecretState {
   submittedIdx: number[];
   isCrossChain: boolean;
 }
+
+interface ParsedRedisOrderSecretState {
+  state: RedisOrderSecretState;
+  isPlaintext: boolean;
+}
+
+const DEFAULT_FUSION_SECRET_STATE_TTL_SECONDS = 2 * 60 * 60;
 
 @Injectable()
 export class FustionNativeService {
@@ -73,17 +86,20 @@ export class FustionNativeService {
   } | null> {
     const rawStr = await this.redisService.getKey(`fusion_secrets:${key}`);
     if (!rawStr) return null;
-    try {
-      const parsed = JSON.parse(rawStr) as RedisOrderSecretState;
-      return {
-        ...parsed,
-        submittedIdx: new Set(parsed.submittedIdx || []),
-        isCrossChain: parsed.isCrossChain ?? true,
-      };
-    } catch (err) {
-      this.logger.error(`Failed to parse secret state for key`, err);
+
+    const parsed = this.parseSecretState(rawStr);
+    if (!parsed) {
+      this.logger.error(`Failed to parse secret state for key`);
       return null;
     }
+
+    const secretState = this.normalizeSecretState(parsed.state);
+
+    if (parsed.isPlaintext) {
+      await this.setSecretState(key, secretState);
+    }
+
+    return secretState;
   }
 
   private async setSecretState(key: string, state: any): Promise<void> {
@@ -96,12 +112,56 @@ export class FustionNativeService {
     };
     await this.redisService.setKey(
       `fusion_secrets:${key}`,
-      JSON.stringify(dataToSave),
+      encryptFusionSecretState(dataToSave),
+      this.getSecretStateTtlSeconds(),
     );
   }
 
   private async delSecretState(key: string): Promise<void> {
     await this.redisService.delKey(`fusion_secrets:${key}`);
+  }
+
+  private getSecretStateTtlSeconds(): number {
+    const configuredTtlSeconds = Number(
+      process.env.FUSION_SECRET_STATE_TTL_SECONDS,
+    );
+    return Number.isFinite(configuredTtlSeconds) && configuredTtlSeconds > 0
+      ? configuredTtlSeconds
+      : DEFAULT_FUSION_SECRET_STATE_TTL_SECONDS;
+  }
+
+  private parseSecretState(rawStr: string): ParsedRedisOrderSecretState | null {
+    try {
+      const parsed = JSON.parse(rawStr);
+
+      if (isFusionSecretStateEnvelope(parsed)) {
+        return {
+          state: decryptFusionSecretState(rawStr) as RedisOrderSecretState,
+          isPlaintext: false,
+        };
+      }
+
+      return {
+        state: parsed as RedisOrderSecretState,
+        isPlaintext: true,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private normalizeSecretState(state: RedisOrderSecretState): {
+    secrets: string[];
+    secretHashes: string[];
+    hashLock: any;
+    submittedIdx: Set<number>;
+    isCrossChain: boolean;
+  } {
+    return {
+      ...state,
+      submittedIdx: new Set(state.submittedIdx || []),
+      isCrossChain: state.isCrossChain ?? true,
+    };
   }
 
   private initialize1InchSdks() {
@@ -196,8 +256,8 @@ export class FustionNativeService {
         };
         const quote = await fusionSdk.getQuote(quoteParams);
         const preparedOrder = await fusionSdk.createOrder(quoteParams);
-        const { Address } = require('@1inch/fusion-sdk');
-        const makerAddress = new Address(walletAddress);
+        const makerAddress = new FusionAddress(walletAddress);
+        const nativeMakerAddress = new Address(walletAddress);
         const orderInfo = await fusionSdk.submitNativeOrder(
           preparedOrder.order,
           makerAddress,
@@ -216,7 +276,7 @@ export class FustionNativeService {
         });
 
         const factory = NativeOrdersFactory.default(srcChainId);
-        const call = factory.create(makerAddress, orderInfo.order);
+        const call = factory.create(nativeMakerAddress, orderInfo.order);
 
         return {
           orderHash: orderInfo.orderHash,

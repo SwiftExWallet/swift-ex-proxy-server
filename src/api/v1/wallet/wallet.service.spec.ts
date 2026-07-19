@@ -16,11 +16,14 @@ describe('WalletService', () => {
     const existingWallet = {
       _id: 'wallet-id',
       addresses: new Map([
-        [SupportedWalletChain.eth, '0x3333333333333333333333333333333333333333'],
+        [
+          SupportedWalletChain.eth,
+          '0x3333333333333333333333333333333333333333',
+        ],
       ]),
     };
     const model = createModelMock(existingWallet);
-    const service = new WalletService(model as any);
+    const service = new WalletService(model);
 
     await expect(
       service.verifyWalletForDevice(
@@ -41,7 +44,7 @@ describe('WalletService', () => {
   });
 
   it('rejects invalid wallet addresses', async () => {
-    const service = new WalletService(createModelMock() as any);
+    const service = new WalletService(createModelMock());
 
     await expect(
       service.verifyWalletForDevice('device-id', 'not-a-wallet'),

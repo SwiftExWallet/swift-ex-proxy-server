@@ -10,7 +10,8 @@ import { ValidWalletType } from '../enums/all-bridge.enum';
 @ValidatorConstraint({ async: false })
 export class validations_token implements ValidatorConstraintInterface {
   validate(token: string, args: ValidationArguments) {
-    const walletType = (args.object as any).sourceChain as keyof ValidWalletType;
+    const walletType = (args.object as any)
+      .sourceChain as keyof ValidWalletType;
     if (ValidWalletType[walletType] == ValidWalletType.BAS) {
       const allowedSourceTokens = ['USDC'];
       const allowedDestinationTokens = ['USDC'];
@@ -22,7 +23,10 @@ export class validations_token implements ValidatorConstraintInterface {
       }
     }
 
-    if (ValidWalletType[walletType] == ValidWalletType.ETH || ValidWalletType[walletType] == ValidWalletType.ARB) {
+    if (
+      ValidWalletType[walletType] == ValidWalletType.ETH ||
+      ValidWalletType[walletType] == ValidWalletType.ARB
+    ) {
       const allowedSourceTokens = ['USDT', 'USDC', 'USDe'];
       const allowedDestinationTokens = ['USDT', 'USDC', 'USDe'];
       if (args.property === 'sourceToken') {
@@ -33,7 +37,10 @@ export class validations_token implements ValidatorConstraintInterface {
       }
     }
 
-    if (ValidWalletType[walletType] == ValidWalletType.BNB || ValidWalletType[walletType] == ValidWalletType.BSC) {
+    if (
+      ValidWalletType[walletType] == ValidWalletType.BNB ||
+      ValidWalletType[walletType] == ValidWalletType.BSC
+    ) {
       const allowedSourceTokens = ['USDT', 'USDC'];
       const allowedDestinationTokens = ['USDT', 'USDC'];
       if (args.property === 'sourceToken') {
@@ -44,7 +51,11 @@ export class validations_token implements ValidatorConstraintInterface {
       }
     }
 
-    if (ValidWalletType[walletType] == ValidWalletType.POL || ValidWalletType[walletType] == ValidWalletType.OPT || ValidWalletType[walletType] == ValidWalletType.AVA) {
+    if (
+      ValidWalletType[walletType] == ValidWalletType.POL ||
+      ValidWalletType[walletType] == ValidWalletType.OPT ||
+      ValidWalletType[walletType] == ValidWalletType.AVA
+    ) {
       const allowedSourceTokens = ['USDT', 'USDC'];
       const allowedDestinationTokens = ['USDT', 'USDC'];
       if (args.property === 'sourceToken') {

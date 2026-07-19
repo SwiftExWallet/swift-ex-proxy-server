@@ -14,7 +14,7 @@ describe('SwapOrdersController', () => {
     controller = new SwapOrdersController(swapOrderService as any);
   });
 
-  it('gets orders for the requested wallet across devices', async () => {
+  it('gets orders for the verified wallet on the authenticated device', async () => {
     const req = {
       device: { _id: 'device-id' },
       wallet: { address: '0x1234567890123456789012345678901234567890' },
@@ -38,7 +38,7 @@ describe('SwapOrdersController', () => {
     );
   });
 
-  it('gets an order only when the tx hash matches the requested wallet', async () => {
+  it('gets an order only when the tx hash matches the verified wallet and device', async () => {
     const req = {
       device: { _id: 'device-id' },
       wallet: { address: '0x1234567890123456789012345678901234567890' },
@@ -52,10 +52,8 @@ describe('SwapOrdersController', () => {
       }),
     ).resolves.toBe(result);
 
-    expect(swapOrderService.findOrderByHashForDeviceWallet).toHaveBeenCalledWith(
-      'device-id',
-      '0xorderhash',
-      req.wallet.address,
-    );
+    expect(
+      swapOrderService.findOrderByHashForDeviceWallet,
+    ).toHaveBeenCalledWith('device-id', '0xorderhash', req.wallet.address);
   });
 });

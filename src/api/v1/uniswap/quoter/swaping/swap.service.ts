@@ -193,7 +193,9 @@ export class SwapService {
           gasEstimateFromQuoter = result[3];
           selectedFee = fee;
           break;
-        } catch {}
+        } catch {
+          continue;
+        }
       }
 
       if (amountOut === 0n) {
@@ -205,7 +207,7 @@ export class SwapService {
         (amountOut * BigInt(10000 - slippageBps)) / 10000n;
       const minimumReceived = formatUnits(minAmountOutWei, tokenOut.decimals);
 
-      const { networkFee, networkFeeWei } = await this.estimateNetworkFee(
+      const { networkFee } = await this.estimateNetworkFee(
         chain,
         isNativeOut,
         gasEstimateFromQuoter,
@@ -276,7 +278,7 @@ export class SwapService {
 
       const deadline = Math.floor(Date.now() / 1000) + 600;
 
-      const wallet = dto.recipient!;
+      const wallet = dto.recipient;
 
       const [nonce, nativeBalance] = await Promise.all([
         provider.getTransactionCount(wallet, 'pending'),

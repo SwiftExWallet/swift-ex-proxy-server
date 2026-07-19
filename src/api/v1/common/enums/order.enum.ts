@@ -12,11 +12,11 @@ export enum SwapOrderStatus {
   CANCELLED = 'cancelled',
   EXPIRED = 'expired',
   INVALID = 'invalid',
-  EXECUTED = "executed",
-  REFUNDING = "refunding",
-  REFUNDED = "refunded",
-  EXHAUSTED = "exhausted",
-  FILLED = "filled",
+  EXECUTED = 'executed',
+  REFUNDING = 'refunding',
+  REFUNDED = 'refunded',
+  EXHAUSTED = 'exhausted',
+  FILLED = 'filled',
 }
 
 export enum OrderTxType {

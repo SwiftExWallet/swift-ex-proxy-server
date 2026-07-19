@@ -1,7 +1,4 @@
-import {
-  getMongoConnectionConfig,
-  getRedisOptions,
-} from './datastore.config';
+import { getMongoConnectionConfig, getRedisOptions } from './datastore.config';
 
 describe('datastore config validation', () => {
   const originalEnv = process.env;

@@ -13,7 +13,9 @@ import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: SwapOrders.name, schema: SwapOrderSchema }]),
+    MongooseModule.forFeature([
+      { name: SwapOrders.name, schema: SwapOrderSchema },
+    ]),
     WalletModule,
   ],
   providers: [
@@ -23,7 +25,7 @@ import { WalletModule } from '../wallet/wallet.module';
     FirebaseNotificationService,
     EvmTxPollerService,
     RedisService,
-    UniswapTxPollerService
+    UniswapTxPollerService,
   ],
   controllers: [SwapOrdersController],
   exports: [SwapOrderService],

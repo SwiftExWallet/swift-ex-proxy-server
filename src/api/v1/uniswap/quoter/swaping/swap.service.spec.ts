@@ -38,9 +38,7 @@ describe('SwapService', () => {
 
   let service: SwapService;
 
-  const makeDto = (
-    overrides: Partial<SwapQuoteDto> = {},
-  ): SwapQuoteDto =>
+  const makeDto = (overrides: Partial<SwapQuoteDto> = {}): SwapQuoteDto =>
     ({
       tokenIn: {
         address: tokenInAddress,

@@ -1,13 +1,27 @@
-import { IsString, IsEnum, IsOptional, IsNotEmpty, ValidateIf, Matches, IsNumber } from 'class-validator';
-import { } from '../schema/swapOrder.schema';
+import {
+  IsString,
+  IsEnum,
+  IsOptional,
+  IsNotEmpty,
+  ValidateIf,
+  Matches,
+  IsNumber,
+} from 'class-validator';
+import {} from '../schema/swapOrder.schema';
 import { SwapNetwork, swapProvider } from '../../common/enums/chain.enum';
-import { SwapOrderStatus as OrderStatus, OrderTxType } from '../../common/enums/order.enum';
+import {
+  SwapOrderStatus as OrderStatus,
+  OrderTxType,
+} from '../../common/enums/order.enum';
 import { ValidWalletType } from '../../common/enums/all-bridge.enum';
 import { PaginationDto } from './pagination.dto';
 
 export class StoreSwapOrderDto {
-
-  @ValidateIf((o) => (o.provider === swapProvider.ONEINCH_FUSION||o.provider === swapProvider.ONEINCH_FUSION_PLUS))
+  @ValidateIf(
+    (o) =>
+      o.provider === swapProvider.ONEINCH_FUSION ||
+      o.provider === swapProvider.ONEINCH_FUSION_PLUS,
+  )
   @IsString({
     message: 'quoteId must be a string',
   })
@@ -71,13 +85,13 @@ export class StoreSwapOrderDto {
   usdValue?: number;
 }
 
-export class MultiChainWalletAddressDto{
+export class MultiChainWalletAddressDto {
   @IsOptional()
   @Matches(
-      /^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$|^[A-Z0-9]{1,12}-G[A-Z0-9]{55}$/,
-      { message: 'Invalid wallet address format' }
-    )
-    address: string;
+    /^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$|^[A-Z0-9]{1,12}-G[A-Z0-9]{55}$/,
+    { message: 'Invalid wallet address format' },
+  )
+  address: string;
 }
 
 export class OrderByWalletQueryDto extends PaginationDto {
@@ -89,15 +103,15 @@ export class OrderByWalletQueryDto extends PaginationDto {
   address: string;
 }
 
-export class BridgeTxStatusDto{
+export class BridgeTxStatusDto {
   @IsString()
   @IsNotEmpty()
   txHash: string;
-  
+
   @IsString()
   @IsNotEmpty()
-  @IsEnum(ValidWalletType||SwapNetwork)
-  walletType: ValidWalletType|SwapNetwork;
+  @IsEnum(ValidWalletType || SwapNetwork)
+  walletType: ValidWalletType | SwapNetwork;
 
   @IsString()
   @IsNotEmpty()
@@ -105,11 +119,11 @@ export class BridgeTxStatusDto{
   provider: swapProvider;
 }
 
-export class UpdateTxStatusDto{
+export class UpdateTxStatusDto {
   @IsString()
   @IsNotEmpty()
   txHash: string;
-  
+
   @IsString()
   @IsNotEmpty()
   @IsEnum(OrderStatus)

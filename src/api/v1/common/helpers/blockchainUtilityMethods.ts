@@ -1,6 +1,5 @@
 import {
   Contract,
-  ethers,
   FeeData,
   JsonRpcProvider,
   Network,

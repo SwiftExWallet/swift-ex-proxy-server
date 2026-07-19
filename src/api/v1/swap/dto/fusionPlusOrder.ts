@@ -1,4 +1,9 @@
-import { IsEthereumAddress, IsInt, IsNotEmpty, IsOptional } from 'class-validator';
+import {
+  IsEthereumAddress,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+} from 'class-validator';
 
 export class FusionPlusOrderDto {
   @IsNotEmpty()

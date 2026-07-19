@@ -1,14 +1,30 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import {formatUnits, parseUnits, ZeroAddress} from 'ethers';
+import { formatUnits, parseUnits, ZeroAddress } from 'ethers';
 import { JsonRpcProvider, Contract } from 'ethers';
-import {ETH_FACTORY_ABI,ETH_POOL_ABI,ETH_QUOTER_ABI,} from '../common/abi/eth';
+import {
+  ETH_FACTORY_ABI,
+  ETH_POOL_ABI,
+  ETH_QUOTER_ABI,
+} from '../common/abi/eth';
 import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
 import { ProviderService } from '../provider/provider.service';
 import { ChainEnum } from '../common/enums/chain.enum';
-import {QuotedOutput,SwapQuote, SwapTransaction,} from '../common/interface/swap.interface';
-import {getPool,getPoolContractFee,quoteExactInputSingle,} from '../common/helpers/contractUtilityMethod';
+import {
+  QuotedOutput,
+  SwapQuote,
+  SwapTransaction,
+} from '../common/interface/swap.interface';
+import {
+  getPool,
+  getPoolContractFee,
+  quoteExactInputSingle,
+} from '../common/helpers/contractUtilityMethod';
 import { SwapPrepareDto } from './dto/swapPrepare.dto';
-import { getFeeData, getNetwork, getTransactionCount } from '../common/helpers/blockchainUtilityMethods';
+import {
+  getFeeData,
+  getNetwork,
+  getTransactionCount,
+} from '../common/helpers/blockchainUtilityMethods';
 import { EthSwapEnum } from '../common/enums/ethSwap.enum';
 @Injectable()
 export class EthTestnetSwapService {
@@ -18,9 +34,7 @@ export class EthTestnetSwapService {
   factoryContract: Contract;
   quoterContract: Contract;
   swapRouterContract: Contract;
-  constructor(
-    private readonly providerService: ProviderService,
-  ) {
+  constructor(private readonly providerService: ProviderService) {
     const factoryAddress = process.env.POOL_FACTORY_CONTRACT_ADDRESS;
     const quoterAddress = process.env.QUOTER_CONTRACT_ADDRESS;
 
@@ -44,7 +58,7 @@ export class EthTestnetSwapService {
   }
 
   async getQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
-try {
+    try {
       const { tokenIn, tokenOut, amount } = swapQuoteDto;
       const poolAddress: string = await getPool(
         this.factoryContract,
@@ -101,9 +115,9 @@ try {
     } catch (error: any) {
       throw new Error(`Failed to get swap quote: ${error.message}`);
     }
-}
+  }
 
-async prepareSwapTransaction(
+  async prepareSwapTransaction(
     swapPrepareDto: SwapPrepareDto,
   ): Promise<SwapTransaction[]> {
     const { address, swapType, value, depositData, approveData, swapData } =
@@ -147,7 +161,7 @@ async prepareSwapTransaction(
         approveData,
       );
       const swapGas = await this.estimateGas(
-        process.env.SWAP_ROUTER_ADDRESS as string,
+        process.env.SWAP_ROUTER_ADDRESS,
         address,
         swapData,
       );
@@ -191,7 +205,7 @@ async prepareSwapTransaction(
         approveData,
       );
       const swapGas = await this.estimateGas(
-        process.env.SWAP_ROUTER_ADDRESS as string,
+        process.env.SWAP_ROUTER_ADDRESS,
         address,
         swapData,
       );
@@ -225,7 +239,7 @@ async prepareSwapTransaction(
     }
     return txs;
   }
-  
+
   async estimateGas(
     to: string,
     from: string,

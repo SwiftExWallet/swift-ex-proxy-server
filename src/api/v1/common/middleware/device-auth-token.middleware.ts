@@ -20,7 +20,7 @@ export class DeviceAuthTokenMiddleware implements NestMiddleware {
     private readonly deviceService: DeviceService,
   ) {}
 
-  async use(req: any, res: Response, next: () => void): Promise<any> {
+  async use(req: any, _res: Response, next: () => void): Promise<any> {
     const token = this.getDeviceToken(req);
     if (!token) {
       throw new UnauthorizedException('Device token not found');

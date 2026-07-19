@@ -78,7 +78,10 @@ export function getMongoConnectionConfig(): MongoConnectionConfig {
       );
     }
 
-    if (!mongoUriHasCredentials(uri) && !isTrue(process.env.MONGO_ALLOW_NO_AUTH)) {
+    if (
+      !mongoUriHasCredentials(uri) &&
+      !isTrue(process.env.MONGO_ALLOW_NO_AUTH)
+    ) {
       throw new Error(
         'MongoDB credentials are required in production. Use a least-privilege application user.',
       );
@@ -105,16 +108,15 @@ function parseRedisUrl(redisUrl: string): RedisOptions {
     port: parsed.port ? Number(parsed.port) : 6379,
     username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
     password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
-    db: parsed.pathname && parsed.pathname !== '/'
-      ? Number(parsed.pathname.slice(1))
-      : undefined,
+    db:
+      parsed.pathname && parsed.pathname !== '/'
+        ? Number(parsed.pathname.slice(1))
+        : undefined,
     tls: parsed.protocol === 'rediss:' ? {} : undefined,
   };
 }
 
-export function getRedisOptions(
-  overrides: RedisOptions = {},
-): RedisOptions {
+export function getRedisOptions(overrides: RedisOptions = {}): RedisOptions {
   const baseOptions = process.env.REDIS_URL
     ? parseRedisUrl(process.env.REDIS_URL)
     : {

@@ -1,6 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
-import { SwapOrderStatus as OrderStatus, OrderTxType } from '../../common/enums/order.enum';
+import {
+  SwapOrderStatus as OrderStatus,
+  OrderTxType,
+} from '../../common/enums/order.enum';
 import { swapProvider } from '../../common/enums/chain.enum';
 
 @Schema({ collection: 'SwapOrders', timestamps: true })
@@ -17,13 +20,13 @@ export class SwapOrders {
   @Prop({
     required: true,
     unique: true,
-    index: true
+    index: true,
   })
   txHash: string;
 
   @Prop({
     required: true,
-    enum: swapProvider
+    enum: swapProvider,
   })
   provider: swapProvider;
 
@@ -51,14 +54,14 @@ export class SwapOrders {
   @Prop({
     required: true,
     enum: OrderTxType,
-    default: OrderTxType["UNKNOWN"],
+    default: OrderTxType['UNKNOWN'],
   })
   txType: OrderTxType;
 
   @Prop({
     required: true,
     enum: OrderStatus,
-    default: OrderStatus["PENDING"],
+    default: OrderStatus['PENDING'],
   })
   status: OrderStatus;
 

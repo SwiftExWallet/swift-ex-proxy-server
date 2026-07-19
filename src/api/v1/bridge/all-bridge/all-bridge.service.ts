@@ -1,12 +1,9 @@
 import {
   AllbridgeCoreSdk,
   ChainDetailsMap,
-  ChainSymbol,
-  ChainType,
   FeePaymentMethod,
   Messenger,
   RawTransaction,
-  TokenWithChainDetails,
 } from '@allbridge/bridge-core-sdk';
 import {
   BadRequestException,
@@ -16,7 +13,10 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ValidPayFeeType, ValidWalletType } from '../../common/enums/all-bridge.enum';
+import {
+  ValidPayFeeType,
+  ValidWalletType,
+} from '../../common/enums/all-bridge.enum';
 import { AllBridgeSwapADto } from './dto/all-bridge-swap.dto';
 import { AllBridgeQuotesDto } from './dto/all-bridge-swap-quotes.dto';
 import {
@@ -33,9 +33,9 @@ import { ChainEnum } from '../../common/enums/chain.enum';
 export class AllBridgeService {
   private readonly logger = new Logger(AllBridgeService.name);
   private sdk: AllbridgeCoreSdk;
-getProvider(chain: ChainEnum): JsonRpcProvider {
-  return this.rpcService.getProvider(chain);
-}
+  getProvider(chain: ChainEnum): JsonRpcProvider {
+    return this.rpcService.getProvider(chain);
+  }
   constructor(private readonly rpcService: ProviderService) {
     this.sdk = new AllbridgeCoreSdk({
       ETH: this.rpcService.getChainRpcUrl(ChainEnum.ETH),
@@ -64,11 +64,14 @@ getProvider(chain: ChainEnum): JsonRpcProvider {
         destinationToken,
         walletType,
         feePayType,
-        destinationWalletType
+        destinationWalletType,
       } = swapDto;
 
       const sourceTokenCoin = await this.fetchTokens(sourceToken, walletType);
-      const destinationTokenCoin = await this.fetchTokens(destinationToken,destinationWalletType);
+      const destinationTokenCoin = await this.fetchTokens(
+        destinationToken,
+        destinationWalletType,
+      );
 
       if (!sourceTokenCoin || !destinationTokenCoin) {
         throw new BadRequestException(
@@ -77,40 +80,57 @@ getProvider(chain: ChainEnum): JsonRpcProvider {
       }
 
       const needsApproval = !(await this.sdk.bridge.checkAllowance({
-        token: sourceTokenCoin as TokenWithChainDetails,
+        token: sourceTokenCoin,
         owner: fromAddress,
         amount: amount,
       }));
 
-      const transferTransaction: RawTransaction = await this.sdk.bridge.rawTxBuilder.send({
-        amount: amount,
-        fromAccountAddress: fromAddress,
-        toAccountAddress: toAddress,
-        sourceToken: sourceTokenCoin as TokenWithChainDetails,
-        destinationToken: destinationTokenCoin as TokenWithChainDetails,
-        messenger: Messenger.ALLBRIDGE,
-        gasFeePaymentMethod: feePayType === ValidPayFeeType.WITH_NATIVE_CURRENCY
-          ? FeePaymentMethod.WITH_NATIVE_CURRENCY
-          : FeePaymentMethod.WITH_STABLECOIN
-      });
-
-      if (needsApproval) {
-        this.logger.log('=== preparing both approve and transfer transactions ===');
-
-        const approveTransaction: RawTransaction = await this.sdk.bridge.rawTxBuilder.approve({
-          token: sourceTokenCoin as TokenWithChainDetails,
-          owner: fromAddress,
+      const transferTransaction: RawTransaction =
+        await this.sdk.bridge.rawTxBuilder.send({
+          amount: amount,
+          fromAccountAddress: fromAddress,
+          toAccountAddress: toAddress,
+          sourceToken: sourceTokenCoin,
+          destinationToken: destinationTokenCoin,
+          messenger: Messenger.ALLBRIDGE,
+          gasFeePaymentMethod:
+            feePayType === ValidPayFeeType.WITH_NATIVE_CURRENCY
+              ? FeePaymentMethod.WITH_NATIVE_CURRENCY
+              : FeePaymentMethod.WITH_STABLECOIN,
         });
 
-        await this.simulateTransaction(fromAddress, approveTransaction, 'approve',walletType);
+      if (needsApproval) {
+        this.logger.log(
+          '=== preparing both approve and transfer transactions ===',
+        );
 
-        const currentNonce = await getTransactionCount(this.getProvider(ChainEnum[walletType]), fromAddress);
+        const approveTransaction: RawTransaction =
+          await this.sdk.bridge.rawTxBuilder.approve({
+            token: sourceTokenCoin,
+            owner: fromAddress,
+          });
+
+        await this.simulateTransaction(
+          fromAddress,
+          approveTransaction,
+          'approve',
+          walletType,
+        );
+
+        const currentNonce = await getTransactionCount(
+          this.getProvider(ChainEnum[walletType]),
+          fromAddress,
+        );
         const [network, feeData] = await Promise.all([
           getNetwork(this.getProvider(ChainEnum[walletType])),
           getFeeData(this.getProvider(ChainEnum[walletType])),
         ]);
-        const bufferedFeeData = this.bufferFeeData(feeData); 
-        const approveGasLimit = await getEstimateGas(this.getProvider(ChainEnum[walletType]), fromAddress, approveTransaction);
+        const bufferedFeeData = this.bufferFeeData(feeData);
+        const approveGasLimit = await getEstimateGas(
+          this.getProvider(ChainEnum[walletType]),
+          fromAddress,
+          approveTransaction,
+        );
         const approveTxMeta = {
           nonce: currentNonce,
           gasLimit: approveGasLimit,
@@ -137,18 +157,30 @@ getProvider(chain: ChainEnum): JsonRpcProvider {
               transaction: transferTransaction,
               txMeta: transferTxMeta,
               type: 'transfer',
-            }
-          ]
+            },
+          ],
         };
       }
 
       this.logger.log('=== preparing only transfer transaction ===');
 
-      await this.simulateTransaction(fromAddress, transferTransaction, 'transfer',walletType);
+      await this.simulateTransaction(
+        fromAddress,
+        transferTransaction,
+        'transfer',
+        walletType,
+      );
 
       const [nonce, gasLimit, feeData, network] = await Promise.all([
-        getTransactionCount(this.getProvider(ChainEnum[walletType]), fromAddress),
-        getEstimateGas(this.getProvider(ChainEnum[walletType]), fromAddress, transferTransaction),
+        getTransactionCount(
+          this.getProvider(ChainEnum[walletType]),
+          fromAddress,
+        ),
+        getEstimateGas(
+          this.getProvider(ChainEnum[walletType]),
+          fromAddress,
+          transferTransaction,
+        ),
         getFeeData(this.getProvider(ChainEnum[walletType])),
         getNetwork(this.getProvider(ChainEnum[walletType])),
       ]);
@@ -167,10 +199,9 @@ getProvider(chain: ChainEnum): JsonRpcProvider {
             transaction: transferTransaction,
             txMeta: txMeta,
             type: 'transfer',
-          }
-        ]
+          },
+        ],
       };
-
     } catch (error) {
       this.logger.error('Error in swap prepare:', error);
       const message =
@@ -189,14 +220,14 @@ getProvider(chain: ChainEnum): JsonRpcProvider {
     slippageTolerance: string;
     fee: object;
     completionTime: number;
-    sourceChain: string,
-    sourceToken: string,
-    destinationChain: string,
-    destinationToken: string
+    sourceChain: string;
+    sourceToken: string;
+    destinationChain: string;
+    destinationToken: string;
   }> {
     try {
       const chains = await this.sdk.chainDetailsMap();
-      const sourceChain = chains[allBridgeQuotes.sourceChain]
+      const sourceChain = chains[allBridgeQuotes.sourceChain];
       const destinationChain = chains[allBridgeQuotes.destinationChain];
       if (!sourceChain || !destinationChain) {
         throw new NotFoundException('Chain details not found');
@@ -221,29 +252,31 @@ getProvider(chain: ChainEnum): JsonRpcProvider {
       );
       this.logger.log('===minimumReceiveAmount ==', minimumReceiveAmount);
 
-      const { gasFeeOptions } = await this.sdk.getAmountToBeReceivedAndGasFeeOptions(
-        allBridgeQuotes.amount,
-        sourceToken,
-        destinationToken,
-        Messenger.ALLBRIDGE,
-      );
+      const { gasFeeOptions } =
+        await this.sdk.getAmountToBeReceivedAndGasFeeOptions(
+          allBridgeQuotes.amount,
+          sourceToken,
+          destinationToken,
+          Messenger.ALLBRIDGE,
+        );
 
       const feeObj = {
         native: {
           amount: gasFeeOptions.native.float,
-          symbol: sourceChain.chainSymbol || "Native"
+          symbol: sourceChain.chainSymbol || 'Native',
         },
         stablecoin: {
-          amount: gasFeeOptions?.stablecoin?.float || "0",
-          symbol: sourceToken.symbol
+          amount: gasFeeOptions?.stablecoin?.float || '0',
+          symbol: sourceToken.symbol,
         },
       };
 
-      const transferTimeMs = this.sdk.getAverageTransferTime(
-        sourceToken,
-        destinationToken,
-        Messenger.ALLBRIDGE
-      ) ?? 0;
+      const transferTimeMs =
+        this.sdk.getAverageTransferTime(
+          sourceToken,
+          destinationToken,
+          Messenger.ALLBRIDGE,
+        ) ?? 0;
 
       const conversionRate = (
         parseFloat(minimumReceiveAmount) / parseFloat(allBridgeQuotes.amount)
@@ -259,7 +292,7 @@ getProvider(chain: ChainEnum): JsonRpcProvider {
         sourceChain: allBridgeQuotes.sourceChain,
         sourceToken: allBridgeQuotes.sourceToken,
         destinationChain: allBridgeQuotes.destinationChain,
-        destinationToken: allBridgeQuotes.destinationToken
+        destinationToken: allBridgeQuotes.destinationToken,
       };
     } catch (error) {
       this.logger.error('Error in getSwapDetails:', error);
@@ -277,7 +310,7 @@ getProvider(chain: ChainEnum): JsonRpcProvider {
     fromAddress: string,
     rawTx: RawTransaction,
     label: string = 'transaction',
-    sourceChain :string
+    sourceChain: string,
   ): Promise<void> {
     try {
       this.logger.log(`=== Simulating ${label} ===`);

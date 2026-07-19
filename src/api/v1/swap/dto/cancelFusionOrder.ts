@@ -1,8 +1,4 @@
-import {
-  IsNotEmpty,
-  IsEnum,
-  IsString,
-} from 'class-validator';
+import { IsNotEmpty, IsEnum, IsString } from 'class-validator';
 import { SwapNetwork } from '../../common/enums/chain.enum';
 
 export class CancelFusionOrderDto {
@@ -12,5 +8,5 @@ export class CancelFusionOrderDto {
 
   @IsNotEmpty()
   @IsString()
-  orderHash: string
+  orderHash: string;
 }

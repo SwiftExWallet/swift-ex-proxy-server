@@ -1,15 +1,20 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { BscController } from './bsc.controller';
 
 describe('BscController', () => {
   let controller: BscController;
+  const bscService = {
+    getSwapQuote: jest.fn(),
+  };
+  const tokenMetadataService = {
+    normalizeSwapQuote: jest.fn(),
+  };
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [BscController],
-    }).compile();
-
-    controller = module.get<BscController>(BscController);
+  beforeEach(() => {
+    jest.clearAllMocks();
+    controller = new BscController(
+      bscService as any,
+      tokenMetadataService as any,
+    );
   });
 
   it('should be defined', () => {

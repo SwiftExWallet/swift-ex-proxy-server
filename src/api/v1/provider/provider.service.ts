@@ -29,13 +29,13 @@ export class ProviderService {
         process.env.PROVIDER_RPC_ETH_5,
       ].filter(Boolean) as string[],
 
-      [ChainEnum.BSC]: [
-        process.env.PROVIDER_RPC_BSC,
-      ].filter(Boolean) as string[],
+      [ChainEnum.BSC]: [process.env.PROVIDER_RPC_BSC].filter(
+        Boolean,
+      ) as string[],
 
-      [ChainEnum.BNB]: [
-        process.env.PROVIDER_RPC_BSC,
-      ].filter(Boolean) as string[],
+      [ChainEnum.BNB]: [process.env.PROVIDER_RPC_BSC].filter(
+        Boolean,
+      ) as string[],
 
       [ChainEnum.POL]: [
         process.env.PROVIDER_RPC_POL_1,
@@ -86,11 +86,9 @@ export class ProviderService {
 
   getProvider(chain: ChainEnum): JsonRpcProvider {
     if (chain === ChainEnum.ETH) {
-      return new JsonRpcProvider(
-        this.getRpcUrl(),
-        Network.from(1),
-        { staticNetwork: true }
-      );
+      return new JsonRpcProvider(this.getRpcUrl(), Network.from(1), {
+        staticNetwork: true,
+      });
     }
 
     if (chain === ChainEnum.BSC) {
@@ -100,11 +98,9 @@ export class ProviderService {
     const url = this.getChainRpcUrl(chain);
     const chainId = this.getChainNetworkId[chain];
 
-    return new JsonRpcProvider(
-      url,
-      Network.from(chainId),
-      { staticNetwork: true }
-    );
+    return new JsonRpcProvider(url, Network.from(chainId), {
+      staticNetwork: true,
+    });
   }
 
   getContract(address: string, abi: any, chain: ChainEnum): Contract {

@@ -42,7 +42,7 @@ export class FirebaseNotificationService {
         apns: {
           headers: {
             'apns-priority': '10',
-            'apns-push-type': 'alert'
+            'apns-push-type': 'alert',
           },
           payload: {
             aps: {
@@ -52,9 +52,9 @@ export class FirebaseNotificationService {
               },
               sound: 'default',
               badge: 0,
-            }
-          }
-        }
+            },
+          },
+        },
       };
       const response = await admin.messaging().send(message);
       return response;

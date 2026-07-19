@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   HttpException,
   HttpStatus,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import {
@@ -15,6 +16,7 @@ import {
 import {
   RATE_LIMIT_KEY,
   RateLimitConfig,
+  RateLimitKeyBy,
 } from '../decorators/rate-limit.decorator';
 import { createRedisClient } from '../config/datastore.config';
 
@@ -61,7 +63,8 @@ export class RateLimitGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
-    const ip = context.switchToHttp().getRequest().ip ?? 'unknown';
+    const request = context.switchToHttp().getRequest();
+    const ip = request.ip ?? 'unknown';
 
     // no decorator → use global limiter
     if (!configs || configs.length === 0) {
@@ -82,13 +85,16 @@ export class RateLimitGuard implements CanActivate {
     // ✅ run ALL limiters — all must pass
     for (const config of configs) {
       const label = config.key ?? `${config.points}_${config.duration}`;
+      const keyBy = config.keyBy ?? 'ip';
       const limiter = this.getRouteLimiter(
         config.points,
         config.duration,
         label,
+        keyBy,
       );
+      const consumeKey = this.getConsumeKey(request, keyBy);
       try {
-        await limiter.consume(ip);
+        await limiter.consume(consumeKey);
       } catch (err) {
         const retryAfter = Math.ceil(
           (err as RateLimiterRes).msBeforeNext / 1000,
@@ -111,8 +117,9 @@ export class RateLimitGuard implements CanActivate {
     points: number,
     duration: number,
     label: string,
+    keyBy: RateLimitKeyBy,
   ): RateLimiterAbstract {
-    const key = `${label}_${points}_${duration}`;
+    const key = `${label}_${keyBy}_${points}_${duration}`;
     if (!routeLimiters.has(key)) {
       routeLimiters.set(
         key,
@@ -120,5 +127,31 @@ export class RateLimitGuard implements CanActivate {
       );
     }
     return routeLimiters.get(key)!;
+  }
+
+  private getConsumeKey(request: any, keyBy: RateLimitKeyBy): string {
+    if (keyBy === 'ip') {
+      return `ip:${request.ip ?? 'unknown'}`;
+    }
+
+    if (keyBy === 'device') {
+      const deviceId = request.device?._id;
+      if (!deviceId) {
+        throw new UnauthorizedException(
+          'Device context not found for rate limit.',
+        );
+      }
+
+      return `device:${String(deviceId)}`;
+    }
+
+    const walletAddress = request.wallet?.address;
+    if (!walletAddress) {
+      throw new UnauthorizedException(
+        'Wallet context not found for rate limit.',
+      );
+    }
+
+    return `wallet:${String(walletAddress).toLowerCase()}`;
   }
 }

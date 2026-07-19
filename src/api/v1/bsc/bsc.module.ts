@@ -7,7 +7,7 @@ import { TokenMetadataService } from '../common/services/tokenMetadata.service';
 
 @Module({
   imports: [ProviderModule],
-  providers: [BscService,PancakeSwapService,TokenMetadataService],
+  providers: [BscService, PancakeSwapService, TokenMetadataService],
   controllers: [BscController],
 })
 export class BscModule {}

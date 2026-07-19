@@ -129,12 +129,10 @@ describe('inchController', () => {
       confirmed: true,
     });
 
-    expect(fustionNativeService.createSwapOrder).toHaveBeenCalledWith(
-      {
-        ...createDto,
-        walletAddress: reqWithWallet.wallet.address,
-      },
-    );
+    expect(fustionNativeService.createSwapOrder).toHaveBeenCalledWith({
+      ...createDto,
+      walletAddress: reqWithWallet.wallet.address,
+    });
     expect(fustionNativeService.confirmSwapOrder).toHaveBeenCalledWith(
       confirmDto,
     );

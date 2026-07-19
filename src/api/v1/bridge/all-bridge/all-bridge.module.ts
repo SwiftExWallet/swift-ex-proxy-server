@@ -5,7 +5,7 @@ import { ProviderService } from '../../provider/provider.service';
 
 @Module({
   imports: [ProviderModule],
-  providers: [AllBridgeService,ProviderService],
+  providers: [AllBridgeService, ProviderService],
   exports: [AllBridgeService],
 })
 export class AllBridgeModule {}

@@ -63,7 +63,9 @@ export class TokenMetadataService {
   private async resolveMetadata(token: TokenInfoDto): Promise<TokenMetadata> {
     const chainId = Number(token.chainId) as ChainId;
     if (!this.isSupportedChainId(chainId)) {
-      throw new BadRequestException(`Unsupported token chainId: ${token.chainId}`);
+      throw new BadRequestException(
+        `Unsupported token chainId: ${token.chainId}`,
+      );
     }
 
     if (this.isNativeToken(token.address)) {

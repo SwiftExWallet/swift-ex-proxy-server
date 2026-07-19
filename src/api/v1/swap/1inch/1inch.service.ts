@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  OnModuleInit,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { SwapQuoteDto } from '../dto/swapQuote';
 import { ChainId, swapProvider } from '../../common/enums/chain.enum';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
@@ -20,7 +16,12 @@ import {
   OrderStatus as SDKOrderStatus,
 } from '@1inch/cross-chain-sdk';
 import { InchOrderStatusDto } from '../dto/1inchsOrderStatus';
-import { encryptFusionSecrets } from '../../common/utils/encryption.util';
+import {
+  decryptFusionSecretState,
+  encryptFusionSecretState,
+  encryptFusionSecrets,
+  isFusionSecretStateEnvelope,
+} from '../../common/utils/encryption.util';
 import { RedisService } from '../../redis/redis.service';
 import * as crypto from 'crypto';
 import { CancelFusionOrderDto } from '../dto/cancelFusionOrder';
@@ -32,6 +33,11 @@ interface RedisOrderSecretState {
   secretHashes: string[];
   hashLock: any;
   submittedIdx: number[];
+}
+
+interface ParsedRedisOrderSecretState {
+  state: RedisOrderSecretState;
+  isPlaintext: boolean;
 }
 
 const SECRET_POLL_INTERVAL_MS = 10_000;
@@ -82,15 +88,19 @@ export class InchService implements OnModuleInit {
   } | null> {
     const rawStr = await this.redisService.getKey(`fusion_secrets:${key}`);
     if (!rawStr) return null;
-    try {
-      const parsed = JSON.parse(rawStr) as RedisOrderSecretState;
-      return {
-        ...parsed,
-        submittedIdx: new Set(parsed.submittedIdx || []),
-      };
-    } catch (err) {
+
+    const parsed = this.parseSecretState(rawStr);
+    if (!parsed) {
       return null;
     }
+
+    const secretState = this.normalizeSecretState(parsed.state);
+
+    if (parsed.isPlaintext) {
+      await this.setSecretState(key, secretState);
+    }
+
+    return secretState;
   }
 
   private async setSecretState(key: string, state: any): Promise<void> {
@@ -102,13 +112,45 @@ export class InchService implements OnModuleInit {
     };
     await this.redisService.setKey(
       `fusion_secrets:${key}`,
-      JSON.stringify(dataToSave),
+      encryptFusionSecretState(dataToSave),
       this.getSecretStateTtlSeconds(),
     );
   }
 
   private async delSecretState(key: string): Promise<void> {
     await this.redisService.delKey(`fusion_secrets:${key}`);
+  }
+
+  private parseSecretState(rawStr: string): ParsedRedisOrderSecretState | null {
+    try {
+      const parsed = JSON.parse(rawStr);
+
+      if (isFusionSecretStateEnvelope(parsed)) {
+        return {
+          state: decryptFusionSecretState(rawStr) as RedisOrderSecretState,
+          isPlaintext: false,
+        };
+      }
+
+      return {
+        state: parsed as RedisOrderSecretState,
+        isPlaintext: true,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private normalizeSecretState(state: RedisOrderSecretState): {
+    secrets: string[];
+    secretHashes: string[];
+    hashLock: any;
+    submittedIdx: Set<number>;
+  } {
+    return {
+      ...state,
+      submittedIdx: new Set(state.submittedIdx || []),
+    };
   }
 
   async getSwapQuote(swapQuote: SwapQuoteDto) {
@@ -245,7 +287,7 @@ export class InchService implements OnModuleInit {
     }
   }
 
-  async submitFusionOrder(device: any, submitOrderDto: SubmitOrderDto) {
+  async submitFusionOrder(_device: any, submitOrderDto: SubmitOrderDto) {
     try {
       const { order, signature, extension, quoteId, chain } = submitOrderDto;
       const config: AxiosRequestConfig = {
@@ -269,7 +311,7 @@ export class InchService implements OnModuleInit {
     }
   }
 
-  async submitFusionPlusOrder(device: any, submitOrderDto: SubmitOrderDto) {
+  async submitFusionPlusOrder(_device: any, submitOrderDto: SubmitOrderDto) {
     const { order, signature, extension, quoteId, chain, orderHash } =
       submitOrderDto;
     const tempKey = `quote:${quoteId}`;
@@ -304,16 +346,16 @@ export class InchService implements OnModuleInit {
       await this.delSecretState(tempKey);
       await this.setSecretState(orderHash, secretState);
 
-      let encryptedFusionSecrets: string | undefined;
       const rawSecretsStr = await this.redisService.getKey(
         `fusion_secrets:${quoteId}`,
       );
       if (rawSecretsStr) {
         try {
           const rawSecrets = JSON.parse(rawSecretsStr);
-          encryptedFusionSecrets = encryptFusionSecrets(rawSecrets);
+          encryptFusionSecrets(rawSecrets);
           await this.redisService.delKey(`fusion_secrets:${quoteId}`);
-        } catch (err) {
+        } catch {
+          await this.redisService.delKey(`fusion_secrets:${quoteId}`);
         }
       }
 
@@ -402,10 +444,7 @@ export class InchService implements OnModuleInit {
     return orderStatusUpdate;
   }
 
-  private async exhaustSecretRevealPoller(
-    orderHash: string,
-    reason: unknown,
-  ): Promise<boolean> {
+  private async exhaustSecretRevealPoller(orderHash: string): Promise<boolean> {
     try {
       await this.updateOrderStatusAndNotify(
         orderHash,
@@ -413,7 +452,7 @@ export class InchService implements OnModuleInit {
       );
       this.stopSecretRevealPoller(orderHash);
       return true;
-    } catch (err) {
+    } catch {
       return false;
     }
   }
@@ -430,15 +469,11 @@ export class InchService implements OnModuleInit {
       this.activeSecretPollers.set(orderHash, timeout);
     };
 
-    const rescheduleOrExhaust = async (
-      delayMs: number,
-      reason: unknown,
-    ): Promise<void> => {
-      const rescheduleCount =
-        this.secretPollReschedules.get(orderHash) ?? 0;
+    const rescheduleOrExhaust = async (delayMs: number): Promise<void> => {
+      const rescheduleCount = this.secretPollReschedules.get(orderHash) ?? 0;
 
       if (rescheduleCount >= SECRET_POLL_MAX_RESCHEDULES) {
-        await this.exhaustSecretRevealPoller(orderHash, reason);
+        await this.exhaustSecretRevealPoller(orderHash);
         return;
       }
 
@@ -480,7 +515,7 @@ export class InchService implements OnModuleInit {
           }
 
           retryDelayMs = SECRET_POLL_INTERVAL_MS;
-          await rescheduleOrExhaust(retryDelayMs, `order status remained ${status}`);
+          await rescheduleOrExhaust(retryDelayMs);
           return;
         }
 
@@ -491,29 +526,26 @@ export class InchService implements OnModuleInit {
           );
 
           retryDelayMs = SECRET_POLL_INTERVAL_MS;
-          await rescheduleOrExhaust(retryDelayMs, `order status remained ${status}`);
+          await rescheduleOrExhaust(retryDelayMs);
           return;
         }
 
         if (FINAL_ORDER_STATUSES.has(status)) {
           const resolvedStatus = this.mapFusionPlusStatus(status);
-          await this.updateOrderStatusAndNotify(
-            orderHash,
-            resolvedStatus,
-          );
+          await this.updateOrderStatusAndNotify(orderHash, resolvedStatus);
           await this.delSecretState(orderHash);
           this.stopSecretRevealPoller(orderHash);
           return;
         }
 
         retryDelayMs = SECRET_POLL_INTERVAL_MS;
-        await rescheduleOrExhaust(retryDelayMs, `unhandled order status ${status}`);
-      } catch (err) {
+        await rescheduleOrExhaust(retryDelayMs);
+      } catch {
         retryDelayMs = Math.min(
           retryDelayMs + SECRET_POLL_RETRY_STEP_MS,
           SECRET_POLL_MAX_RETRY_DELAY_MS,
         );
-        await rescheduleOrExhaust(retryDelayMs, err);
+        await rescheduleOrExhaust(retryDelayMs);
       }
     };
 
@@ -620,12 +652,10 @@ export class InchService implements OnModuleInit {
     try {
       const response = await axios.get(url, config);
       if (response.data.status) {
-        const orderStatusUpdate = await this.swapOrderService.updateOrderByHash(
-          {
-            txHash: inchOrderStatusDto.orderHash,
-            orderStatus: SwapOrderStatus[response.data.status.toUpperCase()],
-          },
-        );
+        await this.swapOrderService.updateOrderByHash({
+          txHash: inchOrderStatusDto.orderHash,
+          orderStatus: SwapOrderStatus[response.data.status.toUpperCase()],
+        });
         // await this.firebaseNotificationService.sendNotification(
         //   orderStatusUpdate?.deviceFcmToken as string,
         //   {
@@ -656,12 +686,10 @@ export class InchService implements OnModuleInit {
     try {
       const response = await axios.get(url, config);
       if (response.data.status) {
-        const orderStatusUpdate = await this.swapOrderService.updateOrderByHash(
-          {
-            txHash: inchOrderStatusDto.orderHash,
-            orderStatus: SwapOrderStatus[response.data.status.toUpperCase()],
-          },
-        );
+        await this.swapOrderService.updateOrderByHash({
+          txHash: inchOrderStatusDto.orderHash,
+          orderStatus: SwapOrderStatus[response.data.status.toUpperCase()],
+        });
         // await this.firebaseNotificationService.sendNotification(
         //   orderStatusUpdate?.deviceFcmToken as string,
         //   {
@@ -692,7 +720,7 @@ export class InchService implements OnModuleInit {
         },
       );
       return true;
-    } catch (error) {
+    } catch {
       throw new BadRequestException('unable to send notification');
     }
   }

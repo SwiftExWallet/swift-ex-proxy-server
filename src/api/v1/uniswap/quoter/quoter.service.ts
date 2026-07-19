@@ -12,12 +12,18 @@ import { JsonRpcProvider } from '@ethersproject/providers';
 import { ProviderService } from '../../provider/provider.service';
 import { SwapQuoteDto, TokenInfoDto } from '../../common/dto/swapQuote.dto';
 import { SwapQuote } from '../../common/interface/swap.interface';
-import { ChainEnum, ChainId, swapProvider } from '../../common/enums/chain.enum';
+import {
+  ChainEnum,
+  ChainId,
+  swapProvider,
+} from '../../common/enums/chain.enum';
 import { InchService } from '../../swap/1inch/1inch.service';
 import { SwapProviderResolver } from './dto/swap-provider.resolver';
 import { TokenMetadataService } from '../../common/services/tokenMetadata.service';
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
+
+type UniswapSwapRoute = NonNullable<Awaited<ReturnType<AlphaRouter['route']>>>;
 
 @Injectable()
 export class QuoterService {
@@ -58,7 +64,8 @@ export class QuoterService {
   }
 
   async buildSwapResponse(dto: SwapQuoteDto) {
-    const normalizedDto = await this.tokenMetadataService.normalizeSwapQuote(dto);
+    const normalizedDto =
+      await this.tokenMetadataService.normalizeSwapQuote(dto);
     const quote = await this.buildSwapTx(normalizedDto);
     return {
       success: true,
@@ -136,8 +143,16 @@ export class QuoterService {
 
   async getQuote(
     swapQuote: SwapQuoteDto,
-    internalCall: Boolean = false,
-  ): Promise<SwapQuote | any> {
+    internalCall: true,
+  ): Promise<UniswapSwapRoute>;
+  async getQuote(
+    swapQuote: SwapQuoteDto,
+    internalCall?: false,
+  ): Promise<SwapQuote>;
+  async getQuote(
+    swapQuote: SwapQuoteDto,
+    internalCall: boolean = false,
+  ): Promise<SwapQuote | UniswapSwapRoute> {
     try {
       const { tokenIn, tokenOut, amount, recipient } = swapQuote;
       const provider = new JsonRpcProvider(
@@ -186,11 +201,10 @@ export class QuoterService {
       const networkFee = ethers.formatEther(gasCostWei);
       const tokenPath = route.route[0].tokenPath.map((t) => t.symbol);
       const isMultiHop = tokenPath.length > 2;
-      let fee = 'N/A';
-      const firstRoute: any = route.route[0];
-      try {
-        fee = firstRoute.pools?.[0]?.fee?.toString() || 'N/A';
-      } catch {}
+      const firstRoute = route.route[0] as {
+        pools?: Array<{ fee?: { toString(): string } }>;
+      };
+      const fee = firstRoute.pools?.[0]?.fee?.toString() || 'N/A';
       return internalCall
         ? route
         : {
@@ -210,10 +224,7 @@ export class QuoterService {
     }
   }
 
-  async buildSwapTx(
-    swapQuote: SwapQuoteDto,
-    slippageBps = 100,
-  ): Promise<TransactionRequest[]> {
+  async buildSwapTx(swapQuote: SwapQuoteDto): Promise<TransactionRequest[]> {
     try {
       const { tokenIn, recipient } = swapQuote;
       const txs: TransactionRequest[] = [];

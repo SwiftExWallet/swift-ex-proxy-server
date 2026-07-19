@@ -6,7 +6,7 @@ import { withVerifiedWalletAddress } from '../common/helpers/requestWallet';
 
 @Controller('api/v1/bridge')
 export class BridgeController {
-  constructor(private readonly allBridgeService: AllBridgeService) { }
+  constructor(private readonly allBridgeService: AllBridgeService) {}
 
   @Post('swap-transaction/prepare')
   async getSwapQuote(

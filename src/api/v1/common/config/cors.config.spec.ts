@@ -1,6 +1,9 @@
 import { createCorsOptions, getAllowedCorsOrigins } from './cors.config';
 
-function invokeOriginCallback(options: ReturnType<typeof createCorsOptions>, origin?: string): Promise<boolean> {
+function invokeOriginCallback(
+  options: ReturnType<typeof createCorsOptions>,
+  origin?: string,
+): Promise<boolean> {
   return new Promise((resolve, reject) => {
     const originHandler = options.origin;
 
@@ -9,7 +12,12 @@ function invokeOriginCallback(options: ReturnType<typeof createCorsOptions>, ori
       return;
     }
 
-    (originHandler as (origin: string | undefined, callback: (error: Error | null, allowed?: boolean) => void) => void)(origin, (error, allowed) => {
+    (
+      originHandler as (
+        origin: string | undefined,
+        callback: (error: Error | null, allowed?: boolean) => void,
+      ) => void
+    )(origin, (error, allowed) => {
       if (error) {
         reject(error);
         return;
@@ -33,7 +41,9 @@ describe('CORS configuration', () => {
       CORS_ALLOWED_ORIGINS: 'https://app.example.com',
     });
 
-    await expect(invokeOriginCallback(options, 'https://app.example.com')).resolves.toBe(true);
+    await expect(
+      invokeOriginCallback(options, 'https://app.example.com'),
+    ).resolves.toBe(true);
   });
 
   it('rejects origins that are not allowlisted', async () => {
@@ -42,7 +52,9 @@ describe('CORS configuration', () => {
       CORS_ALLOWED_ORIGINS: 'https://app.example.com',
     });
 
-    await expect(invokeOriginCallback(options, 'https://evil.example.com')).rejects.toThrow('CORS origin not allowed');
+    await expect(
+      invokeOriginCallback(options, 'https://evil.example.com'),
+    ).rejects.toThrow('CORS origin not allowed');
   });
 
   it('does not allow non-HTTPS browser origins in production', () => {
@@ -61,6 +73,8 @@ describe('CORS configuration', () => {
       CORS_ALLOWED_WEBVIEW_ORIGINS: 'capacitor://localhost',
     });
 
-    await expect(invokeOriginCallback(options, 'capacitor://localhost')).resolves.toBe(true);
+    await expect(
+      invokeOriginCallback(options, 'capacitor://localhost'),
+    ).resolves.toBe(true);
   });
 });

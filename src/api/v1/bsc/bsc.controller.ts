@@ -2,7 +2,6 @@ import { Body, Controller, Get, Param, Post, Req, Res } from '@nestjs/common';
 import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
 import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
 import { BscService } from './bsc.service';
-import { PrepareSwapTransactionDto } from './dto/prepareSwapTransaction.dto';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
@@ -21,12 +20,15 @@ export class BscController {
     private readonly tokenMetadataService: TokenMetadataService,
   ) {}
   @Post('swap-quote')
-  async getSwapQuote(@Req() req: any, @Res() res, @Body() swapQuoteDto: SwapQuoteDto) {
-    const normalizedDto =
-      await this.tokenMetadataService.normalizeSwapQuote(
-        withVerifiedWalletAddress(swapQuoteDto, req, 'recipient'),
-      );
-    const data = await this.bscService.getSwapQuote(normalizedDto)
+  async getSwapQuote(
+    @Req() req: any,
+    @Res() res,
+    @Body() swapQuoteDto: SwapQuoteDto,
+  ) {
+    const normalizedDto = await this.tokenMetadataService.normalizeSwapQuote(
+      withVerifiedWalletAddress(swapQuoteDto, req, 'recipient'),
+    );
+    const data = await this.bscService.getSwapQuote(normalizedDto);
     res.status(200).json(data);
   }
 
@@ -47,13 +49,10 @@ export class BscController {
     @Res() res,
     @Body() prepareSwapTransactionDto: SwapQuoteDto,
   ) {
-    const normalizedDto =
-      await this.tokenMetadataService.normalizeSwapQuote(
-        withVerifiedWalletAddress(prepareSwapTransactionDto, req, 'recipient'),
-      );
-    const data = await this.bscService.prepareSwapTransaction(
-      normalizedDto,
+    const normalizedDto = await this.tokenMetadataService.normalizeSwapQuote(
+      withVerifiedWalletAddress(prepareSwapTransactionDto, req, 'recipient'),
     );
+    const data = await this.bscService.prepareSwapTransaction(normalizedDto);
     res.status(200).json(data);
   }
 

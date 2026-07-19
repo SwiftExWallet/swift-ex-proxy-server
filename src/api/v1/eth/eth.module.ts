@@ -9,7 +9,12 @@ import { TokenMetadataService } from '../common/services/tokenMetadata.service';
 
 @Module({
   imports: [ProviderModule],
-  providers: [EthService,UniSwapService,EthTestnetSwapService,TokenMetadataService],
+  providers: [
+    EthService,
+    UniSwapService,
+    EthTestnetSwapService,
+    TokenMetadataService,
+  ],
   controllers: [EthController, UsdtController],
 })
 export class EthModule {}

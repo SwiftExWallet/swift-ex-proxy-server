@@ -1,5 +1,4 @@
-import { SupportedChain } from "../dto/quoter.dto";
-
+import { SupportedChain } from '../dto/quoter.dto';
 
 export interface ChainConfig {
   chainId: number;
@@ -88,7 +87,11 @@ export const QUOTER_V2_ABI = [
           { internalType: 'address', name: 'tokenOut', type: 'address' },
           { internalType: 'uint256', name: 'amountIn', type: 'uint256' },
           { internalType: 'uint24', name: 'fee', type: 'uint24' },
-          { internalType: 'uint160', name: 'sqrtPriceLimitX96', type: 'uint160' },
+          {
+            internalType: 'uint160',
+            name: 'sqrtPriceLimitX96',
+            type: 'uint160',
+          },
         ],
         internalType: 'struct IQuoterV2.QuoteExactInputSingleParams',
         name: 'params',
@@ -99,7 +102,11 @@ export const QUOTER_V2_ABI = [
     outputs: [
       { internalType: 'uint256', name: 'amountOut', type: 'uint256' },
       { internalType: 'uint160', name: 'sqrtPriceX96After', type: 'uint160' },
-      { internalType: 'uint32', name: 'initializedTicksCrossed', type: 'uint32' },
+      {
+        internalType: 'uint32',
+        name: 'initializedTicksCrossed',
+        type: 'uint32',
+      },
       { internalType: 'uint256', name: 'gasEstimate', type: 'uint256' },
     ],
     stateMutability: 'nonpayable',
@@ -113,7 +120,11 @@ export const QUOTER_V2_ABI = [
           { internalType: 'address', name: 'tokenOut', type: 'address' },
           { internalType: 'uint256', name: 'amount', type: 'uint256' },
           { internalType: 'uint24', name: 'fee', type: 'uint24' },
-          { internalType: 'uint160', name: 'sqrtPriceLimitX96', type: 'uint160' },
+          {
+            internalType: 'uint160',
+            name: 'sqrtPriceLimitX96',
+            type: 'uint160',
+          },
         ],
         internalType: 'struct IQuoterV2.QuoteExactOutputSingleParams',
         name: 'params',
@@ -124,7 +135,11 @@ export const QUOTER_V2_ABI = [
     outputs: [
       { internalType: 'uint256', name: 'amountIn', type: 'uint256' },
       { internalType: 'uint160', name: 'sqrtPriceX96After', type: 'uint160' },
-      { internalType: 'uint32', name: 'initializedTicksCrossed', type: 'uint32' },
+      {
+        internalType: 'uint32',
+        name: 'initializedTicksCrossed',
+        type: 'uint32',
+      },
       { internalType: 'uint256', name: 'gasEstimate', type: 'uint256' },
     ],
     stateMutability: 'nonpayable',

@@ -1,15 +1,22 @@
-import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SwapOrders } from './schema/swapOrder.schema';
-import { StoreSwapOrderDto, } from './dto/updateOrder.dto';
+import { StoreSwapOrderDto } from './dto/updateOrder.dto';
 import { SwapOrderStatus } from '../common/enums/order.enum';
 import { swapProvider } from '../common/enums/chain.enum';
-import { PaginationDto, PaginatedResult, PAGE_SIZE } from './dto/pagination.dto';
+import {
+  PaginationDto,
+  PaginatedResult,
+  PAGE_SIZE,
+} from './dto/pagination.dto';
 
-export type DbResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: string };
+export type DbResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 const PUBLIC_ORDER_SELECT = '-deviceId -deviceFcmToken';
 
@@ -20,7 +27,7 @@ export class SwapOrderRepository {
   constructor(
     @InjectModel(SwapOrders.name)
     private readonly model: Model<SwapOrders>,
-  ) { }
+  ) {}
 
   async create(dto: StoreSwapOrderDto): Promise<SwapOrders> {
     try {
@@ -52,39 +59,62 @@ export class SwapOrderRepository {
     }
   }
 
-  async findByTxHashForWallet(txHash: string, walletAddress: string): Promise<DbResult<SwapOrders | null>> {
+  async findByTxHashForWallet(
+    txHash: string,
+    walletAddress: string,
+    deviceId: string,
+  ): Promise<DbResult<SwapOrders | null>> {
     try {
       const data = await this.model
-        .findOne({ txHash, walletAddress })
+        .findOne({ txHash, walletAddress, deviceId })
         .select(PUBLIC_ORDER_SELECT)
         .exec();
       return { ok: true, data };
     } catch (err) {
-      this.logger.error('findByTxHashForWallet failed', { txHash, walletAddress, err });
+      this.logger.error('findByTxHashForWallet failed', {
+        txHash,
+        walletAddress,
+        deviceId,
+        err,
+      });
       return { ok: false, error: 'findByTxHashForWallet failed' };
     }
   }
 
-  async findByWallet(walletAddress: string): Promise<DbResult<SwapOrders[]>> {
+  async findByWallet(
+    deviceId: string,
+    walletAddress: string,
+  ): Promise<DbResult<SwapOrders[]>> {
     try {
       const data = await this.model
-        .find({ walletAddress })
+        .find({ deviceId, walletAddress })
         .sort({ _id: -1 })
         .select(PUBLIC_ORDER_SELECT)
         .exec();
       return { ok: true, data };
     } catch (err) {
-      this.logger.error('findByWallet failed', { walletAddress, err });
+      this.logger.error('findByWallet failed', {
+        deviceId,
+        walletAddress,
+        err,
+      });
       return { ok: false, error: 'findByWallet failed' };
     }
   }
 
-  async walletBelongsToDevice(deviceId: string, walletAddress: string): Promise<DbResult<boolean>> {
+  async walletBelongsToDevice(
+    deviceId: string,
+    walletAddress: string,
+  ): Promise<DbResult<boolean>> {
     try {
       const data = await this.model.exists({ deviceId, walletAddress }).exec();
       return { ok: true, data: Boolean(data) };
     } catch (err) {
-      this.logger.error('walletBelongsToDevice failed', { deviceId, walletAddress, err });
+      this.logger.error('walletBelongsToDevice failed', {
+        deviceId,
+        walletAddress,
+        err,
+      });
       return { ok: false, error: 'walletBelongsToDevice failed' };
     }
   }
@@ -110,12 +140,20 @@ export class SwapOrderRepository {
   ): Promise<DbResult<SwapOrders[]>> {
     try {
       const data = await this.model
-        .find({ provider, status: SwapOrderStatus.PENDING, createdAt: { $gte: since } })
+        .find({
+          provider,
+          status: SwapOrderStatus.PENDING,
+          createdAt: { $gte: since },
+        })
         .lean()
         .exec();
       return { ok: true, data };
     } catch (err) {
-      this.logger.error('findPendingByProviderSince failed', { provider, since, err });
+      this.logger.error('findPendingByProviderSince failed', {
+        provider,
+        since,
+        err,
+      });
       return { ok: false, error: 'findPendingByProviderSince failed' };
     }
   }
@@ -127,12 +165,21 @@ export class SwapOrderRepository {
   ): Promise<DbResult<SwapOrders[]>> {
     try {
       const data = await this.model
-        .find({ provider, status: { $in: statuses }, createdAt: { $gte: since } })
+        .find({
+          provider,
+          status: { $in: statuses },
+          createdAt: { $gte: since },
+        })
         .lean()
         .exec();
       return { ok: true, data };
     } catch (err) {
-      this.logger.error('findByProviderAndStatusesSince failed', { provider, statuses, since, err });
+      this.logger.error('findByProviderAndStatusesSince failed', {
+        provider,
+        statuses,
+        since,
+        err,
+      });
       return { ok: false, error: 'findByProviderAndStatusesSince failed' };
     }
   }
@@ -168,16 +215,20 @@ export class SwapOrderRepository {
     }
   }
 
-  async findByWalletWithPagination(walletAddress: string,pagination: PaginationDto,): Promise<DbResult<PaginatedResult<SwapOrders>>> {
+  async findByWalletWithPagination(
+    walletAddress: string,
+    pagination: PaginationDto,
+    deviceId: string,
+  ): Promise<DbResult<PaginatedResult<SwapOrders>>> {
     try {
-      const page  = pagination.page  ?? 1;
+      const page = pagination.page ?? 1;
       const limit = pagination.limit ?? PAGE_SIZE;
-      const skip  = (page - 1) * limit;
+      const skip = (page - 1) * limit;
 
       const [total, data] = await Promise.all([
-        this.model.countDocuments({ walletAddress }),
+        this.model.countDocuments({ walletAddress, deviceId }),
         this.model
-          .find({ walletAddress })
+          .find({ walletAddress, deviceId })
           .select(PUBLIC_ORDER_SELECT)
           .sort({ _id: -1 })
           .skip(skip)
@@ -200,7 +251,11 @@ export class SwapOrderRepository {
         },
       };
     } catch (err) {
-      this.logger.error('findByWallet failed', { walletAddress, err });
+      this.logger.error('findByWallet failed', {
+        walletAddress,
+        deviceId,
+        err,
+      });
       return { ok: false, error: 'findByWallet failed' };
     }
   }
@@ -209,7 +264,7 @@ export class SwapOrderRepository {
     txHash: string,
     status: SwapOrderStatus,
     blockNumber: number | null = null,
-  ): Promise<SwapOrders|null> {
+  ): Promise<SwapOrders | null> {
     try {
       const result = await this.model.findOneAndUpdate(
         { txHash },

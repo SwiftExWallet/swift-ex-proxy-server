@@ -1,4 +1,8 @@
-import { HttpException, HttpStatus, UnauthorizedException } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { DeviceAuthTokenMiddleware } from './device-auth-token.middleware';
 import { DeviceService } from '../../device/device.service';
@@ -77,9 +81,9 @@ describe('DeviceAuthTokenMiddleware', () => {
   it('rejects missing tokens before verification', async () => {
     const req = { headers: {} };
 
-    await expect(middleware.use(req, {} as any, jest.fn())).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(
+      middleware.use(req, {} as any, jest.fn()),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(jwtService.verifyAsync).not.toHaveBeenCalled();
     expect(deviceService.findOne).not.toHaveBeenCalled();
   });

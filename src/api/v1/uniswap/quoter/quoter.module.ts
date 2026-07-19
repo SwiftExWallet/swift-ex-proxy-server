@@ -9,11 +9,16 @@ import { RedisModule } from '../../redis/redis.module';
 import { NotificationModule } from '../../notification/notification.module';
 import { TokenMetadataService } from '../../common/services/tokenMetadata.service';
 
-
 @Module({
-  imports: [SwapOrdersModule,RedisModule,NotificationModule],
+  imports: [SwapOrdersModule, RedisModule, NotificationModule],
   controllers: [QuoterController],
-  providers: [QuoterService,ProviderService,InchService,SwapProviderResolver,TokenMetadataService],
+  providers: [
+    QuoterService,
+    ProviderService,
+    InchService,
+    SwapProviderResolver,
+    TokenMetadataService,
+  ],
   exports: [QuoterService],
 })
-export class QuoterModule { }
+export class QuoterModule {}

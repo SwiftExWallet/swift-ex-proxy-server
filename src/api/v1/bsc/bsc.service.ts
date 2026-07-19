@@ -116,10 +116,7 @@ export class BscService {
       deadline,
     ]);
 
-    const nonce: number = await getTransactionCount(
-      this.provider,
-      recipient as string,
-    );
+    const nonce: number = await getTransactionCount(this.provider, recipient);
     const { chainId } = await getNetwork(this.provider);
 
     const { maxFeePerGas, maxPriorityFeePerGas } = await getFeeData(

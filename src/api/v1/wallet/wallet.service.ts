@@ -38,8 +38,14 @@ export class WalletService {
       return null;
     }
 
+    const rawWalletId = wallet._id as unknown;
+    const walletId =
+      rawWalletId instanceof mongoose.Types.ObjectId
+        ? rawWalletId.toHexString()
+        : (rawWalletId as string);
+
     return {
-      walletId: String(wallet._id),
+      walletId,
       address: normalizedAddress,
     };
   }

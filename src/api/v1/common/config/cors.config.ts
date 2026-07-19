@@ -9,7 +9,10 @@ function parseCsv(value?: string): string[] {
     .filter(Boolean);
 }
 
-function isHttpsOrLocalDevelopmentOrigin(origin: string, nodeEnv?: string): boolean {
+function isHttpsOrLocalDevelopmentOrigin(
+  origin: string,
+  nodeEnv?: string,
+): boolean {
   try {
     const parsed = new URL(origin);
 
@@ -27,7 +30,9 @@ function isHttpsOrLocalDevelopmentOrigin(origin: string, nodeEnv?: string): bool
   }
 }
 
-export function getAllowedCorsOrigins(env: NodeJS.ProcessEnv = process.env): Set<string> {
+export function getAllowedCorsOrigins(
+  env: NodeJS.ProcessEnv = process.env,
+): Set<string> {
   const browserOrigins = parseCsv(env.CORS_ALLOWED_ORIGINS).filter((origin) =>
     isHttpsOrLocalDevelopmentOrigin(origin, env.NODE_ENV),
   );
@@ -36,7 +41,9 @@ export function getAllowedCorsOrigins(env: NodeJS.ProcessEnv = process.env): Set
   return new Set([...browserOrigins, ...mobileWebViewOrigins]);
 }
 
-export function createCorsOptions(env: NodeJS.ProcessEnv = process.env): CorsOptions {
+export function createCorsOptions(
+  env: NodeJS.ProcessEnv = process.env,
+): CorsOptions {
   const allowedOrigins = getAllowedCorsOrigins(env);
 
   return {
