@@ -54,7 +54,12 @@ export function createCorsOptions(env: NodeJS.ProcessEnv = process.env): CorsOpt
       callback(new Error('CORS origin not allowed'), false);
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-device-token'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-auth-device-token',
+      'x-wallet-address',
+    ],
     credentials: false,
     maxAge: 86400,
   };

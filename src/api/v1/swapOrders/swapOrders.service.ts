@@ -5,8 +5,6 @@ import {
   InternalServerErrorException,
   BadRequestException,
   ForbiddenException,
-  Inject,
-  forwardRef,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -16,9 +14,8 @@ import { BridgeTxStatusDto, MultiChainWalletAddressDto, OrderByWalletQueryDto, S
 import { DbResult, SwapOrderRepository } from './swapOrder.repository';
 import { AllbridgeCoreSdk, ChainSymbol, nodeRpcUrlsDefault } from '@allbridge/bridge-core-sdk';
 import { PaginatedResult, PaginationDto } from './dto/pagination.dto';
-import { InchWsPollerService } from '../swap/1inch/inchWsPoller.service';
-import { ChainId, swapProvider } from '../common/enums/chain.enum';
-import { InchFusionPlusWsPollerService } from '../swap/1inch/inchFusionPlusWsPoller.service';
+import { swapProvider } from '../common/enums/chain.enum';
+import { WalletService } from '../wallet/wallet.service';
 
 @Injectable()
 export class SwapOrderService {
@@ -28,14 +25,11 @@ export class SwapOrderService {
     @InjectModel(SwapOrders.name)
     private readonly swapOrders: Model<SwapOrders>,
     private readonly swapOrderRepository: SwapOrderRepository,
-     @Inject(forwardRef(() => InchWsPollerService))
-    private readonly inchWsPollerService: InchWsPollerService,
-    private readonly inchFusionPlusWsPollerService: InchFusionPlusWsPollerService,
+    private readonly walletService: WalletService,
   ) { 
   }
 
   async store(device:any, dto: StoreSwapOrderDto): Promise<SwapOrders> {
-    const {fromChain,txHash,quoteId,provider}=dto;
     try {
       let usdValue = dto.usdValue;
 
@@ -52,13 +46,6 @@ export class SwapOrderService {
         confirmedAt: null,
         deviceFcmToken: device.fcmToken,
       });
-      // if(provider===swapProvider.ONEINCH_FUSION){
-      //   await this.inchWsPollerService.subscribeOrder(txHash, ChainId[fromChain] as any, quoteId);
-      // }
-      if(provider===swapProvider.ONEINCH_FUSION_PLUS)
-      {
-        this.inchFusionPlusWsPollerService.subscribeOrder(txHash, quoteId);
-      }
       return await doc.save();
     } catch (err: any) {
       if (err.code === 11000) {
@@ -137,13 +124,15 @@ export class SwapOrderService {
   }
 
   private async assertWalletBelongsToDevice(deviceId: string, walletAddress: string): Promise<void> {
-    const walletBelongsToDevice = await this.swapOrderRepository.walletBelongsToDevice(deviceId, walletAddress);
+    let verifiedWallet: { walletId: string; address: string } | null;
 
-    if (!walletBelongsToDevice.ok) {
+    try {
+      verifiedWallet = await this.walletService.verifyWalletForDevice(deviceId, walletAddress);
+    } catch {
       throw new InternalServerErrorException('Could not verify wallet ownership.');
     }
 
-    if (!walletBelongsToDevice.data) {
+    if (!verifiedWallet) {
       throw new ForbiddenException('Wallet address is not associated with this device.');
     }
   }

@@ -75,3 +75,10 @@ export enum swapProvider {
   DYDX = 'DYDX',
   SRBTODYDX = 'SRBTODYDX',
 }
+
+export enum SupportedWalletChain {
+  eth = 'eth',
+  bnb = 'bnb',
+  xlm = 'xlm',
+  multi = 'multi',
+}

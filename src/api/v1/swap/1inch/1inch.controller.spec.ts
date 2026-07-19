@@ -3,7 +3,9 @@ import { SwapNetwork } from '../../common/enums/chain.enum';
 
 describe('inchController', () => {
   const inchService = {
+    getSwapQuote: jest.fn(),
     getFusionPlusSwapQuote: jest.fn(),
+    buildFusionOrder: jest.fn(),
     buildFusionPlusOrder: jest.fn(),
     submitFusionOrder: jest.fn(),
     submitFusionPlusOrder: jest.fn(),
@@ -24,8 +26,16 @@ describe('inchController', () => {
     );
   });
 
+  const reqWithWallet = {
+    device: { _id: 'device-id' },
+    wallet: { address: '0x3333333333333333333333333333333333333333' },
+  };
+
   it('passes the authenticated device when submitting a Fusion order', async () => {
-    const req = { device: { _id: 'device-id' } };
+    const req = {
+      device: { _id: 'device-id' },
+      wallet: { address: '0x3333333333333333333333333333333333333333' },
+    };
     const dto = {
       order: { salt: '1' },
       signature: '0xsignature',
@@ -42,7 +52,10 @@ describe('inchController', () => {
   });
 
   it('passes the authenticated device when submitting a Fusion+ order', async () => {
-    const req = { device: { _id: 'device-id' } };
+    const req = {
+      device: { _id: 'device-id' },
+      wallet: { address: '0x3333333333333333333333333333333333333333' },
+    };
     const dto = {
       order: { salt: '1' },
       signature: '0xsignature',
@@ -76,9 +89,14 @@ describe('inchController', () => {
     const result = { quoteId: 'quote-id' };
     inchService.getFusionPlusSwapQuote.mockResolvedValue(result);
 
-    await expect(controller.getFusionPlusQuote(dto)).resolves.toBe(result);
+    await expect(
+      controller.getFusionPlusQuote(reqWithWallet, dto),
+    ).resolves.toBe(result);
 
-    expect(inchService.getFusionPlusSwapQuote).toHaveBeenCalledWith(dto);
+    expect(inchService.getFusionPlusSwapQuote).toHaveBeenCalledWith({
+      ...dto,
+      walletAddress: reqWithWallet.wallet.address,
+    });
   });
 
   it('delegates native Fusion+ order creation and confirmation', async () => {
@@ -103,7 +121,7 @@ describe('inchController', () => {
     });
 
     await expect(
-      controller.buildFusionPlusNativeOrder(createDto),
+      controller.buildFusionPlusNativeOrder(reqWithWallet, createDto),
     ).resolves.toEqual({
       order: 'native-order',
     });
@@ -112,7 +130,10 @@ describe('inchController', () => {
     });
 
     expect(fustionNativeService.createSwapOrder).toHaveBeenCalledWith(
-      createDto,
+      {
+        ...createDto,
+        walletAddress: reqWithWallet.wallet.address,
+      },
     );
     expect(fustionNativeService.confirmSwapOrder).toHaveBeenCalledWith(
       confirmDto,

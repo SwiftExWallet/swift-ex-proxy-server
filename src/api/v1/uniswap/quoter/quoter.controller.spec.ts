@@ -32,6 +32,11 @@ describe('QuoterController', () => {
     amount: '1',
     recipient: '0x3333333333333333333333333333333333333333',
   } as SwapQuoteDto;
+  const req = {
+    wallet: {
+      address: '0x3333333333333333333333333333333333333333',
+    },
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -42,17 +47,23 @@ describe('QuoterController', () => {
     const result = { success: true, provider: 'UNISWAP', data: { fee: '3000' } };
     quoterService.getQuoteResponse.mockResolvedValue(result);
 
-    await expect(controller.getQuote(dto)).resolves.toBe(result);
+    await expect(controller.getQuote(req, dto)).resolves.toBe(result);
 
-    expect(quoterService.getQuoteResponse).toHaveBeenCalledWith(dto);
+    expect(quoterService.getQuoteResponse).toHaveBeenCalledWith({
+      ...dto,
+      recipient: req.wallet.address,
+    });
   });
 
   it('delegates swap build requests to the quoter service', async () => {
     const result = { success: true, data: [{ to: dto.recipient }] };
     quoterService.buildSwapResponse.mockResolvedValue(result);
 
-    await expect(controller.swapBuild(dto)).resolves.toBe(result);
+    await expect(controller.swapBuild(req, dto)).resolves.toBe(result);
 
-    expect(quoterService.buildSwapResponse).toHaveBeenCalledWith(dto);
+    expect(quoterService.buildSwapResponse).toHaveBeenCalledWith({
+      ...dto,
+      recipient: req.wallet.address,
+    });
   });
 });

@@ -7,7 +7,7 @@ import {
 import { EthSwapEnum } from '../../common/enums/ethSwap.enum';
 
 export class SwapPrepareDto {
-  @IsNotEmpty()
+  @IsOptional()
   @IsEthereumAddress()
   address: string;
 

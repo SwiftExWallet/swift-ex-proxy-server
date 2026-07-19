@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   FeeData,
   formatUnits,
@@ -53,8 +53,6 @@ import { UniSwapService } from './uniSwap/eth.uniswap.service';
 import { EthTestnetSwapService } from './eth.testnet.service';
 @Injectable()
 export class EthService {
-  private readonly logger = new Logger(EthService.name);
-
   provider(chain: ChainEnum = ChainEnum.ETH): JsonRpcProvider {
     return this.providerService.getProvider(chain);
   }
@@ -110,8 +108,6 @@ export class EthService {
         tokenOut,
       );
 
-      this.logger.log('==== poolAddress ===', { poolAddress });
-
       if (!poolAddress || poolAddress === ZeroAddress) {
         throw new Error('Pool not found for token pair');
       }
@@ -122,7 +118,6 @@ export class EthService {
         ChainEnum.ETH,
       );
       const fee: bigint = await getPoolContractFee(poolContract);
-      this.logger.log('==== fee ===', { fee });
 
       const formattedAmountIn: bigint = parseEther(amount.toString());
 
@@ -133,9 +128,6 @@ export class EthService {
         fee,
         formattedAmountIn,
       );
-      this.logger.log('==== quotedOutput ===', {
-        quotedOutput,
-      });
       const iface: Interface = this.swapRouterContract.interface;
 
       const data = iface.encodeFunctionData('exactInputSingle', [
@@ -150,9 +142,6 @@ export class EthService {
           sqrtPriceLimitX96: 0,
         },
       ]);
-      this.logger.log('==== Iface data ===', {
-        data,
-      });
       const unsignedTx: SwapTx = {
         to: process.env.SWAP_ROUTER_ADDRESS as string,
         data,
@@ -204,8 +193,6 @@ async broadcastTransaction(
       throw new BadRequestException('No signed transaction provided');
     }
     
-    this.logger.log(`Broadcasting ${txArray.length} transaction(s)`);
-    
     interface BroadcastResult {
       transactionHash: string;
       type: string;
@@ -217,13 +204,9 @@ async broadcastTransaction(
     for (let i = 0; i < txArray.length; i++) {
       const signedTransaction = txArray[i];
       
-      this.logger.log(`Broadcasting transaction ${i + 1}/${txArray.length}`);
-      
       const txResponse: TransactionResponse = 
         await this.provider(ChainEnum[broadcastChain]).broadcastTransaction(signedTransaction);
-      
-      this.logger.log(`Transaction ${i + 1} broadcasted: ${txResponse.hash}`);
-      
+
       results.push({
         transactionHash: txResponse.hash,
         type: i === 0 && txArray.length > 1 ? 'approve' : 'transfer',
@@ -232,7 +215,6 @@ async broadcastTransaction(
       
       // Wait 2 seconds before next broadcast (except for last transaction)
       if (i < txArray.length - 1) {
-        this.logger.log(`Waiting 2 seconds before broadcasting transaction ${i + 2}...`);
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
@@ -251,8 +233,6 @@ async broadcastTransaction(
     };
     
   } catch (error) {
-    this.logger.error('Broadcast error:', error);
-    
     const message =
       error.info?.error?.message ||
       error.shortMessage ||
@@ -281,14 +261,9 @@ async broadcastTransaction(
         value: valueInBigInt,
         from,
       });
-      this.logger.log('==== estimated ===', { estimated });
 
       return Number((estimated * 130n) / 100n);
     } catch (error: any) {
-      this.logger.warn(
-        'Gas estimation failed, using fallback:',
-        error?.message || error,
-      );
       if (data.includes('0xa9059cbb') || data.includes('0x095ea7b3'))
         return 100000;
       if (to === process.env.SWAP_ROUTER_ADDRESS) return 400000;
@@ -311,10 +286,8 @@ async broadcastTransaction(
       const txResponse: TransactionResponse =  await this.provider(ChainEnum[broadcastChain]).broadcastTransaction(signedTx);      
       txResponses.push({ txResponse });
     }
-    console.info(txResponses)
     return txResponses;
     } catch (error) {
-       this.logger.error('execute swap transactions error:', error);
       const message =
       error.info?.error?.message ||
       error.shortMessage ||
@@ -359,7 +332,6 @@ async broadcastTransaction(
 
     return tokenInfos;
     } catch (error) {
-      this.logger.error('Get token info error:', error);
       const message =
       error.info?.error?.message ||
       error.shortMessage ||

@@ -3,9 +3,11 @@ import { SwapOrderService } from './swapOrders.service';
 
 describe('SwapOrderService wallet ownership', () => {
   const repository = {
-    walletBelongsToDevice: jest.fn(),
     findByWalletWithPagination: jest.fn(),
     findByTxHashForWallet: jest.fn(),
+  };
+  const walletService = {
+    verifyWalletForDevice: jest.fn(),
   };
 
   let service: SwapOrderService;
@@ -15,8 +17,7 @@ describe('SwapOrderService wallet ownership', () => {
     service = new SwapOrderService(
       {} as any,
       repository as any,
-      {} as any,
-      {} as any,
+      walletService as any,
     );
   });
 
@@ -27,12 +28,15 @@ describe('SwapOrderService wallet ownership', () => {
       limit: 10,
     };
     const result = { ok: true, data: { data: [], total: 0 } };
-    repository.walletBelongsToDevice.mockResolvedValue({ ok: true, data: true });
+    walletService.verifyWalletForDevice.mockResolvedValue({
+      walletId: 'wallet-id',
+      address: query.address,
+    });
     repository.findByWalletWithPagination.mockResolvedValue(result);
 
     await expect(service.findOrdersForDeviceWallet('device-id', query)).resolves.toBe(result);
 
-    expect(repository.walletBelongsToDevice).toHaveBeenCalledWith(
+    expect(walletService.verifyWalletForDevice).toHaveBeenCalledWith(
       'device-id',
       query.address,
     );
@@ -48,7 +52,7 @@ describe('SwapOrderService wallet ownership', () => {
       page: 1,
       limit: 10,
     };
-    repository.walletBelongsToDevice.mockResolvedValue({ ok: true, data: false });
+    walletService.verifyWalletForDevice.mockResolvedValue(null);
 
     await expect(service.findOrdersForDeviceWallet('device-id', query)).rejects.toBeInstanceOf(ForbiddenException);
 
@@ -57,7 +61,10 @@ describe('SwapOrderService wallet ownership', () => {
 
   it('returns an order by hash after the wallet is associated with the device', async () => {
     const result = { ok: true, data: null };
-    repository.walletBelongsToDevice.mockResolvedValue({ ok: true, data: true });
+    walletService.verifyWalletForDevice.mockResolvedValue({
+      walletId: 'wallet-id',
+      address: '0x1234567890123456789012345678901234567890',
+    });
     repository.findByTxHashForWallet.mockResolvedValue(result);
 
     await expect(
@@ -80,7 +87,7 @@ describe('SwapOrderService wallet ownership', () => {
       page: 1,
       limit: 10,
     };
-    repository.walletBelongsToDevice.mockResolvedValue({ ok: false, error: 'lookup failed' });
+    walletService.verifyWalletForDevice.mockRejectedValue(new Error('lookup failed'));
 
     await expect(service.findOrdersForDeviceWallet('device-id', query)).rejects.toBeInstanceOf(InternalServerErrorException);
 

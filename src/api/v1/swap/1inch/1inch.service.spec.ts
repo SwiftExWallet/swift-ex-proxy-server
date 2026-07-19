@@ -67,7 +67,6 @@ describe('InchService Fusion+ poller', () => {
     service = new InchService(
       swapOrderService as any,
       redisService as any,
-      {} as any,
       firebaseNotificationService as any,
     );
     (service as any).sdk = sdk;
@@ -93,6 +92,7 @@ describe('InchService Fusion+ poller', () => {
     expect(redisService.setKey).toHaveBeenCalledWith(
       `fusion_secrets:${orderHash}`,
       expect.stringContaining('"submittedIdx":[0]'),
+      7200,
     );
     expect(swapOrderService.updateOrderByHash).not.toHaveBeenCalled();
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(true);

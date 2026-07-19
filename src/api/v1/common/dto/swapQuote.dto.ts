@@ -44,7 +44,7 @@ export class SwapQuoteDto {
   @IsNotEmpty()
   amount: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
   recipient: string;
 

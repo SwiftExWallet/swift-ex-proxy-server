@@ -10,7 +10,7 @@ import { IsTokenValid } from '../../../common/decorator/valid-token.decorator';
 import { ValidPayFeeType, ValidWalletType } from '../../../common/enums/all-bridge.enum';
 
 export class AllBridgeSwapADto {
-  @IsNotEmpty()
+  @IsOptional()
   @Matches(/^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$/, {
     message: 'Invalid public key format',
   })

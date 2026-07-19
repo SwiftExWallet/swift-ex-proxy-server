@@ -58,7 +58,6 @@ export class validations_token implements ValidatorConstraintInterface {
   }
 
   defaultMessage(args: ValidationArguments) {
-    console.info(args)
     const walletType = (args.object as any).sourceChain as string;
     const destinationChain = (args.object as any).destinationChain as string;
     if (ValidWalletType[walletType] == ValidWalletType[walletType]) {

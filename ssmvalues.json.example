@@ -44,6 +44,11 @@
     "type": "String",
     "description": "Require TLS for Redis connections"
   },
+  "FUSION_SECRET_STATE_TTL_SECONDS": {
+    "value": "7200",
+    "type": "String",
+    "description": "TTL in seconds for Redis fusion_secrets keys"
+  },
   "PROVIDER_RPC_ETH": {
     "value": "https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY",
     "type": "String",
@@ -78,5 +83,10 @@
     "value": "",
     "type": "String",
     "description": "Comma-separated exact mobile WebView origins, for example capacitor://localhost, when the app uses WebView HTTP APIs"
+  },
+  "CUSTOM_NOTIFICATION_ALLOWED_ORIGINS": {
+    "value": "https://app.example.com",
+    "type": "String",
+    "description": "Comma-separated browser origins allowed to call the custom notification endpoint"
   }
 }

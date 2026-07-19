@@ -3,6 +3,7 @@ import {
   IsNotEmpty,
   IsEnum,
   IsString,
+  IsOptional,
 } from 'class-validator';
 import { SwapNetwork } from '../../common/enums/chain.enum';
 
@@ -23,7 +24,7 @@ export class FusionPlusSwapQuoteDto {
   @IsEthereumAddress()
   dstTokenAddress: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsEthereumAddress()
   walletAddress: string;
 

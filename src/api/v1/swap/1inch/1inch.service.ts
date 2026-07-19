@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Injectable,
-  Logger,
   OnModuleInit,
 } from '@nestjs/common';
 import { SwapQuoteDto } from '../dto/swapQuote';
@@ -23,7 +22,6 @@ import {
 import { InchOrderStatusDto } from '../dto/1inchsOrderStatus';
 import { encryptFusionSecrets } from '../../common/utils/encryption.util';
 import { RedisService } from '../../redis/redis.service';
-import { InchWsPollerService } from '../1inch/inchWsPoller.service';
 import * as crypto from 'crypto';
 import { CancelFusionOrderDto } from '../dto/cancelFusionOrder';
 import { FirebaseNotificationService } from '../../notification/firebase/notification.service';
@@ -41,6 +39,7 @@ const SECRET_POLL_RETRY_STEP_MS = 5_000;
 const SECRET_POLL_MAX_RETRY_DELAY_MS = 5 * 60 * 1000;
 const SECRET_POLL_MAX_RESCHEDULES = 5;
 const PENDING_RECOVERY_WINDOW_MS = 2 * 60 * 60 * 1000;
+const DEFAULT_FUSION_SECRET_STATE_TTL_SECONDS = 2 * 60 * 60;
 
 const SECRET_SUBMIT_ORDER_STATUSES: ReadonlySet<SDKOrderStatus> = new Set([
   SDKOrderStatus.Pending,
@@ -55,7 +54,6 @@ const FINAL_ORDER_STATUSES: ReadonlySet<SDKOrderStatus> = new Set([
 
 @Injectable()
 export class InchService implements OnModuleInit {
-  private readonly logger = new Logger(InchService.name);
   private readonly sdk: SDK;
   private readonly activeSecretPollers = new Map<string, NodeJS.Timeout>();
   private readonly secretPollReschedules = new Map<string, number>();
@@ -64,7 +62,6 @@ export class InchService implements OnModuleInit {
   constructor(
     private readonly swapOrderService: SwapOrderService,
     private readonly redisService: RedisService,
-    private readonly inchWsPollerService: InchWsPollerService,
     private readonly firebaseNotificationService: FirebaseNotificationService,
   ) {
     this.sdk = new SDK({
@@ -92,7 +89,6 @@ export class InchService implements OnModuleInit {
         submittedIdx: new Set(parsed.submittedIdx || []),
       };
     } catch (err) {
-      this.logger.error(`Failed to parse secret state for key: ${key}`, err);
       return null;
     }
   }
@@ -107,6 +103,7 @@ export class InchService implements OnModuleInit {
     await this.redisService.setKey(
       `fusion_secrets:${key}`,
       JSON.stringify(dataToSave),
+      this.getSecretStateTtlSeconds(),
     );
   }
 
@@ -134,7 +131,6 @@ export class InchService implements OnModuleInit {
       const response = await axios.get(url, config);
       return response.data;
     } catch (error) {
-      this.logger.error(error);
       const message =
         error.response?.data?.description ||
         error.response?.data ||
@@ -172,7 +168,6 @@ export class InchService implements OnModuleInit {
       const response = await axios.get(url, config);
       return response.data;
     } catch (error) {
-      this.logger.error(error);
       const message =
         error.response?.data?.description ||
         error.response?.data ||
@@ -242,7 +237,6 @@ export class InchService implements OnModuleInit {
       return response.data;
     } catch (error) {
       await this.delSecretState(`quote:${fusionPlusOrder.quoteId}`);
-      this.logger.error(error);
       const message =
         error.response?.data?.description ||
         error.response?.data ||
@@ -267,7 +261,6 @@ export class InchService implements OnModuleInit {
       );
       return response.data;
     } catch (error: any) {
-      this.logger.error(error);
       const message =
         error.response?.data?.description ||
         error.response?.data ||
@@ -321,7 +314,6 @@ export class InchService implements OnModuleInit {
           encryptedFusionSecrets = encryptFusionSecrets(rawSecrets);
           await this.redisService.delKey(`fusion_secrets:${quoteId}`);
         } catch (err) {
-          this.logger.error('Failed to encrypt fusion secrets', err);
         }
       }
 
@@ -331,7 +323,6 @@ export class InchService implements OnModuleInit {
     } catch (error: any) {
       await this.delSecretState(tempKey);
       await this.delSecretState(orderHash);
-      this.logger.error(error);
       const message =
         error.response?.data?.description ||
         error.response?.data ||
@@ -362,8 +353,13 @@ export class InchService implements OnModuleInit {
       : PENDING_RECOVERY_WINDOW_MS;
   }
 
-  private getErrorMessage(err: unknown): unknown {
-    return err instanceof Error ? err.message : err;
+  private getSecretStateTtlSeconds(): number {
+    const configuredTtlSeconds = Number(
+      process.env.FUSION_SECRET_STATE_TTL_SECONDS,
+    );
+    return Number.isFinite(configuredTtlSeconds) && configuredTtlSeconds > 0
+      ? configuredTtlSeconds
+      : DEFAULT_FUSION_SECRET_STATE_TTL_SECONDS;
   }
 
   private async sendOrderStatusNotification(
@@ -389,11 +385,8 @@ export class InchService implements OnModuleInit {
           },
         },
       );
-    } catch (err) {
-      this.logger.error(
-        `[${orderStatusUpdate?.txHash}] Failed to send ${orderStatus} notification`,
-        this.getErrorMessage(err),
-      );
+    } catch {
+      return;
     }
   }
 
@@ -413,11 +406,6 @@ export class InchService implements OnModuleInit {
     orderHash: string,
     reason: unknown,
   ): Promise<boolean> {
-    this.logger.error(
-      `[${orderHash}] Secret reveal poller exhausted after ${SECRET_POLL_MAX_RESCHEDULES} reschedules`,
-      this.getErrorMessage(reason),
-    );
-
     try {
       await this.updateOrderStatusAndNotify(
         orderHash,
@@ -426,10 +414,6 @@ export class InchService implements OnModuleInit {
       this.stopSecretRevealPoller(orderHash);
       return true;
     } catch (err) {
-      this.logger.error(
-        `[${orderHash}] Failed to mark order as exhausted`,
-        this.getErrorMessage(err),
-      );
       return false;
     }
   }
@@ -483,16 +467,12 @@ export class InchService implements OnModuleInit {
 
             const secret = secretState.secrets[idx];
             if (!secret) {
-              this.logger.warn(`[${orderHash}] No secret at index ${idx}`);
               continue;
             }
 
             await this.sdk.submitSecret(orderHash, secret);
             secretState.submittedIdx.add(idx);
             stateUpdated = true;
-            this.logger.log(
-              `[${orderHash}] Secret revealed for fill idx ${idx}`,
-            );
           }
 
           if (stateUpdated) {
@@ -505,14 +485,9 @@ export class InchService implements OnModuleInit {
         }
 
         if (status === SDKOrderStatus.Refunding) {
-          const orderStatusUpdate = await this.updateOrderStatusAndNotify(
+          await this.updateOrderStatusAndNotify(
             orderHash,
             SwapOrderStatus.REFUNDING,
-          );
-          this.logger.log(
-            `[${orderHash}] Order status updated: ${status}. Continuing polling.`,
-            'DB status:',
-            orderStatusUpdate,
           );
 
           retryDelayMs = SECRET_POLL_INTERVAL_MS;
@@ -522,33 +497,21 @@ export class InchService implements OnModuleInit {
 
         if (FINAL_ORDER_STATUSES.has(status)) {
           const resolvedStatus = this.mapFusionPlusStatus(status);
-          const orderStatusUpdate = await this.updateOrderStatusAndNotify(
+          await this.updateOrderStatusAndNotify(
             orderHash,
             resolvedStatus,
-          );
-          this.logger.log(
-            `[${orderHash}] Order terminal reached: ${status}. Cleaning Redis state.`,
-            'DB status:',
-            orderStatusUpdate,
           );
           await this.delSecretState(orderHash);
           this.stopSecretRevealPoller(orderHash);
           return;
         }
 
-        this.logger.warn(
-          `[${orderHash}] Unhandled Fusion+ status "${status}". Continuing polling.`,
-        );
         retryDelayMs = SECRET_POLL_INTERVAL_MS;
         await rescheduleOrExhaust(retryDelayMs, `unhandled order status ${status}`);
       } catch (err) {
         retryDelayMs = Math.min(
           retryDelayMs + SECRET_POLL_RETRY_STEP_MS,
           SECRET_POLL_MAX_RETRY_DELAY_MS,
-        );
-        this.logger.error(
-          `[${orderHash}] Poller error (will retry in ${retryDelayMs}ms if reschedule budget remains):`,
-          this.getErrorMessage(err),
         );
         await rescheduleOrExhaust(retryDelayMs, err);
       }
@@ -571,9 +534,6 @@ export class InchService implements OnModuleInit {
         since,
       );
       if (!result.ok) {
-        this.logger.error(
-          `fusion+ startup recovery fetch failed: ${result.error}`,
-        );
         return;
       }
 
@@ -582,10 +542,6 @@ export class InchService implements OnModuleInit {
         return;
       }
 
-      this.logger.log(
-        `fusion+ startup recovery: found ${pending.length} active order(s) created since ${since.toISOString()}`,
-      );
-
       for (const order of pending) {
         if (this.activeSecretPollers.has(order.txHash)) {
           continue;
@@ -593,13 +549,9 @@ export class InchService implements OnModuleInit {
 
         const secretState = await this.getSecretState(order.txHash);
         if (!secretState) {
-          this.logger.warn(
-            `[${order.txHash}] active fusion+ order has no secret state in redis, skipping recovery`,
-          );
           continue;
         }
 
-        this.logger.log(`[${order.txHash}] resuming secret reveal polling`);
         this.startSecretRevealPoller(order.txHash);
       }
     } finally {
@@ -685,7 +637,6 @@ export class InchService implements OnModuleInit {
       }
       return response.data;
     } catch (error) {
-      this.logger.error(error);
       const message =
         error.response?.data?.description ||
         error.response?.data ||
@@ -722,7 +673,6 @@ export class InchService implements OnModuleInit {
       }
       return response.data;
     } catch (error) {
-      this.logger.error(error);
       const message =
         error.response?.data?.description ||
         error.response?.data ||

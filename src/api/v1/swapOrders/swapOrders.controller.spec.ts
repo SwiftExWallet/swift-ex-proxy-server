@@ -2,6 +2,7 @@ import { SwapOrdersController } from './swapOrders.controller';
 
 describe('SwapOrdersController', () => {
   const swapOrderService = {
+    store: jest.fn(),
     findOrdersForDeviceWallet: jest.fn(),
     findOrderByHashForDeviceWallet: jest.fn(),
   };
@@ -14,7 +15,10 @@ describe('SwapOrdersController', () => {
   });
 
   it('gets orders for the requested wallet across devices', async () => {
-    const req = { device: { _id: 'device-id' } };
+    const req = {
+      device: { _id: 'device-id' },
+      wallet: { address: '0x1234567890123456789012345678901234567890' },
+    };
     const query = {
       address: '0x1234567890123456789012345678901234567890',
       page: 1,
@@ -27,12 +31,18 @@ describe('SwapOrdersController', () => {
 
     expect(swapOrderService.findOrdersForDeviceWallet).toHaveBeenCalledWith(
       'device-id',
-      query,
+      {
+        ...query,
+        address: req.wallet.address,
+      },
     );
   });
 
   it('gets an order only when the tx hash matches the requested wallet', async () => {
-    const req = { device: { _id: 'device-id' } };
+    const req = {
+      device: { _id: 'device-id' },
+      wallet: { address: '0x1234567890123456789012345678901234567890' },
+    };
     const result = { ok: true, data: null };
     swapOrderService.findOrderByHashForDeviceWallet.mockResolvedValue(result);
 
@@ -45,7 +55,7 @@ describe('SwapOrdersController', () => {
     expect(swapOrderService.findOrderByHashForDeviceWallet).toHaveBeenCalledWith(
       'device-id',
       '0xorderhash',
-      '0x1234567890123456789012345678901234567890',
+      req.wallet.address,
     );
   });
 });

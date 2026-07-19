@@ -3,6 +3,7 @@ import {
   IsNotEmpty,
   IsEnum,
   IsString,
+  IsOptional,
 } from 'class-validator';
 import { SwapNetwork } from '../../common/enums/chain.enum';
 
@@ -19,7 +20,7 @@ export class SwapQuoteDto {
   @IsEthereumAddress()
   tokenOut!: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsEthereumAddress()
   walletAddress!: string;
 

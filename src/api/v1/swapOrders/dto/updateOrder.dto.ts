@@ -25,7 +25,7 @@ export class StoreSwapOrderDto {
   provider: swapProvider;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   walletAddress: string;
 
   @IsString()
@@ -72,6 +72,7 @@ export class StoreSwapOrderDto {
 }
 
 export class MultiChainWalletAddressDto{
+  @IsOptional()
   @Matches(
       /^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$|^[A-Z0-9]{1,12}-G[A-Z0-9]{55}$/,
       { message: 'Invalid wallet address format' }
@@ -80,6 +81,7 @@ export class MultiChainWalletAddressDto{
 }
 
 export class OrderByWalletQueryDto extends PaginationDto {
+  @IsOptional()
   @Matches(
     /^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$|^[A-Z0-9]{1,12}-G[A-Z0-9]{55}$/,
     { message: 'Invalid wallet address format' },

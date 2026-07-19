@@ -5,7 +5,6 @@ import {
   getAddress,
   Interface,
   parseEther,
-  TransactionReceipt,
   TransactionRequest,
   TransactionResponse,
 } from 'ethers';
@@ -13,7 +12,6 @@ import { JsonRpcProvider, Contract } from 'ethers';
 
 import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
 import {
-  broadcastTransactionToNetwork,
   getErc20ContractTokenBalance,
   getEstimateGas,
   getFeeData,
@@ -24,7 +22,6 @@ import {
 import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
 import { TokenInfo } from '../common/interface/tokenInfo.interface';
 import { BSC_IMPORT_TOKEN_ABI, BSC_ROUTER_ABI } from '../common/abi/bsc';
-import { PrepareSwapTransactionDto } from './dto/prepareSwapTransaction.dto';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import { ProviderService } from '../provider/provider.service';
 import { ChainEnum } from '../common/enums/chain.enum';
@@ -44,8 +41,8 @@ export class BscService {
   routerContract: Contract;
   constructor(
     private readonly providerService: ProviderService,
-    private readonly pancakeSwapService:PancakeSwapService,
-    ) {
+    private readonly pancakeSwapService: PancakeSwapService,
+  ) {
     const routerAddress = process.env.BSC_ROUTER_ADDRESS;
 
     if (!routerAddress) {
@@ -63,19 +60,17 @@ export class BscService {
 
   async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<string> {
     try {
-      if(process.env.ENVIRONMENT==="prod"){
+      if (process.env.ENVIRONMENT === 'prod') {
         return await this.pancakeSwapService.getSwapQuote(swapQuoteDto);
       }
       const { tokenIn, tokenOut, amount } = swapQuoteDto;
       const path: [string, string] = [tokenIn.address, tokenOut.address];
 
       const amountIn: bigint = parseEther(amount);
-      this.logger.log('====== amountIn =====', { amountIn });
       const amountsOut: bigint[] = (await this.routerContract.getAmountsOut(
         amountIn,
         path,
       )) as bigint[];
-      this.logger.log('====== amountsOut =====', { amountsOut });
 
       return formatUnits(amountsOut[1], tokenIn.decimals);
     } catch (error: any) {
@@ -83,11 +78,14 @@ export class BscService {
     }
   }
 
-  async prepareSwapTransaction(prepareSwapTransactionDto: SwapQuoteDto): Promise<any> {
-
-    if(process.env.ENVIRONMENT==="prod"){
-        return await this.pancakeSwapService.createUnsignedSwapTransaction(prepareSwapTransactionDto);
-     }
+  async prepareSwapTransaction(
+    prepareSwapTransactionDto: SwapQuoteDto,
+  ): Promise<any> {
+    if (process.env.ENVIRONMENT === 'prod') {
+      return await this.pancakeSwapService.createUnsignedSwapTransaction(
+        prepareSwapTransactionDto,
+      );
+    }
 
     const { recipient, tokenIn, tokenOut, amount } = prepareSwapTransactionDto;
     const path: [string, string] = [
@@ -96,13 +94,11 @@ export class BscService {
     ];
 
     const amountIn: bigint = parseEther(amount);
-    this.logger.log('====== amountIn =====', { amountIn });
 
     const amountsOut: bigint[] = (await this.routerContract.getAmountsOut(
       amountIn,
       path,
     )) as bigint[];
-    this.logger.log('====== amountsOut =====', { amountsOut });
 
     const slippagePercent = Number(process.env.BSC_SLIPPAGE ?? '5'); // fallback to 5 if undefined
     const minOut: bigint =
@@ -119,19 +115,16 @@ export class BscService {
       recipient,
       deadline,
     ]);
-    this.logger.log('====== IfaceData =====', { data });
 
-    const nonce: number = await getTransactionCount(this.provider, recipient as string);
+    const nonce: number = await getTransactionCount(
+      this.provider,
+      recipient as string,
+    );
     const { chainId } = await getNetwork(this.provider);
 
     const { maxFeePerGas, maxPriorityFeePerGas } = await getFeeData(
       this.provider,
     );
-    this.logger.log('====== nonce, maxFeePerGas, maxPriorityFeePerGas =====', {
-      nonce,
-      maxFeePerGas,
-      maxPriorityFeePerGas,
-    });
 
     const tx: TransactionRequest = {
       to: getAddress(process.env.BSC_ROUTER_ADDRESS!),
@@ -202,7 +195,6 @@ export class BscService {
         totalTransactions: txArray.length,
         results,
       };
-
     } catch (error) {
       this.logger.error('Broadcast error:', error);
 
