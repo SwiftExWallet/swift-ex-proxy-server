@@ -207,7 +207,7 @@ export class InchService implements OnModuleInit {
 
   async buildFusionPlusOrder(fusionPlusOrder: FusionPlusOrderDto) {
     try {
-      const { quoteId, walletAddress, secretCount } = fusionPlusOrder;
+      const { quoteId, walletAddress, secretCount, requiresApprovalTransaction } = fusionPlusOrder;
       const { secrets, secretHashes, hashLock } =
         this.generateSecrets(secretCount);
 
@@ -231,6 +231,9 @@ export class InchService implements OnModuleInit {
         walletAddress,
         hashLock,
         source: 'APP',
+        ...(requiresApprovalTransaction && {
+          additionalAuctionStartDelay: 20,
+        }),
       };
 
       const response = await axios.post(
