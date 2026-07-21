@@ -3,6 +3,7 @@ import {
   IsInt,
   IsNotEmpty,
   IsOptional,
+  IsBoolean,
 } from 'class-validator';
 
 export class FusionPlusOrderDto {
@@ -16,4 +17,8 @@ export class FusionPlusOrderDto {
   @IsNotEmpty()
   @IsInt()
   secretCount: number;
+
+  @IsOptional()
+  @IsBoolean()
+  requiresApprovalTransaction: boolean;
 }
