@@ -1,4 +1,4 @@
-import { IsEthereumAddress, IsInt, IsNotEmpty } from 'class-validator';
+import { IsBoolean, IsEthereumAddress, IsInt, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class FusionPlusOrderDto {
   @IsNotEmpty()
@@ -11,4 +11,8 @@ export class FusionPlusOrderDto {
   @IsNotEmpty()
   @IsInt()
   secretCount: number;
+  
+  @IsOptional()
+  @IsBoolean()
+  requiresApprovalTransaction: boolean;
 }
