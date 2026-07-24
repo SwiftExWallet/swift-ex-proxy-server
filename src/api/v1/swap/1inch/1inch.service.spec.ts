@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import { OrderStatus as SDKOrderStatus } from '@1inch/cross-chain-sdk';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { swapProvider } from '../../common/enums/chain.enum';
@@ -36,6 +36,7 @@ describe('InchService Fusion+ poller', () => {
   };
   let swapOrderService: {
     updateOrderByHash: jest.Mock;
+    findOrderByHashForDeviceWallet: jest.Mock;
     findByProviderAndStatusesSince: jest.Mock;
   };
   let redisService: {
@@ -70,6 +71,10 @@ describe('InchService Fusion+ poller', () => {
     };
     swapOrderService = {
       updateOrderByHash: jest.fn().mockResolvedValue(updatedOrder),
+      findOrderByHashForDeviceWallet: jest.fn().mockResolvedValue({
+        ok: true,
+        data: updatedOrder,
+      }),
       findByProviderAndStatusesSince: jest.fn(),
     };
     redisService = {
@@ -246,6 +251,56 @@ describe('InchService Fusion+ poller', () => {
     expect(startPoller).toHaveBeenCalledWith(refundingOrder.txHash);
   });
 
+  it('verifies device and wallet ownership before refreshing order status', async () => {
+    const providerGet = jest
+      .spyOn(service as any, 'providerGet')
+      .mockResolvedValue({ status: 'pending' });
+
+    await expect(
+      service.orderStatus(
+        {
+          orderHash,
+          chain: 'ETH',
+          swapProvider: swapProvider.ONEINCH_FUSION,
+        } as any,
+        'device-id',
+        updatedOrder.walletAddress,
+      ),
+    ).resolves.toEqual({ status: 'pending' });
+
+    expect(
+      swapOrderService.findOrderByHashForDeviceWallet,
+    ).toHaveBeenCalledWith('device-id', orderHash, updatedOrder.walletAddress);
+    expect(providerGet).toHaveBeenCalledTimes(1);
+    expect(swapOrderService.updateOrderByHash).toHaveBeenCalledWith({
+      txHash: orderHash,
+      orderStatus: SwapOrderStatus.PENDING,
+    });
+  });
+
+  it('rejects order status refresh before provider calls when the order is not owned', async () => {
+    const providerGet = jest.spyOn(service as any, 'providerGet');
+    swapOrderService.findOrderByHashForDeviceWallet.mockResolvedValueOnce({
+      ok: true,
+      data: null,
+    });
+
+    await expect(
+      service.orderStatus(
+        {
+          orderHash,
+          chain: 'ETH',
+          swapProvider: swapProvider.ONEINCH_FUSION,
+        } as any,
+        'device-id',
+        updatedOrder.walletAddress,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(providerGet).not.toHaveBeenCalled();
+    expect(swapOrderService.updateOrderByHash).not.toHaveBeenCalled();
+  });
+
   it('returns stable provider errors for quote failures', async () => {
     jest.spyOn(service as any, 'providerGet').mockRejectedValue({
       response: {
@@ -273,6 +328,26 @@ describe('InchService Fusion+ poller', () => {
       },
     });
     expect(JSON.stringify(error.response)).not.toContain('private 1inch route');
+  });
+
+  it('rejects Fusion submit when order maker does not match the verified wallet', async () => {
+    const providerPost = jest.spyOn(service as any, 'providerPost');
+
+    await expect(
+      service.submitFusionOrder(
+        { _id: 'device-id' },
+        {
+          order: { maker: '0x9999999999999999999999999999999999999999' },
+          signature: '0xsignature',
+          extension: '0xextension',
+          quoteId: 'quote-id',
+          chain: 'ETH',
+        } as any,
+        '0x1234567890123456789012345678901234567890',
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(providerPost).not.toHaveBeenCalled();
   });
 
   it('rejects redirected 1inch base URLs before provider calls', async () => {

@@ -12,7 +12,11 @@ describe('ValidateAddress', () => {
   });
 
   it('splits comma-separated string', () => {
-    expect(ValidateAddress('0xAAA,0xBBB,0xCCC')).toEqual(['0xAAA', '0xBBB', '0xCCC']);
+    expect(ValidateAddress('0xAAA,0xBBB,0xCCC')).toEqual([
+      '0xAAA',
+      '0xBBB',
+      '0xCCC',
+    ]);
   });
 
   it('splits space-separated string', () => {
@@ -20,7 +24,11 @@ describe('ValidateAddress', () => {
   });
 
   it('handles mixed comma and space separators', () => {
-    expect(ValidateAddress('0xAAA, 0xBBB,0xCCC')).toEqual(['0xAAA', '0xBBB', '0xCCC']);
+    expect(ValidateAddress('0xAAA, 0xBBB,0xCCC')).toEqual([
+      '0xAAA',
+      '0xBBB',
+      '0xCCC',
+    ]);
   });
 
   it('returns empty array for empty string', () => {

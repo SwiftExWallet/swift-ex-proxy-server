@@ -3,6 +3,7 @@ import {
   Logger,
   BadRequestException,
   NotFoundException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
@@ -35,7 +36,7 @@ import {
   encryptFusionSecretState,
   isFusionSecretStateEnvelope,
 } from '../../common/utils/encryption.util';
-import { withProviderRetry } from '../../common/utils/retry.util';
+import { withProviderControls } from '../../common/utils/retry.util';
 import {
   createProviderBadRequestException,
   throwIfHttpException,
@@ -45,6 +46,10 @@ import {
   getProviderRpcAllowedHosts,
   validateProviderUrl,
 } from '../../common/config/provider-url.config';
+import {
+  assertVerifiedWalletAddress,
+  withExplicitVerifiedWalletAddress,
+} from '../../common/helpers/requestWallet';
 
 interface RedisOrderSecretState {
   secrets: string[];
@@ -62,6 +67,7 @@ interface ParsedRedisOrderSecretState {
 const DEFAULT_FUSION_SECRET_STATE_TTL_SECONDS = 2 * 60 * 60;
 const FUSION_NATIVE_SECRET_POLL_INTERVAL_MS = 5_000;
 const DEFAULT_FUSION_NATIVE_SECRET_POLL_MAX_SCHEDULES = 1_440;
+const DEFAULT_FUSION_NATIVE_SECRET_POLL_MAX_PROVIDER_FAILURES = 5;
 
 @Injectable()
 export class FustionNativeService {
@@ -151,6 +157,16 @@ export class FustionNativeService {
     return Number.isFinite(configuredMaxSchedules) && configuredMaxSchedules > 0
       ? Math.floor(configuredMaxSchedules)
       : DEFAULT_FUSION_NATIVE_SECRET_POLL_MAX_SCHEDULES;
+  }
+
+  private getSecretSubmissionMaxProviderFailures(): number {
+    const configuredMaxProviderFailures = Number(
+      process.env.FUSION_NATIVE_SECRET_POLL_MAX_PROVIDER_FAILURES,
+    );
+    return Number.isFinite(configuredMaxProviderFailures) &&
+      configuredMaxProviderFailures > 0
+      ? Math.floor(configuredMaxProviderFailures)
+      : DEFAULT_FUSION_NATIVE_SECRET_POLL_MAX_PROVIDER_FAILURES;
   }
 
   private parseSecretState(rawStr: string): ParsedRedisOrderSecretState | null {
@@ -262,7 +278,13 @@ export class FustionNativeService {
     return provider;
   }
 
-  async createSwapOrder(dto: FusionPlusSwapQuoteDto) {
+  async createSwapOrder(
+    dto: FusionPlusSwapQuoteDto,
+    verifiedWalletAddress?: string,
+  ) {
+    const verifiedDto = verifiedWalletAddress
+      ? withExplicitVerifiedWalletAddress(dto, verifiedWalletAddress)
+      : dto;
     try {
       const {
         amount,
@@ -271,7 +293,7 @@ export class FustionNativeService {
         srcTokenAddress,
         dstTokenAddress,
         walletAddress,
-      } = dto;
+      } = verifiedDto;
       const srcChainId = ChainId[srcChain];
       const dstChainId = ChainId[dstChain];
       const isSingleChainSwap = srcChainId === dstChainId;
@@ -288,20 +310,24 @@ export class FustionNativeService {
           amount: amount,
           walletAddress: walletAddress,
         };
-        const quote = await withProviderRetry(() =>
-          fusionSdk.getQuote(quoteParams),
+        const quote = await withProviderControls(
+          '1inch:fusion-native:quote',
+          () => fusionSdk.getQuote(quoteParams),
         );
-        const preparedOrder = await withProviderRetry(() =>
-          fusionSdk.createOrder(quoteParams),
+        const preparedOrder = await withProviderControls(
+          '1inch:fusion-native:create-order',
+          () => fusionSdk.createOrder(quoteParams),
         );
         const makerAddress = new FusionAddress(walletAddress);
         const nativeMakerAddress = new Address(walletAddress);
-        const orderInfo = await withProviderRetry(() =>
-          fusionSdk.submitNativeOrder(
-            preparedOrder.order,
-            makerAddress,
-            preparedOrder.quoteId,
-          ),
+        const orderInfo = await withProviderControls(
+          '1inch:fusion-native:submit-order',
+          () =>
+            fusionSdk.submitNativeOrder(
+              preparedOrder.order,
+              makerAddress,
+              preparedOrder.quoteId,
+            ),
         );
         this.logger.debug(
           `Single-Chain Order Submitted! Hash: ${orderInfo.orderHash}`,
@@ -333,16 +359,18 @@ export class FustionNativeService {
       this.logger.log(
         `Executing Cross-Chain Fusion+ flow from ${srcChainId} to ${dstChainId}`,
       );
-      const quote = await withProviderRetry(() =>
-        this.crossChainSdk.getQuote({
-          amount: amount,
-          srcChainId: srcChainId,
-          dstChainId: dstChainId,
-          enableEstimate: true,
-          srcTokenAddress,
-          dstTokenAddress,
-          walletAddress: walletAddress,
-        }),
+      const quote = await withProviderControls(
+        '1inch:fusion-plus-native:quote',
+        () =>
+          this.crossChainSdk.getQuote({
+            amount: amount,
+            srcChainId: srcChainId,
+            dstChainId: dstChainId,
+            enableEstimate: true,
+            srcTokenAddress,
+            dstTokenAddress,
+            walletAddress: walletAddress,
+          }),
       );
 
       const preset = quote.recommendedPreset;
@@ -373,14 +401,16 @@ export class FustionNativeService {
 
       assert(order instanceof EvmCrossChainOrder);
 
-      const orderInfo = await withProviderRetry(() =>
-        this.crossChainSdk.submitNativeOrder(
-          quote.srcChainId,
-          order,
-          EvmAddress.fromString(walletAddress),
-          quoteId,
-          secretHashes,
-        ),
+      const orderInfo = await withProviderControls(
+        '1inch:fusion-plus-native:submit-order',
+        () =>
+          this.crossChainSdk.submitNativeOrder(
+            quote.srcChainId,
+            order,
+            EvmAddress.fromString(walletAddress),
+            quoteId,
+            secretHashes,
+          ),
       );
 
       await this.setSecretState(hash, {
@@ -410,9 +440,19 @@ export class FustionNativeService {
     }
   }
 
-  async confirmSwapOrder(dto: ConfirmSwapOrderDto) {
+  async confirmSwapOrder(
+    dto: ConfirmSwapOrderDto,
+    deviceId: string,
+    walletAddress: string | undefined,
+  ) {
     try {
       const { orderHash, txHash, srcChain } = dto;
+
+      await this.assertOrderBelongsToDeviceWallet(
+        deviceId,
+        assertVerifiedWalletAddress(walletAddress),
+        orderHash,
+      );
 
       const secretState = await this.getSecretState(orderHash);
       if (!secretState) {
@@ -452,8 +492,36 @@ export class FustionNativeService {
     }
   }
 
-  private async exhaustSecretSubmissionLoop(hash: string): Promise<void> {
+  private async assertOrderBelongsToDeviceWallet(
+    deviceId: string,
+    walletAddress: string,
+    orderHash: string,
+  ): Promise<void> {
+    const result = await this.swapOrderService.findOrderByHashForDeviceWallet(
+      deviceId,
+      orderHash,
+      walletAddress,
+    );
+
+    if (!result.ok) {
+      throw new InternalServerErrorException(
+        'Could not verify order ownership.',
+      );
+    }
+
+    if (!result.data) {
+      throw new NotFoundException('Order not found.');
+    }
+  }
+
+  private async exhaustSecretSubmissionLoop(
+    hash: string,
+    reason = 'schedule budget exhausted',
+  ): Promise<void> {
     try {
+      this.logger.warn(
+        `[Loop Exhausted] Native Fusion monitoring exhausted for ${hash}: ${reason}`,
+      );
       await this.swapOrderService.updateOrderByHash({
         txHash: hash,
         orderStatus: SwapOrderStatus.EXHAUSTED,
@@ -483,7 +551,9 @@ export class FustionNativeService {
   private async startSecretSubmissionLoop(hash: string, chainId: number) {
     this.logger.log(`[Loop] Monitoring swap target states for order: ${hash}`);
     const maxSchedules = this.getSecretSubmissionMaxSchedules();
+    const maxProviderFailures = this.getSecretSubmissionMaxProviderFailures();
     let scheduleCount = 0;
+    let consecutiveProviderFailures = 0;
 
     try {
       while (scheduleCount < maxSchedules) {
@@ -500,12 +570,14 @@ export class FustionNativeService {
           // SINGLE-CHAIN MONITORING
           if (!secretState.isCrossChain) {
             const fusionSdk = this.getFusionSdk(chainId);
-            const orderStatus = await withProviderRetry(() =>
-              fusionSdk.getOrderStatus(hash),
+            const orderStatus = await withProviderControls(
+              '1inch:fusion-native:order-status',
+              () => fusionSdk.getOrderStatus(hash),
             );
             this.logger.log(
               `[Loop-SingleChain] Order ${hash} current status: ${orderStatus.status}`,
             );
+            consecutiveProviderFailures = 0;
 
             if (
               orderStatus.status === SingleChainOrderStatus.Filled ||
@@ -555,8 +627,9 @@ export class FustionNativeService {
           }
 
           // CROSS-CHAIN MONITORING
-          const secretsToShare = await withProviderRetry(() =>
-            this.crossChainSdk.getReadyToAcceptSecretFills(hash),
+          const secretsToShare = await withProviderControls(
+            '1inch:fusion-plus-native:ready-fills',
+            () => this.crossChainSdk.getReadyToAcceptSecretFills(hash),
           );
           let stateUpdated = false;
 
@@ -572,8 +645,9 @@ export class FustionNativeService {
                 continue;
               }
 
-              await withProviderRetry(() =>
-                this.crossChainSdk.submitSecret(hash, secret),
+              await withProviderControls(
+                '1inch:fusion-plus-native:submit-secret',
+                () => this.crossChainSdk.submitSecret(hash, secret),
               );
               secretState.submittedIdx.add(idx);
               stateUpdated = true;
@@ -587,9 +661,11 @@ export class FustionNativeService {
             await this.setSecretState(hash, secretState);
           }
 
-          const { status } = await withProviderRetry(() =>
-            this.crossChainSdk.getOrderStatus(hash),
+          const { status } = await withProviderControls(
+            '1inch:fusion-plus-native:order-status',
+            () => this.crossChainSdk.getOrderStatus(hash),
           );
+          consecutiveProviderFailures = 0;
           this.logger.log(
             `[Loop-CrossChain] Order ${hash} current status: ${status}`,
           );
@@ -632,10 +708,19 @@ export class FustionNativeService {
             maxSchedules,
           );
         } catch (error) {
+          consecutiveProviderFailures += 1;
           this.logger.error(
-            `[Loop Retry] Provider/action failure for ${hash}; schedule ${scheduleCount}/${maxSchedules}`,
+            `[Loop Retry] Provider/action failure for ${hash}; schedule ${scheduleCount}/${maxSchedules}; provider failures ${consecutiveProviderFailures}/${maxProviderFailures}`,
             error,
           );
+          if (consecutiveProviderFailures >= maxProviderFailures) {
+            await this.exhaustSecretSubmissionLoop(
+              hash,
+              `provider failure budget exhausted after ${consecutiveProviderFailures} consecutive failures`,
+            );
+            return;
+          }
+
           await this.waitBeforeNextSecretSubmissionPoll(
             scheduleCount,
             maxSchedules,

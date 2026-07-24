@@ -6,7 +6,7 @@ import {
   ETH_POOL_ABI,
   ETH_QUOTER_ABI,
 } from '../common/abi/eth';
-import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
+import { ResolvedSwapQuoteDto } from '../common/dto/swapQuote.dto';
 import { ProviderService } from '../provider/provider.service';
 import { ChainEnum } from '../common/enums/chain.enum';
 import {
@@ -26,6 +26,7 @@ import {
   getTransactionCount,
 } from '../common/helpers/blockchainUtilityMethods';
 import { EthSwapEnum } from '../common/enums/ethSwap.enum';
+import { withProviderControls } from '../common/utils/retry.util';
 @Injectable()
 export class EthTestnetSwapService {
   private readonly logger = new Logger(EthTestnetSwapService.name);
@@ -57,7 +58,14 @@ export class EthTestnetSwapService {
     );
   }
 
-  async getQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
+  private async withProviderControl<T>(
+    action: string,
+    operation: (attempt: number) => Promise<T>,
+  ): Promise<T> {
+    return withProviderControls(`eth:testnet-swap:${action}`, operation);
+  }
+
+  async getQuote(swapQuoteDto: ResolvedSwapQuoteDto): Promise<SwapQuote> {
     try {
       const { tokenIn, tokenOut, amount } = swapQuoteDto;
       const poolAddress: string = await getPool(
@@ -252,12 +260,14 @@ export class EthTestnetSwapService {
           ? BigInt(txValue)
           : txValue
         : 0n;
-      const estimated = await this.provider.estimateGas({
-        to,
-        data,
-        value: valueInBigInt,
-        from,
-      });
+      const estimated = await this.withProviderControl('estimate-gas', () =>
+        this.provider.estimateGas({
+          to,
+          data,
+          value: valueInBigInt,
+          from,
+        }),
+      );
       this.logger.log('==== estimated ===', { estimated });
 
       return Number((estimated * 130n) / 100n);

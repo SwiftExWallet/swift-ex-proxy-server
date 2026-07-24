@@ -3,6 +3,7 @@ import {
   RATE_LIMIT_KEY,
   RateLimit,
   RateLimitConfig,
+  failClosedRateLimits,
   rateLimitByIpAndDevice,
   rateLimitByIpDeviceAndWallet,
 } from './rate-limit.decorator';
@@ -68,6 +69,28 @@ describe('RateLimit decorator', () => {
     ]);
   });
 
+  it('stores redis outage policy and fallback points unchanged', () => {
+    const limit: RateLimitConfig = {
+      points: 10,
+      duration: 60,
+      key: 'redis-policy-test',
+      keyBy: 'wallet',
+      redisFailurePolicy: 'fail-closed',
+      fallbackPoints: 2,
+    };
+
+    class TestController {
+      @RateLimit(limit)
+      handler() {
+        return undefined;
+      }
+    }
+
+    expect(
+      Reflect.getMetadata(RATE_LIMIT_KEY, TestController.prototype.handler),
+    ).toEqual([limit]);
+  });
+
   it('stores an empty array when called without configs', () => {
     class TestController {
       @RateLimit()
@@ -119,6 +142,30 @@ describe('RateLimit decorator', () => {
         duration: 120,
         key: 'broadcast-flow-wallet',
         keyBy: 'wallet',
+      },
+    ]);
+  });
+
+  it('marks rate limit configs as fail closed', () => {
+    expect(
+      failClosedRateLimits([
+        { points: 1, duration: 60, key: 'ip-limit', keyBy: 'ip' },
+        { points: 2, duration: 60, key: 'wallet-limit', keyBy: 'wallet' },
+      ]),
+    ).toEqual([
+      {
+        points: 1,
+        duration: 60,
+        key: 'ip-limit',
+        keyBy: 'ip',
+        redisFailurePolicy: 'fail-closed',
+      },
+      {
+        points: 2,
+        duration: 60,
+        key: 'wallet-limit',
+        keyBy: 'wallet',
+        redisFailurePolicy: 'fail-closed',
       },
     ]);
   });

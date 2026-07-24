@@ -24,14 +24,10 @@ describe('QuoterController', () => {
   const dto = {
     tokenIn: {
       address: '0x1111111111111111111111111111111111111111',
-      symbol: 'ETH',
-      decimals: '18',
       chainId: 1,
     },
     tokenOut: {
       address: '0x2222222222222222222222222222222222222222',
-      symbol: 'USDC',
-      decimals: '6',
       chainId: 1,
     },
     amount: '1',
@@ -58,10 +54,10 @@ describe('QuoterController', () => {
 
     await expect(controller.getQuote(req, dto)).resolves.toBe(result);
 
-    expect(quoterService.getQuoteResponse).toHaveBeenCalledWith({
-      ...dto,
-      recipient: req.wallet.address,
-    });
+    expect(quoterService.getQuoteResponse).toHaveBeenCalledWith(
+      dto,
+      req.wallet.address,
+    );
   });
 
   it('delegates swap build requests to the quoter service', async () => {
@@ -70,10 +66,10 @@ describe('QuoterController', () => {
 
     await expect(controller.swapBuild(req, dto)).resolves.toBe(result);
 
-    expect(quoterService.buildSwapResponse).toHaveBeenCalledWith({
-      ...dto,
-      recipient: req.wallet.address,
-    });
+    expect(quoterService.buildSwapResponse).toHaveBeenCalledWith(
+      dto,
+      req.wallet.address,
+    );
   });
 
   it('applies IP, device, and wallet rate limits to quote requests', () => {

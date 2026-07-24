@@ -1,7 +1,7 @@
 import { BadRequestException, Logger } from '@nestjs/common';
 import { Fetcher } from '@pancakeswap/sdk';
 import { ethers } from 'ethers';
-import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
+import { ResolvedSwapQuoteDto } from '../../common/dto/swapQuote.dto';
 import { ChainId } from '../../common/enums/chain.enum';
 import { PancakeSwapService } from './bsc.pancake.service';
 import { ProviderErrorCode } from '../../common/utils/provider-error.util';
@@ -142,8 +142,8 @@ describe('PancakeSwapService', () => {
   });
 
   const createQuoteDto = (
-    overrides: Partial<SwapQuoteDto> = {},
-  ): SwapQuoteDto =>
+    overrides: Partial<ResolvedSwapQuoteDto> = {},
+  ): ResolvedSwapQuoteDto =>
     ({
       tokenIn: {
         address: tokenInAddress,
@@ -161,7 +161,7 @@ describe('PancakeSwapService', () => {
       recipient,
       slippage: 1,
       ...overrides,
-    }) as SwapQuoteDto;
+    }) as ResolvedSwapQuoteDto;
 
   const mockTokenLookup = () => {
     const wbnb = (service as any).WBNB;

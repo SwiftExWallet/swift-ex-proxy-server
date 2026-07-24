@@ -73,6 +73,36 @@ describe('provider-error util', () => {
     });
   });
 
+  it('classifies open provider circuits without exposing control keys', () => {
+    const error = new Error('Provider circuit is open for private-key');
+    (error as NodeJS.ErrnoException).code = ProviderErrorCode.CircuitOpen;
+
+    const exception = createProviderBadRequestException(error);
+
+    expect(exception.getResponse()).toEqual({
+      code: ProviderErrorCode.CircuitOpen,
+      message: 'Provider is temporarily unavailable. Please try again later.',
+    });
+    expect(JSON.stringify(exception.getResponse())).not.toContain(
+      'private-key',
+    );
+  });
+
+  it('classifies full provider bulkheads without exposing control keys', () => {
+    const error = new Error('Provider bulkhead queue is full for private-key');
+    (error as NodeJS.ErrnoException).code = 'PROVIDER_BULKHEAD_REJECTED';
+
+    const exception = createProviderBadRequestException(error);
+
+    expect(exception.getResponse()).toEqual({
+      code: ProviderErrorCode.ProviderBusy,
+      message: 'Provider is busy. Please try again later.',
+    });
+    expect(JSON.stringify(exception.getResponse())).not.toContain(
+      'private-key',
+    );
+  });
+
   it('rethrows existing Nest HTTP exceptions unchanged', () => {
     const exception = new BadRequestException('Invalid client input');
 

@@ -4,12 +4,13 @@ import { EthService } from './eth.service';
 import { ProviderService } from '../provider/provider.service';
 import { UniSwapService } from './uniSwap/eth.uniswap.service';
 import { EthTestnetSwapService } from './eth.testnet.service';
-import { ChainEnum } from '../common/enums/chain.enum';
 
 // Mock all blockchain helper functions
 jest.mock('../common/helpers/blockchainUtilityMethods', () => ({
   getTransactionCount: jest.fn().mockResolvedValue(10),
-  getFeeData: jest.fn().mockResolvedValue({ maxFeePerGas: 100n, gasPrice: 50n }),
+  getFeeData: jest
+    .fn()
+    .mockResolvedValue({ maxFeePerGas: 100n, gasPrice: 50n }),
   getNetwork: jest.fn().mockResolvedValue({ chainId: 1n }),
   getEstimateGas: jest.fn().mockResolvedValue(21000n),
   getNativeCurrencyBalance: jest.fn().mockResolvedValue(1000000000000000000n),
@@ -21,7 +22,10 @@ jest.mock('../common/helpers/contractUtilityMethod', () => ({
   getPoolContractFee: jest.fn().mockResolvedValue(3000n),
   quoteExactInputSingle: jest.fn().mockResolvedValue({ amountOut: 100n }),
   getErc20ContractInfo: jest.fn().mockResolvedValue({
-    name: 'USD Coin', symbol: 'USDC', decimals: 6, balance: 1000000n,
+    name: 'USD Coin',
+    symbol: 'USDC',
+    decimals: 6,
+    balance: 1000000n,
   }),
 }));
 
@@ -30,7 +34,9 @@ const mockProviderInstance = {
   broadcastTransaction: jest.fn().mockResolvedValue({ hash: '0xTxHash' }),
 };
 
-const mockContract = { interface: { encodeFunctionData: jest.fn().mockReturnValue('0xencodedData') } };
+const mockContract = {
+  interface: { encodeFunctionData: jest.fn().mockReturnValue('0xencodedData') },
+};
 
 const mockProviderService = {
   getProvider: jest.fn().mockReturnValue(mockProviderInstance),
@@ -39,7 +45,9 @@ const mockProviderService = {
 
 const mockUniSwapService = {
   getQuote: jest.fn().mockResolvedValue({ amountOut: '100', price: '1.0' }),
-  buildSwapTx: jest.fn().mockResolvedValue({ to: '0xRouter', data: '0xswap', value: 0n }),
+  buildSwapTx: jest
+    .fn()
+    .mockResolvedValue({ to: '0xRouter', data: '0xswap', value: 0n }),
 };
 
 describe('EthService', () => {
@@ -60,7 +68,10 @@ describe('EthService', () => {
         EthService,
         { provide: ProviderService, useValue: mockProviderService },
         { provide: UniSwapService, useValue: mockUniSwapService },
-        { provide: EthTestnetSwapService, useValue: { getQuote: jest.fn(), prepareSwapTransaction: jest.fn() } },
+        {
+          provide: EthTestnetSwapService,
+          useValue: { getQuote: jest.fn(), prepareSwapTransaction: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -68,8 +79,14 @@ describe('EthService', () => {
   });
 
   afterEach(() => {
-    ['POOL_FACTORY_CONTRACT_ADDRESS', 'QUOTER_CONTRACT_ADDRESS', 'SWAP_ROUTER_ADDRESS',
-     'WETH_ADDRESS', 'USDT_ADDRESS', 'ENVIRONMENT'].forEach(k => delete process.env[k]);
+    [
+      'POOL_FACTORY_CONTRACT_ADDRESS',
+      'QUOTER_CONTRACT_ADDRESS',
+      'SWAP_ROUTER_ADDRESS',
+      'WETH_ADDRESS',
+      'USDT_ADDRESS',
+      'ENVIRONMENT',
+    ].forEach((k) => delete process.env[k]);
   });
 
   it('should be defined', () => {
@@ -85,7 +102,9 @@ describe('EthService', () => {
 
   describe('getWalletAddressInfo', () => {
     it('returns transactionCount and gasFeeData', async () => {
-      const result = await service.getWalletAddressInfo({ walletAddress: '0xWallet' });
+      const result = await service.getWalletAddressInfo({
+        walletAddress: '0xWallet',
+      });
       expect(result).toHaveProperty('transactionCount', 10);
       expect(result).toHaveProperty('gasFeeData');
     });
@@ -118,15 +137,23 @@ describe('EthService', () => {
 
     it('falls back to 400000 for swap router address', async () => {
       mockProviderInstance.estimateGas.mockRejectedValue(new Error('revert'));
-      const result = await service.estimateGas(process.env.SWAP_ROUTER_ADDRESS!, '0xFrom', '0xother');
+      const result = await service.estimateGas(
+        process.env.SWAP_ROUTER_ADDRESS!,
+        '0xFrom',
+        '0xother',
+      );
       expect(result).toBe(400000);
     });
   });
 
   describe('broadcastTransaction', () => {
     it('broadcasts a single signedTx and returns txHash', async () => {
-      mockProviderInstance.broadcastTransaction.mockResolvedValue({ hash: '0xhash1' });
-      const result = await service.broadcastTransaction({ signedTx: '0xsigned' } as any);
+      mockProviderInstance.broadcastTransaction.mockResolvedValue({
+        hash: '0xhash1',
+      });
+      const result = await service.broadcastTransaction({
+        signedTx: '0xsigned',
+      } as any);
       expect(result).toEqual({ txHash: '0xhash1', receipt: null });
     });
 
@@ -147,7 +174,9 @@ describe('EthService', () => {
     });
 
     it('throws BadRequestException when no signed transaction provided', async () => {
-      await expect(service.broadcastTransaction({} as any)).rejects.toThrow(BadRequestException);
+      await expect(service.broadcastTransaction({} as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
@@ -171,7 +200,11 @@ describe('EthService', () => {
   describe('getSwapQuote', () => {
     it('delegates to uniSwapService in non-dev environment', async () => {
       process.env.ENVIRONMENT = 'prod';
-      const result = await service.getSwapQuote({ tokenIn: {} as any, tokenOut: {} as any, amount: '1' } as any);
+      const result = await service.getSwapQuote({
+        tokenIn: {} as any,
+        tokenOut: {} as any,
+        amount: '1',
+      } as any);
       expect(mockUniSwapService.getQuote).toHaveBeenCalled();
       expect(result).toHaveProperty('amountOut');
     });

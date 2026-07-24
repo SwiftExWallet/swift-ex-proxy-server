@@ -1,4 +1,11 @@
-import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { SwapQuoteDto } from '../dto/swapQuote';
 import { ChainId, swapProvider } from '../../common/enums/chain.enum';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
@@ -29,13 +36,18 @@ import { FirebaseNotificationService } from '../../notification/firebase/notific
 import { NotificationDto } from '../../notification/dto/notification.dto';
 import {
   getProviderHttpTimeoutMs,
-  withProviderRetry,
+  withProviderControls,
 } from '../../common/utils/retry.util';
 import { createProviderBadRequestException } from '../../common/utils/provider-error.util';
 import {
   getOneInchAllowedHosts,
   validateProviderUrl,
 } from '../../common/config/provider-url.config';
+import {
+  assertVerifiedWalletAddress,
+  assertWalletAddressMatches,
+  withExplicitVerifiedWalletAddress,
+} from '../../common/helpers/requestWallet';
 
 interface RedisOrderSecretState {
   secrets: string[];
@@ -69,6 +81,7 @@ const FINAL_ORDER_STATUSES: ReadonlySet<SDKOrderStatus> = new Set([
 
 @Injectable()
 export class InchService implements OnModuleInit {
+  private readonly logger = new Logger(InchService.name);
   private readonly sdk: SDK;
   private readonly oneInchAllowedHosts = getOneInchAllowedHosts();
   private readonly activeSecretPollers = new Map<string, NodeJS.Timeout>();
@@ -199,7 +212,7 @@ export class InchService implements OnModuleInit {
     config: AxiosRequestConfig,
   ): Promise<T> {
     const safeUrl = this.validateOneInchProviderUrl(url);
-    const response = await withProviderRetry(() =>
+    const response = await withProviderControls('1inch:http:get', () =>
       axios.get<T>(safeUrl, this.withProviderAxiosConfig(config)),
     );
     return response.data;
@@ -211,14 +224,18 @@ export class InchService implements OnModuleInit {
     config: AxiosRequestConfig,
   ): Promise<T> {
     const safeUrl = this.validateOneInchProviderUrl(url);
-    const response = await withProviderRetry(() =>
+    const response = await withProviderControls('1inch:http:post', () =>
       axios.post<T>(safeUrl, body, this.withProviderAxiosConfig(config)),
     );
     return response.data;
   }
 
-  async getSwapQuote(swapQuote: SwapQuoteDto) {
-    const { tokenIn, tokenOut, amount, walletAddress, chain } = swapQuote;
+  async getSwapQuote(swapQuote: SwapQuoteDto, verifiedWalletAddress?: string) {
+    const verifiedSwapQuote = verifiedWalletAddress
+      ? withExplicitVerifiedWalletAddress(swapQuote, verifiedWalletAddress)
+      : swapQuote;
+    const { tokenIn, tokenOut, amount, walletAddress, chain } =
+      verifiedSwapQuote;
     const url = this.buildOneInchUrl(
       'QUOTER_BASE',
       `${ChainId[chain]}/quote/receive`,
@@ -243,7 +260,16 @@ export class InchService implements OnModuleInit {
     }
   }
 
-  async getFusionPlusSwapQuote(fusionPlusSwapQuote: FusionPlusSwapQuoteDto) {
+  async getFusionPlusSwapQuote(
+    fusionPlusSwapQuote: FusionPlusSwapQuoteDto,
+    verifiedWalletAddress?: string,
+  ) {
+    const verifiedFusionPlusSwapQuote = verifiedWalletAddress
+      ? withExplicitVerifiedWalletAddress(
+          fusionPlusSwapQuote,
+          verifiedWalletAddress,
+        )
+      : fusionPlusSwapQuote;
     const {
       srcChain,
       dstChain,
@@ -251,7 +277,7 @@ export class InchService implements OnModuleInit {
       dstTokenAddress,
       amount,
       walletAddress,
-    } = fusionPlusSwapQuote;
+    } = verifiedFusionPlusSwapQuote;
     const url = this.buildOneInchUrl(
       'FUSION_PLUS_QUOTER_BASE',
       'quote/receive',
@@ -278,9 +304,15 @@ export class InchService implements OnModuleInit {
     }
   }
 
-  async buildFusionOrder(fusionOrder: FusionOrderDto) {
+  async buildFusionOrder(
+    fusionOrder: FusionOrderDto,
+    verifiedWalletAddress?: string,
+  ) {
+    const verifiedFusionOrder = verifiedWalletAddress
+      ? withExplicitVerifiedWalletAddress(fusionOrder, verifiedWalletAddress)
+      : fusionOrder;
     const { quote, tokenIn, tokenOut, amount, walletAddress, chain } =
-      fusionOrder;
+      verifiedFusionOrder;
     const config: AxiosRequestConfig = {
       headers: { Authorization: `Bearer ${process.env.INCH_API_KEY}` },
       params: {
@@ -305,9 +337,23 @@ export class InchService implements OnModuleInit {
     }
   }
 
-  async buildFusionPlusOrder(fusionPlusOrder: FusionPlusOrderDto) {
+  async buildFusionPlusOrder(
+    fusionPlusOrder: FusionPlusOrderDto,
+    verifiedWalletAddress?: string,
+  ) {
+    const verifiedFusionPlusOrder = verifiedWalletAddress
+      ? withExplicitVerifiedWalletAddress(
+          fusionPlusOrder,
+          verifiedWalletAddress,
+        )
+      : fusionPlusOrder;
     try {
-      const { quoteId, walletAddress, secretCount, requiresApprovalTransaction } = fusionPlusOrder;
+      const {
+        quoteId,
+        walletAddress,
+        secretCount,
+        requiresApprovalTransaction,
+      } = verifiedFusionPlusOrder;
       const { secrets, secretHashes, hashLock } =
         this.generateSecrets(secretCount);
 
@@ -342,12 +388,24 @@ export class InchService implements OnModuleInit {
         config,
       );
     } catch (error) {
-      await this.delSecretState(`quote:${fusionPlusOrder.quoteId}`);
+      await this.delSecretState(`quote:${verifiedFusionPlusOrder.quoteId}`);
       throw createProviderBadRequestException(error);
     }
   }
 
-  async submitFusionOrder(_device: any, submitOrderDto: SubmitOrderDto) {
+  async submitFusionOrder(
+    _device: any,
+    submitOrderDto: SubmitOrderDto,
+    verifiedWalletAddress?: string,
+  ) {
+    if (verifiedWalletAddress) {
+      assertWalletAddressMatches(
+        submitOrderDto.order?.maker,
+        assertVerifiedWalletAddress(verifiedWalletAddress),
+        'order.maker',
+      );
+    }
+
     try {
       const { order, signature, extension, quoteId, chain } = submitOrderDto;
       const config: AxiosRequestConfig = {
@@ -369,7 +427,19 @@ export class InchService implements OnModuleInit {
     }
   }
 
-  async submitFusionPlusOrder(_device: any, submitOrderDto: SubmitOrderDto) {
+  async submitFusionPlusOrder(
+    _device: any,
+    submitOrderDto: SubmitOrderDto,
+    verifiedWalletAddress?: string,
+  ) {
+    if (verifiedWalletAddress) {
+      assertWalletAddressMatches(
+        submitOrderDto.order?.maker,
+        assertVerifiedWalletAddress(verifiedWalletAddress),
+        'order.maker',
+      );
+    }
+
     const { order, signature, extension, quoteId, chain, orderHash } =
       submitOrderDto;
     const tempKey = `quote:${quoteId}`;
@@ -544,12 +614,20 @@ export class InchService implements OnModuleInit {
       }
 
       try {
-        const { status } = await this.sdk.getOrderStatus(orderHash);
+        const { status } = await withProviderControls(
+          '1inch:fusion-plus:order-status',
+          () => this.sdk.getOrderStatus(orderHash),
+          { maxAttempts: 1, shouldRecordFailure: () => false },
+        );
 
         if (SECRET_SUBMIT_ORDER_STATUSES.has(status)) {
-          const data = await this.sdk.getReadyToAcceptSecretFills(orderHash);
+          const data = await withProviderControls(
+            '1inch:fusion-plus:ready-fills',
+            () => this.sdk.getReadyToAcceptSecretFills(orderHash),
+            { maxAttempts: 1, shouldRecordFailure: () => false },
+          );
           let stateUpdated = false;
-          this.logger.debug("fills length: ", data?.fills?.length || 0)
+          this.logger.debug(`fills length: ${data?.fills?.length || 0}`);
           for (const { idx } of data.fills) {
             if (secretState.submittedIdx.has(idx)) {
               continue;
@@ -560,7 +638,11 @@ export class InchService implements OnModuleInit {
               continue;
             }
 
-            await this.sdk.submitSecret(orderHash, secret);
+            await withProviderControls(
+              '1inch:fusion-plus:submit-secret',
+              () => this.sdk.submitSecret(orderHash, secret),
+              { maxAttempts: 1, shouldRecordFailure: () => false },
+            );
             secretState.submittedIdx.add(idx);
             stateUpdated = true;
           }
@@ -697,7 +779,17 @@ export class InchService implements OnModuleInit {
     return ethers.hexlify(secret);
   }
 
-  async orderStatus(inchOrderStatusDto: InchOrderStatusDto) {
+  async orderStatus(
+    inchOrderStatusDto: InchOrderStatusDto,
+    deviceId: string,
+    walletAddress: string | undefined,
+  ) {
+    await this.assertOrderBelongsToDeviceWallet(
+      deviceId,
+      assertVerifiedWalletAddress(walletAddress),
+      inchOrderStatusDto.orderHash,
+    );
+
     if (
       inchOrderStatusDto.swapProvider === swapProvider['ONEINCH_FUSION_PLUS']
     ) {
@@ -765,6 +857,28 @@ export class InchService implements OnModuleInit {
       return data;
     } catch (error) {
       throw createProviderBadRequestException(error);
+    }
+  }
+
+  private async assertOrderBelongsToDeviceWallet(
+    deviceId: string,
+    walletAddress: string,
+    orderHash: string,
+  ): Promise<void> {
+    const result = await this.swapOrderService.findOrderByHashForDeviceWallet(
+      deviceId,
+      orderHash,
+      walletAddress,
+    );
+
+    if (!result.ok) {
+      throw new InternalServerErrorException(
+        'Could not verify order ownership.',
+      );
+    }
+
+    if (!result.data) {
+      throw new NotFoundException('Order not found.');
     }
   }
 

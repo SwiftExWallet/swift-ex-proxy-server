@@ -20,7 +20,9 @@ describe('DeviceAuthTokenMiddleware', () => {
       ],
     }).compile();
 
-    middleware = module.get<DeviceAuthTokenMiddleware>(DeviceAuthTokenMiddleware);
+    middleware = module.get<DeviceAuthTokenMiddleware>(
+      DeviceAuthTokenMiddleware,
+    );
   });
 
   it('should be defined', () => {
@@ -31,13 +33,18 @@ describe('DeviceAuthTokenMiddleware', () => {
     const req: any = { headers: {}, originalUrl: '/api/test' };
     const next = jest.fn();
 
-    await expect(middleware.use(req, {} as any, next)).rejects.toThrow(NotFoundException);
+    await expect(middleware.use(req, {} as any, next)).rejects.toThrow(
+      NotFoundException,
+    );
     expect(next).not.toHaveBeenCalled();
   });
 
   it('throws HttpException FORBIDDEN when decoded token has no _id', async () => {
     mockJwtService.decode.mockReturnValue({ sub: 'no-id' });
-    const req: any = { headers: { 'x-auth-device-token': 'bad.token' }, originalUrl: '/api/test' };
+    const req: any = {
+      headers: { 'x-auth-device-token': 'bad.token' },
+      originalUrl: '/api/test',
+    };
     const next = jest.fn();
 
     await expect(middleware.use(req, {} as any, next)).rejects.toThrow(
@@ -49,7 +56,10 @@ describe('DeviceAuthTokenMiddleware', () => {
   it('throws HttpException FORBIDDEN when device not found in DB', async () => {
     mockJwtService.decode.mockReturnValue({ _id: 'device-id-123' });
     mockDeviceService.findOne.mockResolvedValue(null);
-    const req: any = { headers: { 'x-auth-device-token': 'valid.token' }, originalUrl: '/api/test' };
+    const req: any = {
+      headers: { 'x-auth-device-token': 'valid.token' },
+      originalUrl: '/api/test',
+    };
     const next = jest.fn();
 
     await expect(middleware.use(req, {} as any, next)).rejects.toThrow(
@@ -61,7 +71,10 @@ describe('DeviceAuthTokenMiddleware', () => {
     const device = { _id: 'device-id-123', fcmToken: 'tok' };
     mockJwtService.decode.mockReturnValue({ _id: 'device-id-123' });
     mockDeviceService.findOne.mockResolvedValue(device);
-    const req: any = { headers: { 'x-auth-device-token': 'valid.token' }, originalUrl: '/api/test' };
+    const req: any = {
+      headers: { 'x-auth-device-token': 'valid.token' },
+      originalUrl: '/api/test',
+    };
     const next = jest.fn();
 
     await middleware.use(req, {} as any, next);

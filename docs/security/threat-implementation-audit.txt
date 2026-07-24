@@ -1,5 +1,5 @@
 Threat Implementation Audit
-Audit date: 2026-07-20
+Audit date: 2026-07-24
 Scope: current worktree src/, docs/security/threat-model.md, package scripts,
 Husky hook, and repository-observable deployment/scripts state. dist/ was
 ignored. Deleted files in the current worktree are treated as absent from the
@@ -11,9 +11,9 @@ docs/security/threat-model.md appear implemented, partially implemented, open,
 or stale against the current source.
 
 Summary
-Implemented: T03, T04, T08, T15, T17
-Mostly implemented / partial: T01, T06, T07, T09, T13, T18, T21, T22, T23, T24, T26, T28, T33
-Open: T12, T14, T16, T19, T20, T31
+Implemented: T03, T04, T08, T14, T15, T17, T23, T24, T28
+Mostly implemented / partial: T01, T06, T07, T09, T13, T18, T20, T21, T22, T26, T31, T33
+Open: T12, T16, T19
 Stale / not present in current source or worktree: T02, T05, T10, T11, T25, T27, T29, T30, T32
 
 Threat Status
@@ -34,8 +34,10 @@ Evidence: src/
 T03 - Implemented
 Swap order reads now require device authentication plus a verified device-bound
 wallet. Controller reads pass req.device._id and the verified wallet address to
-service/repository methods, and repository queries include both deviceId and
-walletAddress for wallet and tx-hash lookups.
+service methods, which first verify that the wallet is attached to the current
+device. After that check, repository order queries use the verified
+walletAddress so the same wallet can show history created from multiple
+devices.
 Evidence:
 - src/api/v1/swapOrders/swapOrders.controller.ts
 - src/api/v1/swapOrders/swapOrders.service.ts
@@ -132,21 +134,45 @@ Evidence:
 - src/api/v1/eth/usdt.controller.ts
 - src/main.ts
 
-T14 - Open
-Blockscout pollers use AbortSignal.timeout(8000), but most axios/provider calls
-still lack a shared timeout, retry budget, circuit breaker, or provider
-bulkhead.
+T14 - Implemented
+Shared provider controls now include retry, timeout, keyed circuit breaker, and
+keyed bulkhead concurrency/queue limits. Retry budgets and delays are
+configurable with PROVIDER_HTTP_TIMEOUT_MS, PROVIDER_RETRY_MAX_ATTEMPTS,
+PROVIDER_RETRY_BASE_DELAY_MS, and PROVIDER_RETRY_MAX_DELAY_MS. Circuit breaker
+and bulkhead behavior are configurable with
+PROVIDER_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
+PROVIDER_CIRCUIT_BREAKER_OPEN_MS, PROVIDER_BULKHEAD_MAX_CONCURRENT, and
+PROVIDER_BULKHEAD_QUEUE_LIMIT. 1inch HTTP/SDK calls, native Fusion SDK calls,
+Blockscout pollers, Allbridge poller, common blockchain/contract helpers,
+token metadata resolution, ETH Uniswap, generic Uniswap quoter/swap, BSC
+service calls, and Pancake provider/contract calls now use the shared controls
+for short provider operations. Long-running confirmation waits remain
+asynchronous transaction monitors rather than short timeout-wrapped requests.
 Evidence:
+- src/api/v1/common/utils/retry.util.ts
+- src/api/v1/common/utils/provider-error.util.ts
+- .env.example
 - src/api/v1/crons/evmTxPoller.service.ts
 - src/api/v1/crons/uniswapTxPoller.service.ts
+- src/api/v1/crons/allbridgePoller.service.ts
 - src/api/v1/swap/1inch/1inch.service.ts
-- src/api/v1/bridge/all-bridge/all-bridge.service.ts
+- src/api/v1/swap/1inch/1inch.fusion.native.swap.service.ts
+- src/api/v1/common/helpers/blockchainUtilityMethods.ts
+- src/api/v1/common/helpers/contractUtilityMethod.ts
+- src/api/v1/common/services/tokenMetadata.service.ts
+- src/api/v1/eth/eth.service.ts
+- src/api/v1/eth/eth.testnet.service.ts
+- src/api/v1/eth/uniSwap/eth.uniswap.service.ts
+- src/api/v1/bsc/bsc.service.ts
+- src/api/v1/bsc/pancake/bsc.pancake.service.ts
+- src/api/v1/uniswap/quoter/quoter.service.ts
+- src/api/v1/uniswap/quoter/swaping/swap.service.ts
 
 T15 - Implemented
 Rate limiting supports route-level keys by IP, device, and wallet. The global
 fallback now consumes IP plus device/wallet when those request contexts exist.
-Expensive quote, prepare, broadcast, execute, submit, status, cancel,
-notification, bridge, and swap order flows have business-flow-specific
+Expensive quote, prepare, broadcast, execute, submit, status, notification,
+bridge, and swap order flows have business-flow-specific
 IP/device or IP/device/wallet limits according to available principal context.
 Evidence:
 - src/api/v1/common/guard/rate-limit.guard.ts
@@ -208,13 +234,15 @@ Evidence:
 - src/api/v1/swap/1inch/1inch.service.ts
 - src/api/v1/swapOrders/schema/swapOrder.schema.ts
 
-T20 - Open
-Server-built swap transactions can still request unlimited ERC-20 approvals.
-Uniswap quoter and Pancake paths use ethers.MaxUint256 for approval amounts.
+T20 - Partial
+The ETH Uniswap service now builds exact-amount ERC-20 approvals when allowance
+is too low. Server-built transactions can still request unlimited approvals in
+the generic quoter and Pancake paths, where ethers.MaxUint256 remains in use.
 Fusion+ permit requirements may justify different handling, but non-permit
 transaction builders still need exact-amount/default-safe approval behavior or
 explicit user opt-in.
 Evidence:
+- src/api/v1/eth/uniSwap/eth.uniswap.service.ts
 - src/api/v1/uniswap/quoter/quoter.service.ts
 - src/api/v1/bsc/pancake/bsc.pancake.service.ts
 
@@ -222,15 +250,20 @@ T21 - Mostly implemented
 Wallet-device middleware is applied broadly to quoter, swap, swapOrders, ETH,
 BSC, USDT, and bridge prepare paths. Controllers now overwrite or validate
 wallet/recipient/maker fields against req.wallet. The public 1inch cancel route
-has been removed. Remaining gaps include native Fusion confirm/status-style
-flows and other client-accessible status actions that are not consistently
-bound to the verified wallet/order owner.
+has been removed. 1inch order status refresh and native Fusion confirmation now
+verify the current device has the wallet attached, then verify the order by
+orderHash plus that verified wallet address before provider/Redis work.
+Remaining gaps are mainly any future client-accessible status/action routes
+that bypass the same verified-wallet ownership pattern.
 Evidence:
 - src/app.module.ts
 - src/api/v1/common/middleware/device-wallet.middleware.ts
 - src/api/v1/common/helpers/requestWallet.ts
 - src/api/v1/uniswap/quoter/quoter.controller.ts
 - src/api/v1/swap/1inch/1inch.controller.ts
+- src/api/v1/swap/1inch/1inch.service.ts
+- src/api/v1/swap/1inch/1inch.fusion.native.swap.service.ts
+- src/api/v1/swapOrders/swapOrders.service.ts
 - src/api/v1/eth/eth.controller.ts
 - src/api/v1/bsc/bsc.controller.ts
 
@@ -253,23 +286,36 @@ Evidence:
 - src/api/v1/swap/1inch/1inch.fusion.native.swap.service.ts
 - .env.example
 
-T23 - Partial
-Redis production TLS/auth/ACL validation exists, and rate limiter Redis clients
-disable offline queue. There is still no route-level fail-open/fail-closed
-policy or fallback memory limiter for Redis outages.
+T23 - Implemented
+Redis production TLS/auth/ACL validation exists, rate limiter Redis clients
+disable offline queue, and rate limiting now has route-level Redis outage
+policies: fallback-memory, fail-closed, and fail-open. The default policy is a
+low-threshold memory fallback, while Redis-backed Fusion+ order build/submit/
+confirm routes opt into fail-closed behavior. RedisService tracks health state,
+provides ping-based health checks, and can enforce configured Redis persistence
+with REDIS_PERSISTENCE_REQUIRED plus REDIS_PERSISTENCE_MODE=snapshot, aof, or
+managed.
+Remaining deployment responsibility: Redis HA, actual durable storage/backups,
+and managed-provider persistence settings must still be configured outside the
+application.
 Evidence:
 - src/api/v1/common/config/datastore.config.ts
 - src/api/v1/common/guard/rate-limit.guard.ts
 - src/api/v1/redis/redis.service.ts
+- src/api/v1/swap/1inch/1inch.controller.ts
+- .env.example
 
-T24 - Partial
+T24 - Implemented
 InchService secret reveal polling has max reschedules and terminal cleanup.
-Native Fusion monitorFillsAndExecute still uses an unbounded while loop and
-does not have a visible retry/dead-letter stop condition for repeated provider
-failures.
+Native Fusion secret submission monitoring is bounded by
+FUSION_NATIVE_SECRET_POLL_MAX_SCHEDULES for total polling and
+FUSION_NATIVE_SECRET_POLL_MAX_PROVIDER_FAILURES for consecutive provider/action
+failures. Exhausted native Fusion monitoring updates the order to exhausted and
+deletes Redis secret state.
 Evidence:
 - src/api/v1/swap/1inch/1inch.service.ts
 - src/api/v1/swap/1inch/1inch.fusion.native.swap.service.ts
+- .env.example
 
 T25 - Stale / not present in current worktree
 The previous evidence file start.sh is absent, so the hardcoded S3 copy of a
@@ -290,17 +336,25 @@ worktree. Branch protection, OIDC trust conditions, action pinning, and
 deployment permissions still cannot be verified from this repository state.
 Evidence: .github/workflows/deploy.yml absent from current worktree
 
-T28 - Partial
-Token symbol/decimals are resolved server-side for common swap quote paths and
-client-supplied metadata is overwritten before quoting. Public DTOs still
-accept symbol/decimals, and not every provider-specific path is proven to use
-the normalization service.
+T28 - Implemented
+Common swap quote DTOs no longer expose token symbol/decimals as public request
+fields. The global whitelist/forbidNonWhitelisted validation policy rejects
+client-supplied token metadata, TokenMetadataService returns an internal
+resolved quote shape, and ETH/BSC/quoter swap services consume the resolved
+shape below the controller boundary. Pancake provider responses now use
+server-fetched token metadata instead of request token metadata. AllBridge
+symbol fields are provider token identifiers validated separately, not
+client-supplied ERC-20 metadata.
 Evidence:
 - src/api/v1/common/dto/swapQuote.dto.ts
 - src/api/v1/common/services/tokenMetadata.service.ts
 - src/api/v1/uniswap/quoter/quoter.controller.ts
 - src/api/v1/eth/eth.controller.ts
 - src/api/v1/bsc/bsc.controller.ts
+- src/api/v1/eth/eth.service.ts
+- src/api/v1/bsc/bsc.service.ts
+- src/api/v1/bsc/pancake/bsc.pancake.service.ts
+- src/api/v1/uniswap/quoter/quoter.service.ts
 
 T29 - Stale / not present
 No Banxa webhook service/controller is present in current source.
@@ -310,21 +364,44 @@ T30 - Stale / not present
 No Alchemy webhook service/controller is present in current source.
 Evidence: src/
 
-T31 - Open
-No separate internal/admin authorization model is present. Client-accessible
-status refresh, cancel, native confirm, and notification actions remain mixed
-with public device-authenticated APIs.
-Evidence: src/api/v1/swap/1inch/1inch.controller.ts
+T31 - Mostly implemented
+The current product model does not require a separate admin/internal role:
+orders retain device metadata, but a wallet address can be attached to multiple
+devices and should show shared wallet history. Public 1inch cancel has been
+removed. Client-accessible order status refresh and native Fusion confirmation
+now require device authentication, verified wallet middleware, and stored order
+lookup by orderHash plus the verified walletAddress before provider/Redis work.
+Remaining gap: customNotification remains client-accessible and accepts
+caller-supplied content; template/content restriction is tracked under T18.
+Evidence:
+- src/api/v1/swap/1inch/1inch.controller.ts
+- src/api/v1/swap/1inch/1inch.service.ts
+- src/api/v1/swap/1inch/1inch.fusion.native.swap.service.ts
+- src/api/v1/swapOrders/swapOrders.service.ts
+- src/api/v1/common/middleware/device-wallet.middleware.ts
 
 T32 - Stale / not present
 No Rango implementation/API-key query usage was found in current src/.
 Evidence: src/
 
-T33 - Partial
-Global body size limit is configured and transaction arrays/strings are
-bounded. There are still no stricter route-specific body limits for expensive
-or public-facing flows.
+T33 - Mostly implemented
+Global body size limit is configured, transaction arrays/strings are bounded,
+and all current POST routes under src/api/v1 declare route-specific
+@BodySizeLimit metadata. Expensive/public-facing write routes are capped below
+the global parser limit according to route risk. Remaining gaps: per-route
+limits are enforced by a Nest guard after Express parsing and depend on
+Content-Length, no proxy/API-gateway body limit is repo-verifiable, and there
+is no automated test that fails when a future POST route lacks @BodySizeLimit.
 Evidence:
 - src/main.ts
 - src/api/v1/common/dto/broadcastTransaction.dto.ts
 - src/api/v1/eth/dto/executeSwapTransactions.dto.ts
+- src/api/v1/common/decorators/body-size-limit.decorator.ts
+- src/api/v1/common/guard/body-size-limit.guard.ts
+- src/api/v1/eth/eth.controller.ts
+- src/api/v1/bsc/bsc.controller.ts
+- src/api/v1/swap/1inch/1inch.controller.ts
+- src/api/v1/bridge/bridge.controller.ts
+- src/api/v1/uniswap/quoter/quoter.controller.ts
+- src/api/v1/swapOrders/swapOrders.controller.ts
+- src/api/v1/eth/usdt.controller.ts

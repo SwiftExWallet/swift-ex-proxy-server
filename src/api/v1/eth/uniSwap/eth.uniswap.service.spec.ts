@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { parseUnits } from 'ethers';
-import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
+import { ResolvedSwapQuoteDto } from '../../common/dto/swapQuote.dto';
 import { ChainId } from '../../common/enums/chain.enum';
 import { ProviderService } from '../../provider/provider.service';
 import { UniSwapService } from './eth.uniswap.service';
@@ -45,8 +45,8 @@ describe('UniSwapService', () => {
   const recipient = '0x1234567890123456789012345678901234567890';
 
   const createQuoteDto = (
-    overrides: Partial<SwapQuoteDto> = {},
-  ): SwapQuoteDto =>
+    overrides: Partial<ResolvedSwapQuoteDto> = {},
+  ): ResolvedSwapQuoteDto =>
     ({
       tokenIn: {
         address: daiAddress,
@@ -63,7 +63,7 @@ describe('UniSwapService', () => {
       amount: '1',
       recipient,
       ...overrides,
-    }) as SwapQuoteDto;
+    }) as ResolvedSwapQuoteDto;
 
   beforeEach(() => {
     process.env = {

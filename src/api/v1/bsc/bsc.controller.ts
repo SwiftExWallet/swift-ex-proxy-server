@@ -6,12 +6,6 @@ import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto'
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 import { UsdtBalanceDto } from './dto/usdtBalance.dto';
-import { TokenMetadataService } from '../common/services/tokenMetadata.service';
-import {
-  assertWalletAddressMatches,
-  getVerifiedWalletAddress,
-  withVerifiedWalletAddress,
-} from '../common/helpers/requestWallet';
 import {
   RateLimit,
   rateLimitByIpDeviceAndWallet,
@@ -23,10 +17,7 @@ import {
 
 @Controller('/api/v1/bsc')
 export class BscController {
-  constructor(
-    private readonly bscService: BscService,
-    private readonly tokenMetadataService: TokenMetadataService,
-  ) {}
+  constructor(private readonly bscService: BscService) {}
   @Post('swap-quote')
   @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'bsc-swap-quote')
   @RateLimit(
@@ -41,10 +32,10 @@ export class BscController {
     @Res() res,
     @Body() swapQuoteDto: SwapQuoteDto,
   ) {
-    const normalizedDto = await this.tokenMetadataService.normalizeSwapQuote(
-      withVerifiedWalletAddress(swapQuoteDto, req, 'recipient'),
+    const data = await this.bscService.getSwapQuote(
+      swapQuoteDto,
+      req.wallet?.address,
     );
-    const data = await this.bscService.getSwapQuote(normalizedDto);
     res.status(200).json(data);
   }
 
@@ -84,10 +75,10 @@ export class BscController {
     @Res() res,
     @Body() prepareSwapTransactionDto: SwapQuoteDto,
   ) {
-    const normalizedDto = await this.tokenMetadataService.normalizeSwapQuote(
-      withVerifiedWalletAddress(prepareSwapTransactionDto, req, 'recipient'),
+    const data = await this.bscService.prepareSwapTransaction(
+      prepareSwapTransactionDto,
+      req.wallet?.address,
     );
-    const data = await this.bscService.prepareSwapTransaction(normalizedDto);
     res.status(200).json(data);
   }
 
@@ -106,7 +97,8 @@ export class BscController {
     @Body() getTokenInfoDto: GetTokenInfoDto,
   ) {
     const data = await this.bscService.getTokenInfo(
-      withVerifiedWalletAddress(getTokenInfoDto, req),
+      getTokenInfoDto,
+      req.wallet?.address,
     );
     res.status(200).json(data);
   }
@@ -124,14 +116,10 @@ export class BscController {
     @Res() res,
     @Param() walletAddressDto: WalletAddressDto,
   ) {
-    const verifiedWalletAddress = getVerifiedWalletAddress(req);
-    assertWalletAddressMatches(
-      walletAddressDto.walletAddress,
-      verifiedWalletAddress,
+    const data = await this.bscService.getBalance(
+      walletAddressDto,
+      req.wallet?.address,
     );
-    const data = await this.bscService.getBalance({
-      walletAddress: verifiedWalletAddress,
-    });
     res.status(200).json(data);
   }
 
@@ -148,14 +136,10 @@ export class BscController {
     @Res() res,
     @Param() walletAddressDto: WalletAddressDto,
   ) {
-    const verifiedWalletAddress = getVerifiedWalletAddress(req);
-    assertWalletAddressMatches(
-      walletAddressDto.walletAddress,
-      verifiedWalletAddress,
+    const data = await this.bscService.getWalletAddressInfo(
+      walletAddressDto,
+      req.wallet?.address,
     );
-    const data = await this.bscService.getWalletAddressInfo({
-      walletAddress: verifiedWalletAddress,
-    });
     res.status(200).json(data);
   }
 
@@ -173,7 +157,8 @@ export class BscController {
     @Param() usdtBalanceDto: UsdtBalanceDto,
   ) {
     const data = await this.bscService.getUsdtTokenBalance(
-      withVerifiedWalletAddress(usdtBalanceDto, req),
+      usdtBalanceDto,
+      req.wallet?.address,
     );
     res.status(200).json(data);
   }
@@ -193,7 +178,8 @@ export class BscController {
     @Body() prepareTransactionDto: PrepareTransactionDto,
   ) {
     const data = await this.bscService.prepareTransaction(
-      withVerifiedWalletAddress(prepareTransactionDto, req),
+      prepareTransactionDto,
+      req.wallet?.address,
     );
     res.status(200).json(data);
   }

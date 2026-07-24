@@ -12,6 +12,7 @@ import { InchService } from './1inch.service';
 import { FusionOrderDto } from '../dto/fusionOrder';
 import { SubmitOrderDto } from '../dto/submitOrder';
 import {
+  failClosedRateLimits,
   RateLimit,
   rateLimitByIpAndDevice,
   rateLimitByIpDeviceAndWallet,
@@ -23,11 +24,6 @@ import { FustionNativeService } from './1inch.fusion.native.swap.service';
 import { ConfirmSwapOrderDto } from '../dto/prepareTxDto';
 import { NotificationDto } from '../../notification/dto/notification.dto';
 import { CustomNotificationOriginGuard } from '../../common/guard/custom-notification-origin.guard';
-import {
-  assertWalletAddressMatches,
-  getVerifiedWalletAddress,
-  withVerifiedWalletAddress,
-} from '../../common/helpers/requestWallet';
 import {
   BodySizeLimit,
   BODY_SIZE_LIMITS,
@@ -51,7 +47,8 @@ export class inchController {
   )
   async getQuote(@Req() req: any, @Body() swapQuote: SwapQuoteDto) {
     const data = await this.inchService.getSwapQuote(
-      withVerifiedWalletAddress(swapQuote, req),
+      swapQuote,
+      req.wallet?.address,
     );
     return data;
   }
@@ -70,7 +67,8 @@ export class inchController {
     @Body() swapQuote: FusionPlusSwapQuoteDto,
   ) {
     const data = await this.inchService.getFusionPlusSwapQuote(
-      withVerifiedWalletAddress(swapQuote, req),
+      swapQuote,
+      req.wallet?.address,
     );
     return data;
   }
@@ -92,7 +90,8 @@ export class inchController {
     @Body() fusionOrder: FusionOrderDto,
   ) {
     const data = await this.inchService.buildFusionOrder(
-      withVerifiedWalletAddress(fusionOrder, req),
+      fusionOrder,
+      req.wallet?.address,
     );
     return data;
   }
@@ -100,18 +99,21 @@ export class inchController {
   @Post('/buildFusionPlusOrder')
   @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'inch-build-fusion-plus-order')
   @RateLimit(
-    ...rateLimitByIpDeviceAndWallet('inch-build-fusion-plus-order', {
-      ip: 30,
-      device: 15,
-      wallet: 15,
-    }),
+    ...failClosedRateLimits(
+      rateLimitByIpDeviceAndWallet('inch-build-fusion-plus-order', {
+        ip: 30,
+        device: 15,
+        wallet: 15,
+      }),
+    ),
   )
   async createFusionPlusOrder(
     @Req() req: any,
     @Body() fusionPlusOrder: FusionPlusOrderDto,
   ) {
     const data = await this.inchService.buildFusionPlusOrder(
-      withVerifiedWalletAddress(fusionPlusOrder, req),
+      fusionPlusOrder,
+      req.wallet?.address,
     );
     return data;
   }
@@ -126,14 +128,10 @@ export class inchController {
     }),
   )
   async submitOrder(@Req() req: any, @Body() submitOrderDto: SubmitOrderDto) {
-    assertWalletAddressMatches(
-      submitOrderDto.order?.maker,
-      getVerifiedWalletAddress(req),
-      'order.maker',
-    );
     const data = await this.inchService.submitFusionOrder(
       req.device,
       submitOrderDto,
+      req.wallet?.address,
     );
     return data;
   }
@@ -144,24 +142,22 @@ export class inchController {
     'inch-submit-fusion-plus-order',
   )
   @RateLimit(
-    ...rateLimitByIpDeviceAndWallet('inch-submit-fusion-plus-order', {
-      ip: 20,
-      device: 10,
-      wallet: 10,
-    }),
+    ...failClosedRateLimits(
+      rateLimitByIpDeviceAndWallet('inch-submit-fusion-plus-order', {
+        ip: 20,
+        device: 10,
+        wallet: 10,
+      }),
+    ),
   )
   async submitFusionPlusOrder(
     @Req() req: any,
     @Body() submitOrderDto: SubmitOrderDto,
   ) {
-    assertWalletAddressMatches(
-      submitOrderDto.order?.maker,
-      getVerifiedWalletAddress(req),
-      'order.maker',
-    );
     const data = await this.inchService.submitFusionPlusOrder(
       req.device,
       submitOrderDto,
+      req.wallet?.address,
     );
     return data;
   }
@@ -174,8 +170,15 @@ export class inchController {
       wallet: 30,
     }),
   )
-  async orderStatus(@Query() inchOrderStatusDto: InchOrderStatusDto) {
-    const data = await this.inchService.orderStatus(inchOrderStatusDto);
+  async orderStatus(
+    @Req() req: any,
+    @Query() inchOrderStatusDto: InchOrderStatusDto,
+  ) {
+    const data = await this.inchService.orderStatus(
+      inchOrderStatusDto,
+      req.device._id,
+      req.wallet?.address,
+    );
     return data;
   }
 
@@ -185,18 +188,21 @@ export class inchController {
     'inch-build-fusion-plus-native-order',
   )
   @RateLimit(
-    ...rateLimitByIpDeviceAndWallet('inch-build-fusion-plus-native-order', {
-      ip: 30,
-      device: 15,
-      wallet: 15,
-    }),
+    ...failClosedRateLimits(
+      rateLimitByIpDeviceAndWallet('inch-build-fusion-plus-native-order', {
+        ip: 30,
+        device: 15,
+        wallet: 15,
+      }),
+    ),
   )
   async buildFusionPlusNativeOrder(
     @Req() req: any,
     @Body() body: FusionPlusSwapQuoteDto,
   ) {
     return await this.fustionNativeService.createSwapOrder(
-      withVerifiedWalletAddress(body, req),
+      body,
+      req.wallet?.address,
     );
   }
 
@@ -206,14 +212,23 @@ export class inchController {
     'inch-submit-fusion-plus-native-order',
   )
   @RateLimit(
-    ...rateLimitByIpDeviceAndWallet('inch-submit-fusion-plus-native-order', {
-      ip: 20,
-      device: 10,
-      wallet: 10,
-    }),
+    ...failClosedRateLimits(
+      rateLimitByIpDeviceAndWallet('inch-submit-fusion-plus-native-order', {
+        ip: 20,
+        device: 10,
+        wallet: 10,
+      }),
+    ),
   )
-  async confirmOrder(@Body() confirmSwapOrderDto: ConfirmSwapOrderDto) {
-    return this.fustionNativeService.confirmSwapOrder(confirmSwapOrderDto);
+  async confirmOrder(
+    @Req() req: any,
+    @Body() confirmSwapOrderDto: ConfirmSwapOrderDto,
+  ) {
+    return this.fustionNativeService.confirmSwapOrder(
+      confirmSwapOrderDto,
+      req.device._id,
+      req.wallet?.address,
+    );
   }
 
   @Post('/customNotification')

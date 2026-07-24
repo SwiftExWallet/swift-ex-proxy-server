@@ -40,7 +40,9 @@ describe('OrdersService', () => {
 
     it('returns null when order not found', async () => {
       mockOrderRepo.findOne.mockResolvedValue(null);
-      expect(await service.findOne(new mongoose.Types.ObjectId() as any)).toBeNull();
+      expect(
+        await service.findOne(new mongoose.Types.ObjectId() as any),
+      ).toBeNull();
     });
   });
 
@@ -50,7 +52,9 @@ describe('OrdersService', () => {
       mockOrderRepo.findOne.mockResolvedValue(order);
 
       const result = await service.findOneByOrderNo('ORD-001');
-      expect(mockOrderRepo.findOne).toHaveBeenCalledWith({ orderNo: 'ORD-001' });
+      expect(mockOrderRepo.findOne).toHaveBeenCalledWith({
+        orderNo: 'ORD-001',
+      });
       expect(result).toEqual(order);
     });
 

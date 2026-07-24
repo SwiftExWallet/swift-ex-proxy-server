@@ -18,6 +18,9 @@ describe('BscService', () => {
     getSwapQuote: jest.fn(),
     createUnsignedSwapTransaction: jest.fn(),
   };
+  const tokenMetadataService = {
+    normalizeSwapQuote: jest.fn(),
+  };
 
   beforeEach(() => {
     process.env = {
@@ -28,7 +31,11 @@ describe('BscService', () => {
     providerService.getProvider.mockReturnValue(provider);
     providerService.getContract.mockReturnValue(routerContract);
 
-    service = new BscService(providerService as any, pancakeSwapService as any);
+    service = new BscService(
+      providerService as any,
+      pancakeSwapService as any,
+      tokenMetadataService as any,
+    );
   });
 
   afterEach(() => {
@@ -46,6 +53,25 @@ describe('BscService', () => {
 
     await expect(service.getSwapQuote({} as any)).resolves.toBe(quote);
     expect(pancakeSwapService.getSwapQuote).toHaveBeenCalledWith({});
+  });
+
+  it('applies the verified wallet and normalizes token metadata before quoting', async () => {
+    process.env.ENVIRONMENT = 'prod';
+    const dto = { amount: '1', recipient: undefined };
+    const normalizedDto = { amount: '1', recipient: '0xwallet' };
+    const quote = { outputAmount: '1' };
+    tokenMetadataService.normalizeSwapQuote.mockResolvedValue(normalizedDto);
+    pancakeSwapService.getSwapQuote.mockResolvedValue(quote);
+
+    await expect(service.getSwapQuote(dto as any, '0xwallet')).resolves.toBe(
+      quote,
+    );
+
+    expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith({
+      amount: '1',
+      recipient: '0xwallet',
+    });
+    expect(pancakeSwapService.getSwapQuote).toHaveBeenCalledWith(normalizedDto);
   });
 
   it('delegates swap transaction preparation to PancakeSwap service in prod', async () => {

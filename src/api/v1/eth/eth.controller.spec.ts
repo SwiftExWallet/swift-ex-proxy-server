@@ -10,16 +10,10 @@ describe('EthController', () => {
   const ethService = {
     getSwapQuote: jest.fn(),
   };
-  const tokenMetadataService = {
-    normalizeSwapQuote: jest.fn(),
-  };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new EthController(
-      ethService as any,
-      tokenMetadataService as any,
-    );
+    controller = new EthController(ethService as any);
   });
 
   it('should be defined', () => {

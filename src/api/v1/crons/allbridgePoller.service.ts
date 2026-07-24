@@ -12,7 +12,7 @@ import { SwapOrderStatus as OrderStatus } from '../common/enums/order.enum';
 import { swapProvider } from '../common/enums/chain.enum';
 import { NotificationDto } from '../notification/dto/notification.dto';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';
-import { withProviderRetry } from '../common/utils/retry.util';
+import { withProviderControls } from '../common/utils/retry.util';
 
 function mapAllbridgeStatus(
   res: TransferStatusResponse | null | undefined,
@@ -71,8 +71,10 @@ export class AllbridgePollerService {
   private async processTx(tx: SwapOrders): Promise<void> {
     let transferStatus: TransferStatusResponse;
     try {
-      transferStatus = await withProviderRetry(() =>
-        this.sdk.getTransferStatus(tx.fromChain as ChainSymbol, tx.txHash),
+      transferStatus = await withProviderControls(
+        'allbridge:transfer-status',
+        () =>
+          this.sdk.getTransferStatus(tx.fromChain as ChainSymbol, tx.txHash),
       );
     } catch (err) {
       this.logger.error(

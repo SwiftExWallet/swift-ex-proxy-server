@@ -37,7 +37,9 @@ describe('UsersService', () => {
 
     it('returns null when user not found', async () => {
       mockUserRepo.findOne.mockResolvedValue(null);
-      expect(await service.findOne(new mongoose.Types.ObjectId() as any)).toBeNull();
+      expect(
+        await service.findOne(new mongoose.Types.ObjectId() as any),
+      ).toBeNull();
     });
   });
 });

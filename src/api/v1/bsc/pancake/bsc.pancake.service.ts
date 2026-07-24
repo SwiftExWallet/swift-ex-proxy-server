@@ -28,6 +28,10 @@ import {
   getProviderRpcAllowedHosts,
   validateProviderUrl,
 } from '../../common/config/provider-url.config';
+import {
+  type ProviderControlOptions,
+  withProviderControls,
+} from '../../common/utils/retry.util';
 
 @Injectable()
 export class PancakeSwapService {
@@ -65,6 +69,22 @@ export class PancakeSwapService {
     this.logger.log(`✓ WBNB Token initialized: ${this.WBNB.address}`);
   }
 
+  private async withProviderControl<T>(
+    action: string,
+    operation: (attempt: number) => Promise<T>,
+    options?: ProviderControlOptions,
+  ): Promise<T> {
+    return withProviderControls(`bsc:pancake:${action}`, operation, options);
+  }
+
+  private async fetchPairData(tokenA: Token, tokenB: Token) {
+    return this.withProviderControl(
+      `pair-data:${tokenA.address.toLowerCase()}:${tokenB.address.toLowerCase()}`,
+      () => Fetcher.fetchPairData(tokenA, tokenB, this.viemProvider),
+      { maxAttempts: 1, shouldRecordFailure: () => false },
+    );
+  }
+
   private isNativeToken(address: string): boolean {
     if (!address) return false;
     const NATIVE_ADDRESSES = [
@@ -98,9 +118,13 @@ export class PancakeSwapService {
 
     try {
       const [decimalsRaw, symbol, name] = await Promise.all([
-        tokenContract.decimals(),
-        tokenContract.symbol(),
-        tokenContract.name(),
+        this.withProviderControl('token-metadata', () =>
+          tokenContract.decimals(),
+        ),
+        this.withProviderControl('token-metadata', () =>
+          tokenContract.symbol(),
+        ),
+        this.withProviderControl('token-metadata', () => tokenContract.name()),
       ]);
 
       const decimals = Number(decimalsRaw);
@@ -144,11 +168,7 @@ export class PancakeSwapService {
       let routePath = 'direct';
 
       try {
-        const pair = await Fetcher.fetchPairData(
-          fromToken,
-          toToken,
-          this.viemProvider,
-        );
+        const pair = await this.fetchPairData(fromToken, toToken);
         const route = new Route([pair], fromToken, toToken);
         trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
         this.logger.log('Direct swap route found');
@@ -158,16 +178,8 @@ export class PancakeSwapService {
 
       if (!trade) {
         try {
-          const pair1 = await Fetcher.fetchPairData(
-            fromToken,
-            this.WBNB,
-            this.viemProvider,
-          );
-          const pair2 = await Fetcher.fetchPairData(
-            this.WBNB,
-            toToken,
-            this.viemProvider,
-          );
+          const pair1 = await this.fetchPairData(fromToken, this.WBNB);
+          const pair2 = await this.fetchPairData(this.WBNB, toToken);
           const route = new Route([pair1, pair2], fromToken, toToken);
           trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
           routePath = 'multi-hop-wbnb';
@@ -183,16 +195,8 @@ export class PancakeSwapService {
       ) {
         try {
           const busdToken = await this.getToken(this.BUSD_ADDRESS);
-          const pair1 = await Fetcher.fetchPairData(
-            fromToken,
-            busdToken,
-            this.viemProvider,
-          );
-          const pair2 = await Fetcher.fetchPairData(
-            busdToken,
-            toToken,
-            this.viemProvider,
-          );
+          const pair1 = await this.fetchPairData(fromToken, busdToken);
+          const pair2 = await this.fetchPairData(busdToken, toToken);
           const route = new Route([pair1, pair2], fromToken, toToken);
           trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
           routePath = 'multi-hop-busd';
@@ -208,16 +212,8 @@ export class PancakeSwapService {
       ) {
         try {
           const usdtToken = await this.getToken(this.USDT_ADDRESS);
-          const pair1 = await Fetcher.fetchPairData(
-            fromToken,
-            usdtToken,
-            this.viemProvider,
-          );
-          const pair2 = await Fetcher.fetchPairData(
-            usdtToken,
-            toToken,
-            this.viemProvider,
-          );
+          const pair1 = await this.fetchPairData(fromToken, usdtToken);
+          const pair2 = await this.fetchPairData(usdtToken, toToken);
           const route = new Route([pair1, pair2], fromToken, toToken);
           trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
           routePath = 'multi-hop-usdt';
@@ -237,7 +233,9 @@ export class PancakeSwapService {
       const formattedAmountOut = trade.outputAmount.toExact();
       const pricePerToken = trade.executionPrice.invert();
 
-      const feeData = await this.ethersProvider.getFeeData();
+      const feeData = await this.withProviderControl('fee-data', () =>
+        this.ethersProvider.getFeeData(),
+      );
       const gasPriceWei = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
       const estimatedGasUnits = routePath === 'direct' ? 150000n : 300000n;
       const networkFeeBnb = parseFloat(
@@ -245,9 +243,9 @@ export class PancakeSwapService {
       );
       return {
         inputAmount: amount,
-        inputToken: isNativeIn ? 'BNB' : tokenIn.symbol,
+        inputToken: fromToken.symbol,
         outputAmount: formattedAmountOut,
-        outputToken: isNativeOut ? 'BNB' : tokenOut.symbol,
+        outputToken: toToken.symbol,
         pricePerToken: pricePerToken.toSignificant(6),
         fee: '3000',
         route: routePath,
@@ -290,11 +288,7 @@ export class PancakeSwapService {
 
       // ✅ STEP 1: Try Direct Route
       try {
-        const pair = await Fetcher.fetchPairData(
-          fromToken,
-          toToken,
-          this.viemProvider,
-        );
+        const pair = await this.fetchPairData(fromToken, toToken);
         const route = new Route([pair], fromToken, toToken);
         trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
         actualPath = trade.route.path.map((t) => t.address);
@@ -306,16 +300,8 @@ export class PancakeSwapService {
       // ✅ STEP 2: Try Multi-hop via WBNB
       if (!trade) {
         try {
-          const pair1 = await Fetcher.fetchPairData(
-            fromToken,
-            this.WBNB,
-            this.viemProvider,
-          );
-          const pair2 = await Fetcher.fetchPairData(
-            this.WBNB,
-            toToken,
-            this.viemProvider,
-          );
+          const pair1 = await this.fetchPairData(fromToken, this.WBNB);
+          const pair2 = await this.fetchPairData(this.WBNB, toToken);
           const route = new Route([pair1, pair2], fromToken, toToken);
           trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
           actualPath = trade.route.path.map((t) => t.address);
@@ -332,16 +318,8 @@ export class PancakeSwapService {
       ) {
         try {
           const busdToken = await this.getToken(this.BUSD_ADDRESS);
-          const pair1 = await Fetcher.fetchPairData(
-            fromToken,
-            busdToken,
-            this.viemProvider,
-          );
-          const pair2 = await Fetcher.fetchPairData(
-            busdToken,
-            toToken,
-            this.viemProvider,
-          );
+          const pair1 = await this.fetchPairData(fromToken, busdToken);
+          const pair2 = await this.fetchPairData(busdToken, toToken);
           const route = new Route([pair1, pair2], fromToken, toToken);
           trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
           actualPath = trade.route.path.map((t) => t.address);
@@ -358,16 +336,8 @@ export class PancakeSwapService {
       ) {
         try {
           const usdtToken = await this.getToken(this.USDT_ADDRESS);
-          const pair1 = await Fetcher.fetchPairData(
-            fromToken,
-            usdtToken,
-            this.viemProvider,
-          );
-          const pair2 = await Fetcher.fetchPairData(
-            usdtToken,
-            toToken,
-            this.viemProvider,
-          );
+          const pair1 = await this.fetchPairData(fromToken, usdtToken);
+          const pair2 = await this.fetchPairData(usdtToken, toToken);
           const route = new Route([pair1, pair2], fromToken, toToken);
           trade = new Trade(route, currencyAmount, TradeType.EXACT_INPUT);
           actualPath = trade.route.path.map((t) => t.address);
@@ -412,9 +382,15 @@ export class PancakeSwapService {
       // ✅ Get account info
       const fromAddress = recipient;
       const [nonce, feeData, balance] = await Promise.all([
-        this.ethersProvider.getTransactionCount(fromAddress, 'pending'),
-        this.ethersProvider.getFeeData(),
-        this.ethersProvider.getBalance(fromAddress),
+        this.withProviderControl('transaction-count', () =>
+          this.ethersProvider.getTransactionCount(fromAddress, 'pending'),
+        ),
+        this.withProviderControl('fee-data', () =>
+          this.ethersProvider.getFeeData(),
+        ),
+        this.withProviderControl('native-balance', () =>
+          this.ethersProvider.getBalance(fromAddress),
+        ),
       ]);
 
       const gasPrice = feeData.gasPrice || ethers.parseUnits('5', 'gwei');
@@ -463,7 +439,10 @@ export class PancakeSwapService {
         };
 
         try {
-          const estimatedGas = await this.ethersProvider.estimateGas(swapTx);
+          const estimatedGas = await this.withProviderControl(
+            'estimate-gas',
+            () => this.ethersProvider.estimateGas(swapTx),
+          );
           swapTx['gasLimit'] = ((estimatedGas * 120n) / 100n).toString();
           this.logger.log(`Gas estimated: ${estimatedGas.toString()}`);
         } catch (gasError) {
@@ -497,7 +476,10 @@ export class PancakeSwapService {
           BSC_TOKEN_ABI,
           this.ethersProvider,
         );
-        const tokenBalance = await tokenContract.balanceOf(fromAddress);
+        const tokenBalance = await this.withProviderControl(
+          'token-balance',
+          () => tokenContract.balanceOf(fromAddress),
+        );
 
         if (tokenBalance < BigInt(currencyAmount.quotient.toString())) {
           const balanceFormatted = ethers.formatUnits(
@@ -542,7 +524,10 @@ export class PancakeSwapService {
           };
 
           try {
-            const approveGas = await this.ethersProvider.estimateGas(approveTx);
+            const approveGas = await this.withProviderControl(
+              'estimate-gas',
+              () => this.ethersProvider.estimateGas(approveTx),
+            );
             approveTx['gasLimit'] = ((approveGas * 120n) / 100n).toString();
           } catch {
             approveTx['gasLimit'] = '60000';
@@ -603,7 +588,10 @@ export class PancakeSwapService {
         };
 
         try {
-          const estimatedGas = await this.ethersProvider.estimateGas(swapTx);
+          const estimatedGas = await this.withProviderControl(
+            'estimate-gas',
+            () => this.ethersProvider.estimateGas(swapTx),
+          );
           swapTx['gasLimit'] = ((estimatedGas * 120n) / 100n).toString();
           this.logger.log(`Swap gas estimated: ${estimatedGas.toString()}`);
         } catch (gasError) {
@@ -641,8 +629,12 @@ export class PancakeSwapService {
       }> = [];
 
       for (const signedTx of signedTxs) {
-        const tx = await this.ethersProvider.broadcastTransaction(signedTx);
-        const receipt = await tx.wait();
+        const tx = await this.withProviderControl('broadcast', () =>
+          this.ethersProvider.broadcastTransaction(signedTx),
+        );
+        const receipt = await this.withProviderControl('receipt-wait', () =>
+          tx.wait(),
+        );
 
         results.push({
           txResponse: {
@@ -682,9 +674,8 @@ export class PancakeSwapService {
     );
 
     try {
-      const allowance = await tokenContract.allowance(
-        ownerAddress,
-        this.ROUTER_ADDRESS,
+      const allowance = await this.withProviderControl('allowance', () =>
+        tokenContract.allowance(ownerAddress, this.ROUTER_ADDRESS),
       );
       return allowance < BigInt(amount);
     } catch {
@@ -700,12 +691,16 @@ export class PancakeSwapService {
       let totalGas = 0n;
       for (const tx of transactions) {
         try {
-          const estimatedGas = await this.ethersProvider.estimateGas({
-            to: tx.to,
-            value: tx.value,
-            data: tx.data,
-            from: tx.from,
-          });
+          const estimatedGas = await this.withProviderControl(
+            'estimate-gas',
+            () =>
+              this.ethersProvider.estimateGas({
+                to: tx.to,
+                value: tx.value,
+                data: tx.data,
+                from: tx.from,
+              }),
+          );
           totalGas += estimatedGas;
         } catch {
           totalGas += 300000n;

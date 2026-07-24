@@ -17,6 +17,9 @@ describe('EthService', () => {
   const ethTestnetSwapService = {
     getQuote: jest.fn(),
   };
+  const tokenMetadataService = {
+    normalizeSwapQuote: jest.fn(),
+  };
 
   beforeEach(() => {
     process.env = {
@@ -34,6 +37,7 @@ describe('EthService', () => {
       providerService as any,
       uniSwapService as any,
       ethTestnetSwapService as any,
+      tokenMetadataService as any,
     );
   });
 
@@ -63,6 +67,25 @@ describe('EthService', () => {
     await expect(service.getSwapQuote({} as any)).resolves.toBe(quote);
     expect(uniSwapService.getQuote).toHaveBeenCalledWith({});
     expect(ethTestnetSwapService.getQuote).not.toHaveBeenCalled();
+  });
+
+  it('applies the verified wallet and normalizes token metadata before quoting', async () => {
+    process.env.ENVIRONMENT = 'prod';
+    const dto = { amount: '1', recipient: undefined };
+    const normalizedDto = { amount: '1', recipient: '0xwallet' };
+    const quote = { outputAmount: '1' };
+    tokenMetadataService.normalizeSwapQuote.mockResolvedValue(normalizedDto);
+    uniSwapService.getQuote.mockResolvedValue(quote);
+
+    await expect(service.getSwapQuote(dto as any, '0xwallet')).resolves.toBe(
+      quote,
+    );
+
+    expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith({
+      amount: '1',
+      recipient: '0xwallet',
+    });
+    expect(uniSwapService.getQuote).toHaveBeenCalledWith(normalizedDto);
   });
 
   it('returns a stable provider error when broadcast fails', async () => {

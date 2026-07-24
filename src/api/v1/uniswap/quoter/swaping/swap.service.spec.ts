@@ -11,7 +11,7 @@ jest.mock('ethers', () => {
 
 import { BadRequestException } from '@nestjs/common';
 import { parseUnits } from 'ethers';
-import { SwapQuoteDto } from '../../../common/dto/swapQuote.dto';
+import { ResolvedSwapQuoteDto } from '../../../common/dto/swapQuote.dto';
 import { CHAIN_CONFIGS } from '../constants/quoter.chain.config';
 import { SupportedChain } from '../dto/quoter.dto';
 import { SwapService } from './swap.service';
@@ -39,7 +39,9 @@ describe('SwapService', () => {
 
   let service: SwapService;
 
-  const makeDto = (overrides: Partial<SwapQuoteDto> = {}): SwapQuoteDto =>
+  const makeDto = (
+    overrides: Partial<ResolvedSwapQuoteDto> = {},
+  ): ResolvedSwapQuoteDto =>
     ({
       tokenIn: {
         address: tokenInAddress,
@@ -56,7 +58,7 @@ describe('SwapService', () => {
       amount: '1',
       recipient: wallet,
       ...overrides,
-    }) as unknown as SwapQuoteDto;
+    }) as unknown as ResolvedSwapQuoteDto;
 
   beforeEach(() => {
     jest.clearAllMocks();

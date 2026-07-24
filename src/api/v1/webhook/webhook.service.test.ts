@@ -9,7 +9,10 @@ import { WebhookMoralisDto } from './dto/moralisWebhook.dto';
 function encryptToken(plaintext: string, keyBuffer: Buffer): string {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', keyBuffer, iv);
-  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const encrypted = Buffer.concat([
+    cipher.update(plaintext, 'utf8'),
+    cipher.final(),
+  ]);
   const authTag = cipher.getAuthTag();
   return Buffer.concat([iv, encrypted, authTag]).toString('base64');
 }
@@ -32,7 +35,10 @@ describe('WebhookService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WebhookService,
-        { provide: FirebaseNotificationService, useValue: mockNotificationService },
+        {
+          provide: FirebaseNotificationService,
+          useValue: mockNotificationService,
+        },
         { provide: RedisService, useValue: mockRedisService },
       ],
     }).compile();
@@ -51,7 +57,9 @@ describe('WebhookService', () => {
 
   describe('handleStellar', () => {
     it('skips test payloads', async () => {
-      const payload = Object.assign(new WebhookStellarDto(), { eventType: 'test' });
+      const payload = Object.assign(new WebhookStellarDto(), {
+        eventType: 'test',
+      });
       const result = await service.handleStellar(payload);
       expect(result).toEqual({ status: 'ok', message: 'Test payload skipped' });
       expect(mockNotificationService.sendNotification).not.toHaveBeenCalled();
@@ -60,7 +68,12 @@ describe('WebhookService', () => {
     it('returns undefined when no tag or additionalData', async () => {
       const payload = Object.assign(new WebhookStellarDto(), {
         eventType: 'payment',
-        data: { amount: '10', asset_type: 'credit_alphanum4', asset_code: 'USDC', additionalData: '' },
+        data: {
+          amount: '10',
+          asset_type: 'credit_alphanum4',
+          asset_code: 'USDC',
+          additionalData: '',
+        },
       });
       const result = await service.handleStellar(payload);
       expect(result).toBeUndefined();
@@ -74,7 +87,12 @@ describe('WebhookService', () => {
       const payload = Object.assign(new WebhookStellarDto(), {
         eventType: 'payment',
         tag,
-        data: { amount: '5.00', asset_type: 'credit_alphanum4', asset_code: 'USDC', additionalData: '' },
+        data: {
+          amount: '5.00',
+          asset_type: 'credit_alphanum4',
+          asset_code: 'USDC',
+          additionalData: '',
+        },
       });
 
       const result = await service.handleStellar(payload);
@@ -92,7 +110,12 @@ describe('WebhookService', () => {
       const payload = Object.assign(new WebhookStellarDto(), {
         eventType: 'payment',
         tag,
-        data: { amount: '1.00', asset_type: 'native', asset_code: '', additionalData: '' },
+        data: {
+          amount: '1.00',
+          asset_type: 'native',
+          asset_code: '',
+          additionalData: '',
+        },
       });
 
       await service.handleStellar(payload);
@@ -109,7 +132,12 @@ describe('WebhookService', () => {
 
       const payload = Object.assign(new WebhookStellarDto(), {
         eventType: 'payment',
-        data: { amount: '2', asset_type: 'credit_alphanum4', asset_code: 'USDC', additionalData },
+        data: {
+          amount: '2',
+          asset_type: 'credit_alphanum4',
+          asset_code: 'USDC',
+          additionalData,
+        },
       });
 
       await service.handleStellar(payload);
@@ -125,8 +153,14 @@ describe('WebhookService', () => {
       return Object.assign(new WebhookMoralisDto(), {
         chainId: '',
         block: { number: '', hash: '', timestamp: '' },
-        abi: [], txs: [], logs: [], erc20Transfers: [], nftTransfers: [],
-        nativeBalances: [], erc20Approvals: [], nftTokenApprovals: [],
+        abi: [],
+        txs: [],
+        logs: [],
+        erc20Transfers: [],
+        nftTransfers: [],
+        nativeBalances: [],
+        erc20Approvals: [],
+        nftTokenApprovals: [],
         nftApprovals: { ERC721: [], ERC1155: [] },
       });
     }
@@ -142,15 +176,29 @@ describe('WebhookService', () => {
       mockRedisService.getKey.mockResolvedValue('1');
 
       const payload = Object.assign(new WebhookMoralisDto(), {
-        chainId: '0x1', confirmed: true, tag,
+        chainId: '0x1',
+        confirmed: true,
+        tag,
         block: { number: '100', hash: '0xblock', timestamp: '1234' },
-        abi: [], logs: [], txsInternal: [], retries: 0, streamId: 's1',
-        nftApprovals: { ERC721: [], ERC1155: [] }, nftTransfers: [], nftTokenApprovals: [],
-        nativeBalances: [], erc20Approvals: [], txs: [],
-        erc20Transfers: [{
-          toAddress: `0x${walletAddr}`, hash: '0xabc123',
-          valueWithDecimals: '10.0', tokenSymbol: 'USDC',
-        }],
+        abi: [],
+        logs: [],
+        txsInternal: [],
+        retries: 0,
+        streamId: 's1',
+        nftApprovals: { ERC721: [], ERC1155: [] },
+        nftTransfers: [],
+        nftTokenApprovals: [],
+        nativeBalances: [],
+        erc20Approvals: [],
+        txs: [],
+        erc20Transfers: [
+          {
+            toAddress: `0x${walletAddr}`,
+            hash: '0xabc123',
+            valueWithDecimals: '10.0',
+            tokenSymbol: 'USDC',
+          },
+        ],
       });
 
       const result = await service.handleWebhookMoralis(payload);
@@ -161,22 +209,39 @@ describe('WebhookService', () => {
     it('sends notification and caches txHash for valid ERC-20 transfer', async () => {
       const fcmToken = 'fcm-token';
       const walletAddr = 'abcdef1234567890';
-      const tag = encryptToken(`${fcmToken}${SPLIT_KEY}${walletAddr}`, TEST_KEY);
+      const tag = encryptToken(
+        `${fcmToken}${SPLIT_KEY}${walletAddr}`,
+        TEST_KEY,
+      );
       const txHash = '0xnew456';
 
       mockRedisService.getKey.mockResolvedValue(null);
       mockNotificationService.sendNotification.mockResolvedValue('msg-id');
 
       const payload = Object.assign(new WebhookMoralisDto(), {
-        chainId: '0x1', confirmed: true, tag,
+        chainId: '0x1',
+        confirmed: true,
+        tag,
         block: { number: '101', hash: '0xblock2', timestamp: '5678' },
-        abi: [], logs: [], txsInternal: [], retries: 0, streamId: 's2',
-        nftApprovals: { ERC721: [], ERC1155: [] }, nftTransfers: [], nftTokenApprovals: [],
-        nativeBalances: [], erc20Approvals: [], txs: [],
-        erc20Transfers: [{
-          toAddress: `0x${walletAddr}`, hash: txHash,
-          valueWithDecimals: '25.5', tokenSymbol: 'USDT',
-        }],
+        abi: [],
+        logs: [],
+        txsInternal: [],
+        retries: 0,
+        streamId: 's2',
+        nftApprovals: { ERC721: [], ERC1155: [] },
+        nftTransfers: [],
+        nftTokenApprovals: [],
+        nativeBalances: [],
+        erc20Approvals: [],
+        txs: [],
+        erc20Transfers: [
+          {
+            toAddress: `0x${walletAddr}`,
+            hash: txHash,
+            valueWithDecimals: '25.5',
+            tokenSymbol: 'USDT',
+          },
+        ],
       });
 
       await service.handleWebhookMoralis(payload);
@@ -193,15 +258,29 @@ describe('WebhookService', () => {
       mockRedisService.getKey.mockResolvedValue(null);
 
       const payload = Object.assign(new WebhookMoralisDto(), {
-        chainId: '0x1', confirmed: true, tag,
+        chainId: '0x1',
+        confirmed: true,
+        tag,
         block: { number: '102', hash: '0xblock3', timestamp: '9999' },
-        abi: [], logs: [], txsInternal: [], retries: 0, streamId: 's3',
-        nftApprovals: { ERC721: [], ERC1155: [] }, nftTransfers: [], nftTokenApprovals: [],
-        nativeBalances: [], erc20Approvals: [], txs: [],
-        erc20Transfers: [{
-          toAddress: '0xDIFFERENTADDRESS', hash: '0xhash789',
-          valueWithDecimals: '5.0', tokenSymbol: 'DAI',
-        }],
+        abi: [],
+        logs: [],
+        txsInternal: [],
+        retries: 0,
+        streamId: 's3',
+        nftApprovals: { ERC721: [], ERC1155: [] },
+        nftTransfers: [],
+        nftTokenApprovals: [],
+        nativeBalances: [],
+        erc20Approvals: [],
+        txs: [],
+        erc20Transfers: [
+          {
+            toAddress: '0xDIFFERENTADDRESS',
+            hash: '0xhash789',
+            valueWithDecimals: '5.0',
+            tokenSymbol: 'DAI',
+          },
+        ],
       });
 
       const result = await service.handleWebhookMoralis(payload);

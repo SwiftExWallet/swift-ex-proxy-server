@@ -8,7 +8,7 @@ import { NotificationDto } from '../notification/dto/notification.dto';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';
 import {
   getProviderHttpTimeoutMs,
-  withProviderRetry,
+  withProviderControls,
 } from '../common/utils/retry.util';
 import {
   getBlockscoutAllowedHosts,
@@ -151,24 +151,27 @@ export class EvmTxPollerService {
         `&action=gettxreceiptstatus` +
         `&txhash=${encodeURIComponent(tx.txHash)}`;
 
-      const res = await withProviderRetry(async () => {
-        const response = await fetch(url, {
-          headers: { 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(getProviderHttpTimeoutMs()),
-        });
-        if (
-          !response.ok &&
-          (response.status === 408 ||
-            response.status === 429 ||
-            response.status >= 500)
-        ) {
-          const error = new Error(`blockscout HTTP ${response.status}`);
-          (error as any).response = { status: response.status };
-          throw error;
-        }
+      const res = await withProviderControls(
+        'blockscout:evm-tx-poller',
+        async () => {
+          const response = await fetch(url, {
+            headers: { 'Content-Type': 'application/json' },
+            signal: AbortSignal.timeout(getProviderHttpTimeoutMs()),
+          });
+          if (
+            !response.ok &&
+            (response.status === 408 ||
+              response.status === 429 ||
+              response.status >= 500)
+          ) {
+            const error = new Error(`blockscout HTTP ${response.status}`);
+            (error as any).response = { status: response.status };
+            throw error;
+          }
 
-        return response;
-      });
+          return response;
+        },
+      );
 
       if (!res.ok) {
         this.logger.warn(

@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
 import { FustionNativeService } from './1inch.fusion.native.swap.service';
 import {
   decryptFusionSecretState,
@@ -43,7 +43,10 @@ describe('FustionNativeService secret state TTL', () => {
   const encryptionKey = '12345678901234567890123456789012';
   let service: FustionNativeService;
   let redisService: { setKey: jest.Mock; getKey: jest.Mock; delKey: jest.Mock };
-  let swapOrderService: { updateOrderByHash: jest.Mock };
+  let swapOrderService: {
+    updateOrderByHash: jest.Mock;
+    findOrderByHashForDeviceWallet: jest.Mock;
+  };
   let firebaseNotificationService: { sendNotification: jest.Mock };
 
   beforeEach(() => {
@@ -63,6 +66,10 @@ describe('FustionNativeService secret state TTL', () => {
     };
     swapOrderService = {
       updateOrderByHash: jest.fn().mockResolvedValue({}),
+      findOrderByHashForDeviceWallet: jest.fn().mockResolvedValue({
+        ok: true,
+        data: { txHash: 'order-hash' },
+      }),
     };
     firebaseNotificationService = {
       sendNotification: jest.fn().mockResolvedValue(undefined),
@@ -178,6 +185,72 @@ describe('FustionNativeService secret state TTL', () => {
     expect(redisService.setKey).not.toHaveBeenCalled();
   });
 
+  it('verifies device and wallet ownership before confirming native Fusion orders', async () => {
+    const walletAddress = '0x1234567890123456789012345678901234567890';
+    const waitForTransaction = jest
+      .fn()
+      .mockReturnValue(new Promise(() => undefined));
+    jest.spyOn(service, 'getProvider').mockReturnValue({
+      waitForTransaction,
+    } as any);
+    redisService.getKey.mockResolvedValueOnce(
+      encryptFusionSecretState({
+        secrets: [],
+        secretHashes: [],
+        hashLock: null,
+        submittedIdx: [],
+        isCrossChain: false,
+      }),
+    );
+
+    await expect(
+      service.confirmSwapOrder(
+        {
+          orderHash: 'order-hash',
+          txHash: '0xtxhash',
+          srcChain: 'ETH',
+        } as any,
+        'device-id',
+        walletAddress,
+      ),
+    ).resolves.toMatchObject({
+      success: true,
+      typeTx: 'fusion',
+    });
+
+    expect(
+      swapOrderService.findOrderByHashForDeviceWallet,
+    ).toHaveBeenCalledWith('device-id', 'order-hash', walletAddress);
+    expect(redisService.getKey).toHaveBeenCalledWith(
+      'fusion_secrets:order-hash',
+    );
+    expect(waitForTransaction).toHaveBeenCalledWith('0xtxhash', 3);
+  });
+
+  it('rejects native Fusion confirmation before Redis/provider work when the order is not owned', async () => {
+    const walletAddress = '0x1234567890123456789012345678901234567890';
+    const getProvider = jest.spyOn(service, 'getProvider');
+    swapOrderService.findOrderByHashForDeviceWallet.mockResolvedValueOnce({
+      ok: true,
+      data: null,
+    });
+
+    await expect(
+      service.confirmSwapOrder(
+        {
+          orderHash: 'order-hash',
+          txHash: '0xtxhash',
+          srcChain: 'ETH',
+        } as any,
+        'device-id',
+        walletAddress,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(redisService.getKey).not.toHaveBeenCalled();
+    expect(getProvider).not.toHaveBeenCalled();
+  });
+
   it('exhausts native Fusion monitoring after the configured max schedules', async () => {
     process.env.FUSION_NATIVE_SECRET_POLL_MAX_SCHEDULES = '2';
     jest.useFakeTimers();
@@ -209,6 +282,78 @@ describe('FustionNativeService secret state TTL', () => {
     expect(redisService.delKey).toHaveBeenCalledWith(
       'fusion_secrets:order-hash',
     );
+  });
+
+  it('exhausts native Fusion monitoring after the configured provider failure limit', async () => {
+    process.env.FUSION_NATIVE_SECRET_POLL_MAX_SCHEDULES = '10';
+    process.env.FUSION_NATIVE_SECRET_POLL_MAX_PROVIDER_FAILURES = '2';
+    jest.useFakeTimers();
+    redisService.getKey.mockResolvedValue(
+      encryptFusionSecretState({
+        secrets: [],
+        secretHashes: [],
+        hashLock: null,
+        submittedIdx: [],
+        isCrossChain: false,
+      }),
+    );
+    const fusionSdk = {
+      getOrderStatus: jest.fn().mockRejectedValue(new Error('provider down')),
+    };
+    (service as any).fusionSdkMap.set(1, fusionSdk);
+
+    const loop = (service as any).startSecretSubmissionLoop('order-hash', 1);
+
+    await Promise.resolve();
+    await jest.runOnlyPendingTimersAsync();
+    await loop;
+
+    expect(fusionSdk.getOrderStatus).toHaveBeenCalledTimes(2);
+    expect(swapOrderService.updateOrderByHash).toHaveBeenCalledWith({
+      txHash: 'order-hash',
+      orderStatus: SwapOrderStatus.EXHAUSTED,
+    });
+    expect(redisService.delKey).toHaveBeenCalledWith(
+      'fusion_secrets:order-hash',
+    );
+  });
+
+  it('resets native Fusion provider failure count after a successful poll', async () => {
+    process.env.FUSION_NATIVE_SECRET_POLL_MAX_SCHEDULES = '4';
+    process.env.FUSION_NATIVE_SECRET_POLL_MAX_PROVIDER_FAILURES = '2';
+    jest.useFakeTimers();
+    redisService.getKey.mockResolvedValue(
+      encryptFusionSecretState({
+        secrets: [],
+        secretHashes: [],
+        hashLock: null,
+        submittedIdx: [],
+        isCrossChain: false,
+      }),
+    );
+    const fusionSdk = {
+      getOrderStatus: jest
+        .fn()
+        .mockRejectedValueOnce(new Error('provider down once'))
+        .mockResolvedValueOnce({ status: 'Pending' })
+        .mockRejectedValueOnce(new Error('provider down twice'))
+        .mockRejectedValueOnce(new Error('provider down third time')),
+    };
+    (service as any).fusionSdkMap.set(1, fusionSdk);
+
+    const loop = (service as any).startSecretSubmissionLoop('order-hash', 1);
+
+    await Promise.resolve();
+    await jest.runOnlyPendingTimersAsync();
+    await jest.runOnlyPendingTimersAsync();
+    await jest.runOnlyPendingTimersAsync();
+    await loop;
+
+    expect(fusionSdk.getOrderStatus).toHaveBeenCalledTimes(4);
+    expect(swapOrderService.updateOrderByHash).toHaveBeenCalledWith({
+      txHash: 'order-hash',
+      orderStatus: SwapOrderStatus.EXHAUSTED,
+    });
   });
 
   it('returns stable provider errors when native Fusion quote creation fails', async () => {

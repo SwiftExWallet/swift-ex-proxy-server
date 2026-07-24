@@ -1,6 +1,7 @@
 import {
   ExecutionContext,
   HttpException,
+  HttpStatus,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -8,10 +9,28 @@ import {
   RATE_LIMIT_KEY,
   RateLimitConfig,
 } from '../decorators/rate-limit.decorator';
+import { createRedisClient } from '../config/datastore.config';
 import { RateLimitGuard } from './rate-limit.guard';
+
+const mockRedisConsume = jest.fn();
+
+jest.mock('rate-limiter-flexible', () => {
+  const actual = jest.requireActual('rate-limiter-flexible');
+  return {
+    ...actual,
+    RateLimiterRedis: jest.fn().mockImplementation(() => ({
+      consume: mockRedisConsume,
+    })),
+  };
+});
+
+jest.mock('../config/datastore.config', () => ({
+  createRedisClient: jest.fn(() => ({})),
+}));
 
 describe('RateLimitGuard', () => {
   const originalEnv = process.env;
+  const mockCreateRedisClient = createRedisClient as jest.Mock;
   let reflector: { getAllAndOverride: jest.Mock };
   let guard: RateLimitGuard;
 
@@ -21,6 +40,9 @@ describe('RateLimitGuard', () => {
       getAllAndOverride: jest.fn(),
     };
     guard = new RateLimitGuard(reflector as unknown as Reflector);
+    mockRedisConsume.mockReset();
+    mockCreateRedisClient.mockReset();
+    mockCreateRedisClient.mockReturnValue({});
   });
 
   afterEach(() => {
@@ -174,5 +196,111 @@ describe('RateLimitGuard', () => {
     ).rejects.toMatchObject({
       response: expect.objectContaining({ limit: 'global-wallet' }),
     });
+  });
+
+  it('uses memory fallback when Redis-backed limiter fails', async () => {
+    process.env = { ...originalEnv, ENVIRONMENT: 'test' };
+    guard = new RateLimitGuard(reflector as unknown as Reflector);
+    mockRedisConsume.mockRejectedValue(new Error('ECONNRESET'));
+    useLimits([
+      {
+        points: 10,
+        duration: 60,
+        key: 'redis-fallback-test',
+        keyBy: 'ip',
+        fallbackPoints: 1,
+        redisFailurePolicy: 'fallback-memory',
+      },
+    ]);
+
+    await expect(
+      guard.canActivate(createContext({ ip: '127.0.0.1' })),
+    ).resolves.toBe(true);
+    await expect(
+      guard.canActivate(createContext({ ip: '127.0.0.1' })),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        limit: 'redis-fallback-test',
+      }),
+      status: HttpStatus.TOO_MANY_REQUESTS,
+    });
+  });
+
+  it('uses memory fallback when Redis limiter creation fails', async () => {
+    process.env = { ...originalEnv, ENVIRONMENT: 'test' };
+    guard = new RateLimitGuard(reflector as unknown as Reflector);
+    mockCreateRedisClient.mockImplementationOnce(() => {
+      throw new Error('missing redis');
+    });
+    useLimits([
+      {
+        points: 10,
+        duration: 60,
+        key: 'redis-create-fallback-test',
+        keyBy: 'ip',
+        fallbackPoints: 1,
+        redisFailurePolicy: 'fallback-memory',
+      },
+    ]);
+
+    await expect(
+      guard.canActivate(createContext({ ip: '127.0.0.1' })),
+    ).resolves.toBe(true);
+    await expect(
+      guard.canActivate(createContext({ ip: '127.0.0.1' })),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        limit: 'redis-create-fallback-test',
+      }),
+      status: HttpStatus.TOO_MANY_REQUESTS,
+    });
+  });
+
+  it('fails closed when Redis-backed limiter fails and route requires Redis', async () => {
+    process.env = { ...originalEnv, ENVIRONMENT: 'test' };
+    guard = new RateLimitGuard(reflector as unknown as Reflector);
+    mockRedisConsume.mockRejectedValue(new Error('ECONNRESET'));
+    useLimits([
+      {
+        points: 10,
+        duration: 60,
+        key: 'redis-fail-closed-test',
+        keyBy: 'ip',
+        redisFailurePolicy: 'fail-closed',
+      },
+    ]);
+
+    await expect(
+      guard.canActivate(createContext({ ip: '127.0.0.1' })),
+    ).rejects.toMatchObject({
+      response: expect.objectContaining({
+        message: 'Rate limit service unavailable',
+        limit: 'redis-fail-closed-test',
+      }),
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+    });
+  });
+
+  it('fails open when Redis-backed limiter fails and route allows it', async () => {
+    process.env = { ...originalEnv, ENVIRONMENT: 'test' };
+    guard = new RateLimitGuard(reflector as unknown as Reflector);
+    mockRedisConsume.mockRejectedValue(new Error('ECONNRESET'));
+    useLimits([
+      {
+        points: 1,
+        duration: 60,
+        key: 'redis-fail-open-test',
+        keyBy: 'ip',
+        redisFailurePolicy: 'fail-open',
+        fallbackPoints: 1,
+      },
+    ]);
+
+    await expect(
+      guard.canActivate(createContext({ ip: '127.0.0.1' })),
+    ).resolves.toBe(true);
+    await expect(
+      guard.canActivate(createContext({ ip: '127.0.0.1' })),
+    ).resolves.toBe(true);
   });
 });

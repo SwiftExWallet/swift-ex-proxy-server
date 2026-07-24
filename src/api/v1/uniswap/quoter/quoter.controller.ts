@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { QuoterService } from './quoter.service';
 import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
-import { withVerifiedWalletAddress } from '../../common/helpers/requestWallet';
 import { RateLimit } from '../../common/decorators/rate-limit.decorator';
 import {
   BodySizeLimit,
@@ -38,9 +37,7 @@ export class QuoterController {
     },
   )
   async getQuote(@Req() req: any, @Body() body: SwapQuoteDto) {
-    return await this.quoterService.getQuoteResponse(
-      withVerifiedWalletAddress(body, req, 'recipient'),
-    );
+    return await this.quoterService.getQuoteResponse(body, req.wallet?.address);
   }
 
   @Post('swap')
@@ -62,8 +59,6 @@ export class QuoterController {
     },
   )
   async swapBuild(@Req() req: any, @Body() dto: SwapQuoteDto) {
-    return await this.quoterService.buildSwapResponse(
-      withVerifiedWalletAddress(dto, req, 'recipient'),
-    );
+    return await this.quoterService.buildSwapResponse(dto, req.wallet?.address);
   }
 }

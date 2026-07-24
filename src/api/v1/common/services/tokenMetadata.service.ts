@@ -3,7 +3,13 @@ import { Contract, ZeroAddress } from 'ethers';
 import { ETH_ERC20_ABI } from '../abi/eth';
 import { ChainEnum, ChainId } from '../enums/chain.enum';
 import { ProviderService } from '../../provider/provider.service';
-import { SwapQuoteDto, TokenInfoDto } from '../dto/swapQuote.dto';
+import {
+  ResolvedSwapQuoteDto,
+  ResolvedTokenInfoDto,
+  SwapQuoteDto,
+  TokenInfoDto,
+} from '../dto/swapQuote.dto';
+import { withProviderControls } from '../utils/retry.util';
 
 type TokenMetadata = {
   symbol: string;
@@ -37,7 +43,7 @@ export class TokenMetadataService {
 
   constructor(private readonly providerService: ProviderService) {}
 
-  async normalizeSwapQuote(dto: SwapQuoteDto): Promise<SwapQuoteDto> {
+  async normalizeSwapQuote(dto: SwapQuoteDto): Promise<ResolvedSwapQuoteDto> {
     const [tokenIn, tokenOut] = await Promise.all([
       this.resolveToken(dto.tokenIn),
       this.resolveToken(dto.tokenOut),
@@ -50,7 +56,7 @@ export class TokenMetadataService {
     };
   }
 
-  async resolveToken(token: TokenInfoDto): Promise<TokenInfoDto> {
+  async resolveToken(token: TokenInfoDto): Promise<ResolvedTokenInfoDto> {
     const metadata = await this.resolveMetadata(token);
 
     return {
@@ -89,8 +95,10 @@ export class TokenMetadataService {
         this.providerService.getProvider(chain),
       );
       const [symbol, decimalsRaw] = await Promise.all([
-        contract.symbol(),
-        contract.decimals(),
+        withProviderControls('token-metadata:symbol', () => contract.symbol()),
+        withProviderControls('token-metadata:decimals', () =>
+          contract.decimals(),
+        ),
       ]);
       const decimals = Number(decimalsRaw);
 

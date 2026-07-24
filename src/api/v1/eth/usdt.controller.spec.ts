@@ -1,4 +1,3 @@
-import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { UsdtController } from './usdt.controller';
 import {
   BODY_SIZE_LIMIT_KEY,
@@ -41,15 +40,15 @@ describe('UsdtController', () => {
 
     await controller.swapPrepare(req, res, body);
 
-    expect(ethService.prepareUsdtSwapTransaction).toHaveBeenCalledWith({
-      ...body,
-      fromAddress: req.wallet.address,
-    });
+    expect(ethService.prepareUsdtSwapTransaction).toHaveBeenCalledWith(
+      body,
+      req.wallet.address,
+    );
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(result);
   });
 
-  it('uses the verified wallet address when body does not include fromAddress', async () => {
+  it('passes the verified wallet address when body does not include fromAddress', async () => {
     const req = {
       wallet: { address: '0x1234567890123456789012345678901234567890' },
     };
@@ -59,10 +58,10 @@ describe('UsdtController', () => {
 
     await controller.swapPrepare(req, res, body);
 
-    expect(ethService.prepareUsdtSwapTransaction).toHaveBeenCalledWith({
-      amount: body.amount,
-      fromAddress: req.wallet.address,
-    });
+    expect(ethService.prepareUsdtSwapTransaction).toHaveBeenCalledWith(
+      body,
+      req.wallet.address,
+    );
   });
 
   it('allows a matching fromAddress from the request body', async () => {
@@ -78,34 +77,10 @@ describe('UsdtController', () => {
 
     await controller.swapPrepare(req, res, body);
 
-    expect(ethService.prepareUsdtSwapTransaction).toHaveBeenCalledWith(body);
-  });
-
-  it('rejects a body fromAddress that does not match the verified wallet', async () => {
-    const req = {
-      wallet: { address: '0x1234567890123456789012345678901234567890' },
-    };
-    const res = createResponse();
-    const body = {
-      amount: '100',
-      fromAddress: '0x9999999999999999999999999999999999999999',
-    };
-
-    await expect(controller.swapPrepare(req, res, body)).rejects.toBeInstanceOf(
-      ForbiddenException,
+    expect(ethService.prepareUsdtSwapTransaction).toHaveBeenCalledWith(
+      body,
+      req.wallet.address,
     );
-    expect(ethService.prepareUsdtSwapTransaction).not.toHaveBeenCalled();
-    expect(res.status).not.toHaveBeenCalled();
-  });
-
-  it('rejects requests without a verified wallet', async () => {
-    const res = createResponse();
-
-    await expect(
-      controller.swapPrepare({}, res, { amount: '100' } as any),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(ethService.prepareUsdtSwapTransaction).not.toHaveBeenCalled();
-    expect(res.status).not.toHaveBeenCalled();
   });
 
   it('applies a route-specific body size limit to prepare', () => {

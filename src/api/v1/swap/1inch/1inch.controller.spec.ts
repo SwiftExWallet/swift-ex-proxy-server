@@ -14,6 +14,7 @@ describe('inchController', () => {
     buildFusionPlusOrder: jest.fn(),
     submitFusionOrder: jest.fn(),
     submitFusionPlusOrder: jest.fn(),
+    orderStatus: jest.fn(),
     fireCustomNotification: jest.fn(),
   };
   const fustionNativeService = {
@@ -53,7 +54,11 @@ describe('inchController', () => {
 
     await expect(controller.submitOrder(req, dto as any)).resolves.toBe(result);
 
-    expect(inchService.submitFusionOrder).toHaveBeenCalledWith(req.device, dto);
+    expect(inchService.submitFusionOrder).toHaveBeenCalledWith(
+      req.device,
+      dto,
+      req.wallet.address,
+    );
   });
 
   it('passes the authenticated device when submitting a Fusion+ order', async () => {
@@ -79,6 +84,7 @@ describe('inchController', () => {
     expect(inchService.submitFusionPlusOrder).toHaveBeenCalledWith(
       req.device,
       dto,
+      req.wallet.address,
     );
   });
 
@@ -98,10 +104,30 @@ describe('inchController', () => {
       controller.getFusionPlusQuote(reqWithWallet, dto),
     ).resolves.toBe(result);
 
-    expect(inchService.getFusionPlusSwapQuote).toHaveBeenCalledWith({
-      ...dto,
-      walletAddress: reqWithWallet.wallet.address,
-    });
+    expect(inchService.getFusionPlusSwapQuote).toHaveBeenCalledWith(
+      dto,
+      reqWithWallet.wallet.address,
+    );
+  });
+
+  it('passes device and wallet context when refreshing order status', async () => {
+    const dto = {
+      orderHash: '0xorderhash',
+      chain: SwapNetwork.ETH,
+      swapProvider: 'ONEINCH_FUSION',
+    };
+    const result = { status: 'pending' };
+    inchService.orderStatus.mockResolvedValue(result);
+
+    await expect(
+      controller.orderStatus(reqWithWallet, dto as any),
+    ).resolves.toBe(result);
+
+    expect(inchService.orderStatus).toHaveBeenCalledWith(
+      dto,
+      reqWithWallet.device._id,
+      reqWithWallet.wallet.address,
+    );
   });
 
   it('delegates native Fusion+ order creation and confirmation', async () => {
@@ -130,16 +156,20 @@ describe('inchController', () => {
     ).resolves.toEqual({
       order: 'native-order',
     });
-    await expect(controller.confirmOrder(confirmDto)).resolves.toEqual({
+    await expect(
+      controller.confirmOrder(reqWithWallet, confirmDto),
+    ).resolves.toEqual({
       confirmed: true,
     });
 
-    expect(fustionNativeService.createSwapOrder).toHaveBeenCalledWith({
-      ...createDto,
-      walletAddress: reqWithWallet.wallet.address,
-    });
+    expect(fustionNativeService.createSwapOrder).toHaveBeenCalledWith(
+      createDto,
+      reqWithWallet.wallet.address,
+    );
     expect(fustionNativeService.confirmSwapOrder).toHaveBeenCalledWith(
       confirmDto,
+      reqWithWallet.device._id,
+      reqWithWallet.wallet.address,
     );
   });
 
@@ -184,20 +214,40 @@ describe('inchController', () => {
         duration: 60,
         key: 'inch-submit-fusion-plus-order-ip',
         keyBy: 'ip',
+        redisFailurePolicy: 'fail-closed',
       },
       {
         points: 10,
         duration: 60,
         key: 'inch-submit-fusion-plus-order-device',
         keyBy: 'device',
+        redisFailurePolicy: 'fail-closed',
       },
       {
         points: 10,
         duration: 60,
         key: 'inch-submit-fusion-plus-order-wallet',
         keyBy: 'wallet',
+        redisFailurePolicy: 'fail-closed',
       },
     ]);
+  });
+
+  it('fails closed for Redis-backed Fusion+ rate-limit metadata', () => {
+    const redisBackedHandlers = [
+      controller.createFusionPlusOrder,
+      controller.submitFusionPlusOrder,
+      controller.buildFusionPlusNativeOrder,
+      controller.confirmOrder,
+    ];
+
+    for (const handler of redisBackedHandlers) {
+      expect(Reflect.getMetadata(RATE_LIMIT_KEY, handler)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ redisFailurePolicy: 'fail-closed' }),
+        ]),
+      );
+    }
   });
 
   it('applies device-scoped limits to custom notifications', () => {

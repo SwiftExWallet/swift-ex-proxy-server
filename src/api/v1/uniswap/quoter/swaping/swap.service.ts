@@ -11,7 +11,7 @@ import {
 
 import { Token } from '@uniswap/sdk-core';
 
-import { SwapQuoteDto } from '../../../common/dto/swapQuote.dto';
+import { ResolvedSwapQuoteDto } from '../../../common/dto/swapQuote.dto';
 import { SwapQuote } from '../../../common/interface/swap.interface';
 
 import { ETH_PREPARE_ABI } from '../../../common/abi/eth';
@@ -26,6 +26,10 @@ import {
   createProviderBadRequestException,
   throwIfHttpException,
 } from '../../../common/utils/provider-error.util';
+import {
+  type ProviderControlOptions,
+  withProviderControls,
+} from '../../../common/utils/retry.util';
 
 @Injectable()
 export class SwapService {
@@ -33,13 +37,23 @@ export class SwapService {
 
   constructor(private readonly providerService: ProviderService) {}
 
+  private async withProviderControl<T>(
+    action: string,
+    operation: (attempt: number) => Promise<T>,
+    options?: ProviderControlOptions,
+  ): Promise<T> {
+    return withProviderControls(`uniswap:swap:${action}`, operation, options);
+  }
+
   private async estimateNetworkFee(
     chain: SupportedChain,
     isNativeOut: boolean,
     quoterGasEstimate = 0n,
   ): Promise<{ networkFee: string; networkFeeWei: bigint }> {
     try {
-      const feeData = await this.getProvider(chain).getFeeData();
+      const feeData = await this.withProviderControl('fee-data', () =>
+        this.getProvider(chain).getFeeData(),
+      );
       const gasPrice =
         feeData.maxFeePerGas ?? feeData.gasPrice ?? parseUnits('3', 'gwei');
 
@@ -98,7 +112,9 @@ export class SwapService {
   }
 
   private async gasPricing(chain: SupportedChain) {
-    const fee = await this.getProvider(chain).getFeeData();
+    const fee = await this.withProviderControl('fee-data', () =>
+      this.getProvider(chain).getFeeData(),
+    );
 
     const gasPrice = fee.gasPrice ?? parseUnits('3', 'gwei');
 
@@ -115,7 +131,9 @@ export class SwapService {
     fallback: bigint,
   ): Promise<bigint> {
     try {
-      const gas = await this.getProvider(chain).estimateGas(tx);
+      const gas = await this.withProviderControl('estimate-gas', () =>
+        this.getProvider(chain).estimateGas(tx),
+      );
 
       return (gas * 115n) / 100n;
     } catch {
@@ -123,7 +141,10 @@ export class SwapService {
     }
   }
 
-  async getQuote(dto: SwapQuoteDto, slippageBps = 100): Promise<SwapQuote> {
+  async getQuote(
+    dto: ResolvedSwapQuoteDto,
+    slippageBps = 100,
+  ): Promise<SwapQuote> {
     try {
       const chain = this.resolveSupportedChain(dto.tokenIn.chainId);
       const config = this.cfg(chain);
@@ -185,13 +206,18 @@ export class SwapService {
 
       for (const fee of feeTiers) {
         try {
-          const result = await quoter.quoteExactInputSingle.staticCall({
-            tokenIn: tokenIn.address,
-            tokenOut: tokenOut.address,
-            amountIn: amountInWei,
-            fee,
-            sqrtPriceLimitX96: 0n,
-          });
+          const result = await this.withProviderControl(
+            'single-hop-quote',
+            () =>
+              quoter.quoteExactInputSingle.staticCall({
+                tokenIn: tokenIn.address,
+                tokenOut: tokenOut.address,
+                amountIn: amountInWei,
+                fee,
+                sqrtPriceLimitX96: 0n,
+              }),
+            { maxAttempts: 1, shouldRecordFailure: () => false },
+          );
 
           amountOut = result[0];
           gasEstimateFromQuoter = result[3];
@@ -234,7 +260,7 @@ export class SwapService {
   }
 
   async buildSwapTx(
-    dto: SwapQuoteDto,
+    dto: ResolvedSwapQuoteDto,
     slippageBps = 100,
   ): Promise<TransactionRequest[]> {
     try {
@@ -285,8 +311,12 @@ export class SwapService {
       const wallet = dto.recipient;
 
       const [nonce, nativeBalance] = await Promise.all([
-        provider.getTransactionCount(wallet, 'pending'),
-        provider.getBalance(wallet),
+        this.withProviderControl('transaction-count', () =>
+          provider.getTransactionCount(wallet, 'pending'),
+        ),
+        this.withProviderControl('native-balance', () =>
+          provider.getBalance(wallet),
+        ),
       ]);
 
       const gas = await this.gasPricing(chain);
@@ -348,8 +378,12 @@ export class SwapService {
       );
 
       const [tokenBalance, allowance] = await Promise.all([
-        erc20.balanceOf(wallet),
-        erc20.allowance(wallet, router),
+        this.withProviderControl('erc20-balance', () =>
+          erc20.balanceOf(wallet),
+        ),
+        this.withProviderControl('erc20-allowance', () =>
+          erc20.allowance(wallet, router),
+        ),
       ]);
 
       if (tokenBalance < amountInWei) {

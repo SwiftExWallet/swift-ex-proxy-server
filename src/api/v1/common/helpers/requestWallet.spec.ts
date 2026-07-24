@@ -1,8 +1,10 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import {
+  assertVerifiedWalletAddress,
   assertWalletAddressMatches,
   getVerifiedWalletAddress,
   walletAddressesEqual,
+  withExplicitVerifiedWalletAddress,
   withVerifiedWalletAddress,
 } from './requestWallet';
 
@@ -26,6 +28,18 @@ describe('requestWallet helpers', () => {
       expect(() =>
         getVerifiedWalletAddress({ wallet: { address: '   ' } }),
       ).toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('assertVerifiedWalletAddress', () => {
+    it('returns a present verified wallet address', () => {
+      expect(assertVerifiedWalletAddress(walletAddress)).toBe(walletAddress);
+    });
+
+    it('rejects a missing verified wallet address', () => {
+      expect(() => assertVerifiedWalletAddress(undefined)).toThrow(
+        UnauthorizedException,
+      );
     });
   });
 
@@ -117,6 +131,33 @@ describe('requestWallet helpers', () => {
             recipient: '0x9999999999999999999999999999999999999999',
           },
           { wallet: { address: walletAddress } },
+          'recipient',
+        ),
+      ).toThrow(ForbiddenException);
+    });
+  });
+
+  describe('withExplicitVerifiedWalletAddress', () => {
+    it('injects an explicit verified wallet into the requested field', () => {
+      expect(
+        withExplicitVerifiedWalletAddress(
+          { amount: '1' },
+          walletAddress,
+          'recipient',
+        ),
+      ).toEqual({
+        amount: '1',
+        recipient: walletAddress,
+      });
+    });
+
+    it('rejects when the DTO field does not match the explicit verified wallet', () => {
+      expect(() =>
+        withExplicitVerifiedWalletAddress(
+          {
+            recipient: '0x9999999999999999999999999999999999999999',
+          },
+          walletAddress,
           'recipient',
         ),
       ).toThrow(ForbiddenException);

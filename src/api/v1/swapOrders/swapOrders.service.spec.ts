@@ -24,7 +24,7 @@ describe('SwapOrderService wallet ownership', () => {
     );
   });
 
-  it('returns device-scoped orders for a wallet after the wallet is associated with the device', async () => {
+  it('returns wallet orders across devices after the wallet is associated with the device', async () => {
     const query = {
       address: '0x1234567890123456789012345678901234567890',
       page: 1,
@@ -48,7 +48,34 @@ describe('SwapOrderService wallet ownership', () => {
     expect(repository.findByWalletWithPagination).toHaveBeenCalledWith(
       query.address,
       query,
-      'device-id',
+    );
+  });
+
+  it('applies the verified wallet before looking up order history', async () => {
+    const query = {
+      address: '0x9999999999999999999999999999999999999999',
+      page: 1,
+      limit: 10,
+    };
+    const verifiedWalletAddress = '0x1234567890123456789012345678901234567890';
+    const result = { ok: true, data: { data: [], total: 0 } };
+    walletService.verifyWalletForDevice.mockResolvedValue({
+      walletId: 'wallet-id',
+      address: verifiedWalletAddress,
+    });
+    repository.findByWalletWithPagination.mockResolvedValue(result);
+
+    await expect(
+      service.findOrdersForDeviceWallet(
+        'device-id',
+        { ...query, address: verifiedWalletAddress },
+        verifiedWalletAddress,
+      ),
+    ).resolves.toBe(result);
+
+    expect(repository.findByWalletWithPagination).toHaveBeenCalledWith(
+      verifiedWalletAddress,
+      { ...query, address: verifiedWalletAddress },
     );
   });
 
@@ -86,7 +113,6 @@ describe('SwapOrderService wallet ownership', () => {
     expect(repository.findByTxHashForWallet).toHaveBeenCalledWith(
       '0xorderhash',
       '0x1234567890123456789012345678901234567890',
-      'device-id',
     );
   });
 

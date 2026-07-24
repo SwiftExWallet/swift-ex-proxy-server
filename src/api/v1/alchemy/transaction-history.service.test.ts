@@ -70,45 +70,87 @@ describe('TransactionHistoryService', () => {
     });
 
     it('combines sent and received transfers', async () => {
-      const sentTx = { hash: '0xsent', blockNum: '0x64', category: 'external', rawContract: { value: '1000000000000000000', address: null, decimal: '18' } };
-      const receivedTx = { hash: '0xreceived', blockNum: '0x63', category: 'external', rawContract: { value: '500000000000000000', address: null, decimal: '18' } };
+      const sentTx = {
+        hash: '0xsent',
+        blockNum: '0x64',
+        category: 'external',
+        rawContract: {
+          value: '1000000000000000000',
+          address: null,
+          decimal: '18',
+        },
+      };
+      const receivedTx = {
+        hash: '0xreceived',
+        blockNum: '0x63',
+        category: 'external',
+        rawContract: {
+          value: '500000000000000000',
+          address: null,
+          decimal: '18',
+        },
+      };
 
       mockGetAssetTransfers
         .mockResolvedValueOnce({ transfers: [sentTx], pageKey: null })
         .mockResolvedValueOnce({ transfers: [receivedTx], pageKey: null });
 
       const result = await service.getWalletTransactionHistory({
-        walletAddress, chain: ChainEnum.ETH, sentPageKey: undefined, receivedPageKey: undefined,
+        walletAddress,
+        chain: ChainEnum.ETH,
+        sentPageKey: undefined,
+        receivedPageKey: undefined,
       });
 
       expect(result.data).toHaveLength(2);
-      expect(result.data.map(t => t.hash)).toContain('0xsent');
-      expect(result.data.map(t => t.hash)).toContain('0xreceived');
+      expect(result.data.map((t) => t.hash)).toContain('0xsent');
+      expect(result.data.map((t) => t.hash)).toContain('0xreceived');
     });
 
     it('deduplicates transfers with the same hash', async () => {
-      const tx = { hash: '0xdup', blockNum: '0x64', category: 'external', rawContract: { value: '0', address: null, decimal: '18' } };
+      const tx = {
+        hash: '0xdup',
+        blockNum: '0x64',
+        category: 'external',
+        rawContract: { value: '0', address: null, decimal: '18' },
+      };
       mockGetAssetTransfers
         .mockResolvedValueOnce({ transfers: [tx], pageKey: null })
         .mockResolvedValueOnce({ transfers: [tx], pageKey: null });
 
       const result = await service.getWalletTransactionHistory({
-        walletAddress, chain: ChainEnum.ETH, sentPageKey: undefined, receivedPageKey: undefined,
+        walletAddress,
+        chain: ChainEnum.ETH,
+        sentPageKey: undefined,
+        receivedPageKey: undefined,
       });
 
       expect(result.data).toHaveLength(1);
     });
 
     it('sorts results by block number descending', async () => {
-      const tx1 = { hash: '0xA', blockNum: '0x63', category: 'external', rawContract: { value: '0', address: null, decimal: '18' } };
-      const tx2 = { hash: '0xB', blockNum: '0x65', category: 'external', rawContract: { value: '0', address: null, decimal: '18' } };
+      const tx1 = {
+        hash: '0xA',
+        blockNum: '0x63',
+        category: 'external',
+        rawContract: { value: '0', address: null, decimal: '18' },
+      };
+      const tx2 = {
+        hash: '0xB',
+        blockNum: '0x65',
+        category: 'external',
+        rawContract: { value: '0', address: null, decimal: '18' },
+      };
 
       mockGetAssetTransfers
         .mockResolvedValueOnce({ transfers: [tx1], pageKey: null })
         .mockResolvedValueOnce({ transfers: [tx2], pageKey: null });
 
       const result = await service.getWalletTransactionHistory({
-        walletAddress, chain: ChainEnum.ETH, sentPageKey: undefined, receivedPageKey: undefined,
+        walletAddress,
+        chain: ChainEnum.ETH,
+        sentPageKey: undefined,
+        receivedPageKey: undefined,
       });
 
       expect(result.data[0].hash).toBe('0xB');
@@ -117,8 +159,14 @@ describe('TransactionHistoryService', () => {
 
     it('fetches token metadata for erc20 transfers', async () => {
       const erc20Tx = {
-        hash: '0xerc', blockNum: '0x64', category: 'erc20',
-        rawContract: { value: '1000000', address: '0xTokenAddr', decimal: null },
+        hash: '0xerc',
+        blockNum: '0x64',
+        category: 'erc20',
+        rawContract: {
+          value: '1000000',
+          address: '0xTokenAddr',
+          decimal: null,
+        },
         asset: null,
       };
 
@@ -127,7 +175,10 @@ describe('TransactionHistoryService', () => {
         .mockResolvedValueOnce({ transfers: [], pageKey: null });
 
       const result = await service.getWalletTransactionHistory({
-        walletAddress, chain: ChainEnum.ETH, sentPageKey: undefined, receivedPageKey: undefined,
+        walletAddress,
+        chain: ChainEnum.ETH,
+        sentPageKey: undefined,
+        receivedPageKey: undefined,
       });
 
       expect(mockGetTokenMetadata).toHaveBeenCalledWith('0xtokenaddr');
@@ -137,7 +188,9 @@ describe('TransactionHistoryService', () => {
     it('falls back to UNKNOWN when metadata fetch fails', async () => {
       mockGetTokenMetadata.mockRejectedValue(new Error('fetch failed'));
       const erc20Tx = {
-        hash: '0xerr', blockNum: '0x64', category: 'erc20',
+        hash: '0xerr',
+        blockNum: '0x64',
+        category: 'erc20',
         rawContract: { value: '0', address: '0xBadAddr', decimal: null },
         asset: null,
       };
@@ -147,7 +200,10 @@ describe('TransactionHistoryService', () => {
         .mockResolvedValueOnce({ transfers: [], pageKey: null });
 
       const result = await service.getWalletTransactionHistory({
-        walletAddress, chain: ChainEnum.ETH, sentPageKey: undefined, receivedPageKey: undefined,
+        walletAddress,
+        chain: ChainEnum.ETH,
+        sentPageKey: undefined,
+        receivedPageKey: undefined,
       });
 
       expect(result.data[0].asset).toBe('UNKNOWN');
@@ -159,7 +215,10 @@ describe('TransactionHistoryService', () => {
         .mockResolvedValueOnce({ transfers: [], pageKey: null });
 
       const result = await service.getWalletTransactionHistory({
-        walletAddress, chain: ChainEnum.ETH, sentPageKey: undefined, receivedPageKey: undefined,
+        walletAddress,
+        chain: ChainEnum.ETH,
+        sentPageKey: undefined,
+        receivedPageKey: undefined,
       });
 
       expect(result.pagination.nextSentPageKey).toBe('sent-next');

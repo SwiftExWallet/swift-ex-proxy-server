@@ -7,12 +7,6 @@ import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 import { WalletAddressDto } from '../common/dto/walletAddress.dto';
 import { ExecuteSwapTransactionsDto } from './dto/executeSwapTransactions.dto';
-import { TokenMetadataService } from '../common/services/tokenMetadata.service';
-import {
-  assertWalletAddressMatches,
-  getVerifiedWalletAddress,
-  withVerifiedWalletAddress,
-} from '../common/helpers/requestWallet';
 import {
   RateLimit,
   rateLimitByIpDeviceAndWallet,
@@ -24,10 +18,7 @@ import {
 
 @Controller('/api/v1/eth')
 export class EthController {
-  constructor(
-    private readonly ethService: EthService,
-    private readonly tokenMetadataService: TokenMetadataService,
-  ) {}
+  constructor(private readonly ethService: EthService) {}
   @Post('swap-quote')
   @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'eth-swap-quote')
   @RateLimit(
@@ -42,10 +33,10 @@ export class EthController {
     @Res() res,
     @Body() swapQuoteDto: SwapQuoteDto,
   ) {
-    const normalizedDto = await this.tokenMetadataService.normalizeSwapQuote(
-      withVerifiedWalletAddress(swapQuoteDto, req, 'recipient'),
+    const data = await this.ethService.getSwapQuote(
+      swapQuoteDto,
+      req.wallet?.address,
     );
-    const data = await this.ethService.getSwapQuote(normalizedDto);
     res.status(200).json(data);
   }
 
@@ -85,15 +76,10 @@ export class EthController {
     @Res() res,
     @Body() swapPrepareDto: SwapPrepareDto | SwapQuoteDto,
   ) {
-    const verifiedDto =
-      'tokenIn' in swapPrepareDto && 'tokenOut' in swapPrepareDto
-        ? withVerifiedWalletAddress(swapPrepareDto, req, 'recipient')
-        : withVerifiedWalletAddress(swapPrepareDto, req, 'address');
-    const normalizedDto =
-      'tokenIn' in verifiedDto && 'tokenOut' in verifiedDto
-        ? await this.tokenMetadataService.normalizeSwapQuote(verifiedDto)
-        : verifiedDto;
-    const data = await this.ethService.prepareSwapTransaction(normalizedDto);
+    const data = await this.ethService.prepareSwapTransaction(
+      swapPrepareDto,
+      req.wallet?.address,
+    );
     res.status(200).json(data);
   }
 
@@ -135,7 +121,8 @@ export class EthController {
     @Body() getTokenInfoDto: GetTokenInfoDto,
   ) {
     const data = await this.ethService.getTokenInfo(
-      withVerifiedWalletAddress(getTokenInfoDto, req),
+      getTokenInfoDto,
+      req.wallet?.address,
     );
     res.status(200).json(data);
   }
@@ -155,7 +142,8 @@ export class EthController {
     @Body() prepareTransactionDto: PrepareTransactionDto,
   ) {
     const data = await this.ethService.prepareTransaction(
-      withVerifiedWalletAddress(prepareTransactionDto, req),
+      prepareTransactionDto,
+      req.wallet?.address,
     );
     res.status(200).json(data);
   }
@@ -173,14 +161,10 @@ export class EthController {
     @Res() res,
     @Param() walletAddressDto: WalletAddressDto,
   ) {
-    const verifiedWalletAddress = getVerifiedWalletAddress(req);
-    assertWalletAddressMatches(
-      walletAddressDto.walletAddress,
-      verifiedWalletAddress,
+    const data = await this.ethService.getBalance(
+      walletAddressDto,
+      req.wallet?.address,
     );
-    const data = await this.ethService.getBalance({
-      walletAddress: verifiedWalletAddress,
-    });
     res.status(200).json(data);
   }
 
@@ -197,14 +181,10 @@ export class EthController {
     @Res() res,
     @Param() walletAddressDto: WalletAddressDto,
   ) {
-    const verifiedWalletAddress = getVerifiedWalletAddress(req);
-    assertWalletAddressMatches(
-      walletAddressDto.walletAddress,
-      verifiedWalletAddress,
+    const data = await this.ethService.getWalletAddressInfo(
+      walletAddressDto,
+      req.wallet?.address,
     );
-    const data = await this.ethService.getWalletAddressInfo({
-      walletAddress: verifiedWalletAddress,
-    });
     res.status(200).json(data);
   }
 }

@@ -26,6 +26,7 @@ import {
   ProviderErrorCode,
   throwIfHttpException,
 } from '../../common/utils/provider-error.util';
+import { withExplicitVerifiedWalletAddress } from '../../common/helpers/requestWallet';
 
 @Injectable()
 export class AllBridgeService {
@@ -52,7 +53,17 @@ export class AllBridgeService {
     return tokens.find((token) => token.symbol === sourceToken);
   }
 
-  async prepareTransaction(swapDto: AllBridgeSwapADto) {
+  async prepareTransaction(
+    swapDto: AllBridgeSwapADto,
+    verifiedWalletAddress?: string,
+  ) {
+    const verifiedSwapDto = verifiedWalletAddress
+      ? withExplicitVerifiedWalletAddress(
+          swapDto,
+          verifiedWalletAddress,
+          'fromAddress',
+        )
+      : swapDto;
     try {
       const {
         fromAddress,
@@ -63,7 +74,7 @@ export class AllBridgeService {
         walletType,
         feePayType,
         destinationWalletType,
-      } = swapDto;
+      } = verifiedSwapDto;
 
       const sourceTokenCoin = await this.fetchTokens(sourceToken, walletType);
       const destinationTokenCoin = await this.fetchTokens(

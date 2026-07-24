@@ -62,11 +62,10 @@ export class SwapOrderRepository {
   async findByTxHashForWallet(
     txHash: string,
     walletAddress: string,
-    deviceId: string,
   ): Promise<DbResult<SwapOrders | null>> {
     try {
       const data = await this.model
-        .findOne({ txHash, walletAddress, deviceId })
+        .findOne({ txHash, walletAddress })
         .select(PUBLIC_ORDER_SELECT)
         .exec();
       return { ok: true, data };
@@ -74,27 +73,22 @@ export class SwapOrderRepository {
       this.logger.error('findByTxHashForWallet failed', {
         txHash,
         walletAddress,
-        deviceId,
         err,
       });
       return { ok: false, error: 'findByTxHashForWallet failed' };
     }
   }
 
-  async findByWallet(
-    deviceId: string,
-    walletAddress: string,
-  ): Promise<DbResult<SwapOrders[]>> {
+  async findByWallet(walletAddress: string): Promise<DbResult<SwapOrders[]>> {
     try {
       const data = await this.model
-        .find({ deviceId, walletAddress })
+        .find({ walletAddress })
         .sort({ _id: -1 })
         .select(PUBLIC_ORDER_SELECT)
         .exec();
       return { ok: true, data };
     } catch (err) {
       this.logger.error('findByWallet failed', {
-        deviceId,
         walletAddress,
         err,
       });
@@ -218,7 +212,6 @@ export class SwapOrderRepository {
   async findByWalletWithPagination(
     walletAddress: string,
     pagination: PaginationDto,
-    deviceId: string,
   ): Promise<DbResult<PaginatedResult<SwapOrders>>> {
     try {
       const page = pagination.page ?? 1;
@@ -226,9 +219,9 @@ export class SwapOrderRepository {
       const skip = (page - 1) * limit;
 
       const [total, data] = await Promise.all([
-        this.model.countDocuments({ walletAddress, deviceId }),
+        this.model.countDocuments({ walletAddress }),
         this.model
-          .find({ walletAddress, deviceId })
+          .find({ walletAddress })
           .select(PUBLIC_ORDER_SELECT)
           .sort({ _id: -1 })
           .skip(skip)
@@ -253,7 +246,6 @@ export class SwapOrderRepository {
     } catch (err) {
       this.logger.error('findByWallet failed', {
         walletAddress,
-        deviceId,
         err,
       });
       return { ok: false, error: 'findByWallet failed' };

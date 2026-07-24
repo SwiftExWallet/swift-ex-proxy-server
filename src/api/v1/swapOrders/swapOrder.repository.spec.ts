@@ -134,13 +134,13 @@ describe('SwapOrderRepository', () => {
     });
   });
 
-  it('finds a public order by transaction hash, wallet, and device', async () => {
+  it('finds a public order by transaction hash and wallet', async () => {
     const order = { txHash: '0xtxhash', walletAddress: '0xwallet' };
     const query = createQuery(order);
     model.findOne.mockReturnValue(query);
 
     await expect(
-      repository.findByTxHashForWallet('0xtxhash', '0xwallet', 'device-id'),
+      repository.findByTxHashForWallet('0xtxhash', '0xwallet'),
     ).resolves.toEqual({
       ok: true,
       data: order,
@@ -149,26 +149,22 @@ describe('SwapOrderRepository', () => {
     expect(model.findOne).toHaveBeenCalledWith({
       txHash: '0xtxhash',
       walletAddress: '0xwallet',
-      deviceId: 'device-id',
     });
     expect(query.select).toHaveBeenCalledWith(publicOrderSelect);
     expect(query.exec).toHaveBeenCalledTimes(1);
   });
 
-  it('finds public orders for a wallet scoped to the device', async () => {
+  it('finds public orders for a wallet across devices', async () => {
     const orders = [{ txHash: '0xtxhash' }];
     const query = createQuery(orders);
     model.find.mockReturnValue(query);
 
-    await expect(
-      repository.findByWallet('device-id', '0xwallet'),
-    ).resolves.toEqual({
+    await expect(repository.findByWallet('0xwallet')).resolves.toEqual({
       ok: true,
       data: orders,
     });
 
     expect(model.find).toHaveBeenCalledWith({
-      deviceId: 'device-id',
       walletAddress: '0xwallet',
     });
     expect(query.sort).toHaveBeenCalledWith({ _id: -1 });
@@ -311,18 +307,14 @@ describe('SwapOrderRepository', () => {
     });
   });
 
-  it('finds wallet orders with pagination scoped to device', async () => {
+  it('finds wallet orders with pagination across devices', async () => {
     const orders = [{ txHash: '0xtxhash' }];
     const query = createQuery(orders);
     model.countDocuments.mockResolvedValue(12);
     model.find.mockReturnValue(query);
 
     await expect(
-      repository.findByWalletWithPagination(
-        '0xwallet',
-        { page: 2, limit: 5 },
-        'device-id',
-      ),
+      repository.findByWalletWithPagination('0xwallet', { page: 2, limit: 5 }),
     ).resolves.toEqual({
       ok: true,
       data: {
@@ -338,11 +330,9 @@ describe('SwapOrderRepository', () => {
 
     expect(model.countDocuments).toHaveBeenCalledWith({
       walletAddress: '0xwallet',
-      deviceId: 'device-id',
     });
     expect(model.find).toHaveBeenCalledWith({
       walletAddress: '0xwallet',
-      deviceId: 'device-id',
     });
     expect(query.select).toHaveBeenCalledWith(publicOrderSelect);
     expect(query.sort).toHaveBeenCalledWith({ _id: -1 });

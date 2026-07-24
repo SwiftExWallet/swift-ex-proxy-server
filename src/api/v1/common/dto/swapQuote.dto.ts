@@ -1,7 +1,6 @@
 import {
   IsEnum,
   IsNotEmpty,
-  IsNumberString,
   IsOptional,
   IsString,
   Matches,
@@ -17,19 +16,9 @@ export class TokenInfoDto {
   )
   address: string;
 
-  // TODO(next build): remove client-supplied symbol/decimals from the public DTO.
-  // The server resolves and overwrites both values before quoting.
-  @IsNotEmpty()
-  @IsString()
-  symbol: string;
-
   @IsNotEmpty()
   @IsEnum(ChainId)
   chainId: number;
-
-  @IsNotEmpty()
-  @IsNumberString()
-  decimals: string;
 }
 
 export class SwapQuoteDto {
@@ -51,3 +40,16 @@ export class SwapQuoteDto {
   @IsOptional()
   slippage?: number;
 }
+
+export interface ResolvedTokenInfoDto extends TokenInfoDto {
+  symbol: string;
+  decimals: string;
+}
+
+export type ResolvedSwapQuoteDto = Omit<
+  SwapQuoteDto,
+  'tokenIn' | 'tokenOut'
+> & {
+  tokenIn: ResolvedTokenInfoDto;
+  tokenOut: ResolvedTokenInfoDto;
+};

@@ -1,6 +1,9 @@
 import {
+  getProviderControlConfig,
   getProviderRetryConfig,
   isTransientProviderError,
+  resetProviderControlsForTesting,
+  withProviderControls,
   withProviderRetry,
 } from './retry.util';
 
@@ -9,6 +12,7 @@ describe('retry util', () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    resetProviderControlsForTesting();
     jest.useFakeTimers();
   });
 
@@ -29,6 +33,20 @@ describe('retry util', () => {
       maxAttempts: 4,
       baseDelayMs: 250,
       maxDelayMs: 2000,
+    });
+  });
+
+  it('loads provider control config from environment with defaults', () => {
+    process.env.PROVIDER_CIRCUIT_BREAKER_FAILURE_THRESHOLD = '7';
+    process.env.PROVIDER_CIRCUIT_BREAKER_OPEN_MS = '12000';
+    process.env.PROVIDER_BULKHEAD_MAX_CONCURRENT = '3';
+    process.env.PROVIDER_BULKHEAD_QUEUE_LIMIT = '9';
+
+    expect(getProviderControlConfig()).toEqual({
+      failureThreshold: 7,
+      openMs: 12000,
+      maxConcurrent: 3,
+      queueLimit: 9,
     });
   });
 
@@ -87,5 +105,82 @@ describe('retry util', () => {
     expect(isTransientProviderError({ response: { status: 503 } })).toBe(true);
     expect(isTransientProviderError({ response: { status: 400 } })).toBe(false);
     expect(isTransientProviderError({ name: 'AbortError' })).toBe(true);
+  });
+
+  it('opens circuit after the configured controlled-call failure threshold', async () => {
+    const key = 'test:circuit';
+    const error = { response: { status: 503 } };
+    const operation = jest.fn().mockRejectedValue(error);
+
+    await expect(
+      withProviderControls(key, operation, {
+        maxAttempts: 1,
+        failureThreshold: 2,
+        openMs: 1000,
+      }),
+    ).rejects.toBe(error);
+    await expect(
+      withProviderControls(key, operation, {
+        maxAttempts: 1,
+        failureThreshold: 2,
+        openMs: 1000,
+      }),
+    ).rejects.toBe(error);
+    await expect(
+      withProviderControls(key, operation, {
+        maxAttempts: 1,
+        failureThreshold: 2,
+        openMs: 1000,
+      }),
+    ).rejects.toMatchObject({ code: 'PROVIDER_CIRCUIT_OPEN' });
+
+    operation.mockResolvedValueOnce('ok');
+    await jest.advanceTimersByTimeAsync(1000);
+
+    await expect(
+      withProviderControls(key, operation, {
+        maxAttempts: 1,
+        failureThreshold: 2,
+        openMs: 1000,
+      }),
+    ).resolves.toBe('ok');
+  });
+
+  it('rejects controlled calls when the provider bulkhead queue is full', async () => {
+    const key = 'test:bulkhead';
+    let releaseFirst: (value: string) => void = () => undefined;
+    const first = withProviderControls(
+      key,
+      () =>
+        new Promise<string>((resolve) => {
+          releaseFirst = resolve;
+        }),
+      {
+        maxAttempts: 1,
+        timeoutMs: 1000,
+        maxConcurrent: 1,
+        queueLimit: 1,
+      },
+    );
+    const second = withProviderControls(key, () => Promise.resolve('second'), {
+      maxAttempts: 1,
+      timeoutMs: 1000,
+      maxConcurrent: 1,
+      queueLimit: 1,
+    });
+
+    await expect(
+      withProviderControls(key, () => Promise.resolve('third'), {
+        maxAttempts: 1,
+        timeoutMs: 1000,
+        maxConcurrent: 1,
+        queueLimit: 1,
+      }),
+    ).rejects.toMatchObject({ code: 'PROVIDER_BULKHEAD_REJECTED' });
+
+    releaseFirst('first');
+
+    await expect(first).resolves.toBe('first');
+    await expect(second).resolves.toBe('second');
   });
 });

@@ -4,6 +4,8 @@ export enum ProviderErrorCode {
   RequestFailed = 'PROVIDER_REQUEST_FAILED',
   Timeout = 'PROVIDER_TIMEOUT',
   RateLimited = 'PROVIDER_RATE_LIMITED',
+  CircuitOpen = 'PROVIDER_CIRCUIT_OPEN',
+  ProviderBusy = 'PROVIDER_BUSY',
   BadResponse = 'PROVIDER_BAD_RESPONSE',
   RouteNotFound = 'PROVIDER_ROUTE_NOT_FOUND',
   TransactionRejected = 'PROVIDER_TRANSACTION_REJECTED',
@@ -31,6 +33,9 @@ const SAFE_PROVIDER_MESSAGES: Record<ProviderErrorCode, string> = {
   [ProviderErrorCode.Timeout]: 'Provider request timed out.',
   [ProviderErrorCode.RateLimited]:
     'Provider rate limit exceeded. Please try again later.',
+  [ProviderErrorCode.CircuitOpen]:
+    'Provider is temporarily unavailable. Please try again later.',
+  [ProviderErrorCode.ProviderBusy]: 'Provider is busy. Please try again later.',
   [ProviderErrorCode.BadResponse]: 'Provider rejected the request.',
   [ProviderErrorCode.RouteNotFound]:
     'No provider route was found for this request.',
@@ -80,6 +85,14 @@ export function classifyProviderError(
   const candidate = getErrorLike(error);
   const status = candidate.response?.status;
   const fingerprint = buildProviderFingerprint(error);
+
+  if (candidate.code === ProviderErrorCode.CircuitOpen) {
+    return ProviderErrorCode.CircuitOpen;
+  }
+
+  if (candidate.code === 'PROVIDER_BULKHEAD_REJECTED') {
+    return ProviderErrorCode.ProviderBusy;
+  }
 
   if (
     status === 408 ||

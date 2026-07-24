@@ -19,7 +19,7 @@ describe('SwapOrdersController', () => {
     controller = new SwapOrdersController(swapOrderService as any);
   });
 
-  it('gets orders for the verified wallet on the authenticated device', async () => {
+  it('gets orders for the verified wallet after authenticating the device wallet', async () => {
     const req = {
       device: { _id: 'device-id' },
       wallet: { address: '0x1234567890123456789012345678901234567890' },
@@ -36,14 +36,12 @@ describe('SwapOrdersController', () => {
 
     expect(swapOrderService.findOrdersForDeviceWallet).toHaveBeenCalledWith(
       'device-id',
-      {
-        ...query,
-        address: req.wallet.address,
-      },
+      query,
+      req.wallet.address,
     );
   });
 
-  it('gets an order only when the tx hash matches the verified wallet and device', async () => {
+  it('gets an order only when the tx hash matches the verified wallet', async () => {
     const req = {
       device: { _id: 'device-id' },
       wallet: { address: '0x1234567890123456789012345678901234567890' },
@@ -59,7 +57,14 @@ describe('SwapOrdersController', () => {
 
     expect(
       swapOrderService.findOrderByHashForDeviceWallet,
-    ).toHaveBeenCalledWith('device-id', '0xorderhash', req.wallet.address);
+    ).toHaveBeenCalledWith(
+      'device-id',
+      '0xorderhash',
+      {
+        address: '0x1234567890123456789012345678901234567890',
+      },
+      req.wallet.address,
+    );
   });
 
   it('applies wallet-scoped limits to order reads and device limits to bridge status', () => {

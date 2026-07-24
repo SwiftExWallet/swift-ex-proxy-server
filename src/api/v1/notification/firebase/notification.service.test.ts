@@ -21,7 +21,9 @@ describe('FirebaseNotificationService', () => {
       providers: [FirebaseNotificationService],
     }).compile();
 
-    service = module.get<FirebaseNotificationService>(FirebaseNotificationService);
+    service = module.get<FirebaseNotificationService>(
+      FirebaseNotificationService,
+    );
   });
 
   it('should be defined', () => {

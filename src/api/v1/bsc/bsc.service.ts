@@ -10,7 +10,10 @@ import {
 } from 'ethers';
 import { JsonRpcProvider, Contract } from 'ethers';
 
-import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
+import {
+  ResolvedSwapQuoteDto,
+  SwapQuoteDto,
+} from '../common/dto/swapQuote.dto';
 import {
   getErc20ContractTokenBalance,
   getEstimateGas,
@@ -37,6 +40,9 @@ import {
   ProviderErrorCode,
   throwIfHttpException,
 } from '../common/utils/provider-error.util';
+import { withProviderControls } from '../common/utils/retry.util';
+import { TokenMetadataService } from '../common/services/tokenMetadata.service';
+import { withExplicitVerifiedWalletAddress } from '../common/helpers/requestWallet';
 
 @Injectable()
 export class BscService {
@@ -47,6 +53,7 @@ export class BscService {
   constructor(
     private readonly providerService: ProviderService,
     private readonly pancakeSwapService: PancakeSwapService,
+    private readonly tokenMetadataService: TokenMetadataService,
   ) {
     const routerAddress = process.env.BSC_ROUTER_ADDRESS;
 
@@ -63,18 +70,34 @@ export class BscService {
     );
   }
 
-  async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<string> {
+  private async withProviderControl<T>(
+    action: string,
+    operation: (attempt: number) => Promise<T>,
+  ): Promise<T> {
+    return withProviderControls(`bsc:service:${action}`, operation);
+  }
+
+  async getSwapQuote(
+    swapQuoteDto: SwapQuoteDto | ResolvedSwapQuoteDto,
+    verifiedWalletAddress?: string,
+  ): Promise<string> {
     try {
+      const resolvedDto = verifiedWalletAddress
+        ? await this.normalizeSwapQuoteForWallet(
+            swapQuoteDto,
+            verifiedWalletAddress,
+          )
+        : (swapQuoteDto as ResolvedSwapQuoteDto);
       if (process.env.ENVIRONMENT === 'prod') {
-        return await this.pancakeSwapService.getSwapQuote(swapQuoteDto);
+        return await this.pancakeSwapService.getSwapQuote(resolvedDto);
       }
-      const { tokenIn, tokenOut, amount } = swapQuoteDto;
+      const { tokenIn, tokenOut, amount } = resolvedDto;
       const path: [string, string] = [tokenIn.address, tokenOut.address];
 
       const amountIn: bigint = parseEther(amount);
-      const amountsOut: bigint[] = (await this.routerContract.getAmountsOut(
-        amountIn,
-        path,
+      const amountsOut: bigint[] = (await this.withProviderControl(
+        'router-amounts-out',
+        () => this.routerContract.getAmountsOut(amountIn, path),
       )) as bigint[];
 
       return formatUnits(amountsOut[1], tokenIn.decimals);
@@ -85,17 +108,23 @@ export class BscService {
   }
 
   async prepareSwapTransaction(
-    prepareSwapTransactionDto: SwapQuoteDto,
+    prepareSwapTransactionDto: SwapQuoteDto | ResolvedSwapQuoteDto,
+    verifiedWalletAddress?: string,
   ): Promise<any> {
     try {
+      const resolvedDto = verifiedWalletAddress
+        ? await this.normalizeSwapQuoteForWallet(
+            prepareSwapTransactionDto,
+            verifiedWalletAddress,
+          )
+        : (prepareSwapTransactionDto as ResolvedSwapQuoteDto);
       if (process.env.ENVIRONMENT === 'prod') {
         return await this.pancakeSwapService.createUnsignedSwapTransaction(
-          prepareSwapTransactionDto,
+          resolvedDto,
         );
       }
 
-      const { recipient, tokenIn, tokenOut, amount } =
-        prepareSwapTransactionDto;
+      const { recipient, tokenIn, tokenOut, amount } = resolvedDto;
       const path: [string, string] = [
         getAddress(tokenIn.address),
         getAddress(tokenOut.address),
@@ -103,9 +132,9 @@ export class BscService {
 
       const amountIn: bigint = parseEther(amount);
 
-      const amountsOut: bigint[] = (await this.routerContract.getAmountsOut(
-        amountIn,
-        path,
+      const amountsOut: bigint[] = (await this.withProviderControl(
+        'router-amounts-out',
+        () => this.routerContract.getAmountsOut(amountIn, path),
       )) as bigint[];
 
       const slippagePercent = Number(process.env.BSC_SLIPPAGE ?? '5'); // fallback to 5 if undefined
@@ -180,8 +209,10 @@ export class BscService {
 
         this.logger.log(`Broadcasting transaction ${i + 1}/${txArray.length}`);
 
-        const txResponse: TransactionResponse =
-          await this.provider.broadcastTransaction(signedTransaction);
+        const txResponse: TransactionResponse = await this.withProviderControl(
+          'broadcast',
+          () => this.provider.broadcastTransaction(signedTransaction),
+        );
 
         this.logger.log(`Transaction ${i + 1} broadcasted: ${txResponse.hash}`);
 
@@ -216,9 +247,15 @@ export class BscService {
 
   async getUsdtTokenBalance(
     usdtBalanceDto: UsdtBalanceDto,
+    verifiedWalletAddress?: string,
   ): Promise<{ walletBalance: bigint; tokenBalance: bigint }> {
     try {
-      const { walletAddress, tokenAddress } = usdtBalanceDto;
+      const { walletAddress, tokenAddress } = verifiedWalletAddress
+        ? withExplicitVerifiedWalletAddress(
+            usdtBalanceDto,
+            verifiedWalletAddress,
+          )
+        : usdtBalanceDto;
       const walletAddressDto: WalletAddressDto = {
         walletAddress: walletAddress as string,
       };
@@ -238,9 +275,17 @@ export class BscService {
     }
   }
 
-  async getBalance(walletAddressDto: WalletAddressDto): Promise<bigint> {
+  async getBalance(
+    walletAddressDto: WalletAddressDto,
+    verifiedWalletAddress?: string,
+  ): Promise<bigint> {
     try {
-      const { walletAddress } = walletAddressDto;
+      const { walletAddress } = verifiedWalletAddress
+        ? withExplicitVerifiedWalletAddress(
+            walletAddressDto,
+            verifiedWalletAddress,
+          )
+        : walletAddressDto;
       return await getNativeCurrencyBalance(walletAddress, this.provider);
     } catch (error) {
       throw createProviderBadRequestException(error);
@@ -249,9 +294,15 @@ export class BscService {
 
   async getWalletAddressInfo(
     walletAddressDto: WalletAddressDto,
+    verifiedWalletAddress?: string,
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
     try {
-      const { walletAddress } = walletAddressDto;
+      const { walletAddress } = verifiedWalletAddress
+        ? withExplicitVerifiedWalletAddress(
+            walletAddressDto,
+            verifiedWalletAddress,
+          )
+        : walletAddressDto;
       const [transactionCount, gasFeeData] = await Promise.all([
         getTransactionCount(this.provider, walletAddress),
         getFeeData(this.provider),
@@ -266,9 +317,17 @@ export class BscService {
     }
   }
 
-  async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
+  async getTokenInfo(
+    getTokenInfoDto: GetTokenInfoDto,
+    verifiedWalletAddress?: string,
+  ): Promise<TokenInfo[]> {
     try {
-      const { addresses, walletAddress } = getTokenInfoDto;
+      const { addresses, walletAddress } = verifiedWalletAddress
+        ? withExplicitVerifiedWalletAddress(
+            getTokenInfoDto,
+            verifiedWalletAddress,
+          )
+        : getTokenInfoDto;
       const validAddresses: string[] = ValidateAddress(addresses);
 
       if (validAddresses.length === 0) {
@@ -306,9 +365,15 @@ export class BscService {
 
   async prepareTransaction(
     prepareTransactionDto: PrepareTransactionDto,
+    verifiedWalletAddress?: string,
   ): Promise<FullTransaction> {
     try {
-      const { unsignedTx, walletAddress } = prepareTransactionDto;
+      const { unsignedTx, walletAddress } = verifiedWalletAddress
+        ? withExplicitVerifiedWalletAddress(
+            prepareTransactionDto,
+            verifiedWalletAddress,
+          )
+        : prepareTransactionDto;
       const [nonce, gasLimit, feeData, network] = await Promise.all([
         getTransactionCount(this.provider, walletAddress),
         getEstimateGas(this.provider, walletAddress, unsignedTx),
@@ -327,5 +392,18 @@ export class BscService {
     } catch (error) {
       throw createProviderBadRequestException(error);
     }
+  }
+
+  private async normalizeSwapQuoteForWallet(
+    dto: SwapQuoteDto | ResolvedSwapQuoteDto,
+    verifiedWalletAddress: string,
+  ): Promise<ResolvedSwapQuoteDto> {
+    return await this.tokenMetadataService.normalizeSwapQuote(
+      withExplicitVerifiedWalletAddress(
+        dto,
+        verifiedWalletAddress,
+        'recipient',
+      ),
+    );
   }
 }

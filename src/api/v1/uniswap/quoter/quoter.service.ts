@@ -10,7 +10,11 @@ import {
 import { ethers, parseUnits, TransactionRequest, ZeroAddress } from 'ethers';
 import { JsonRpcProvider } from '@ethersproject/providers';
 import { ProviderService } from '../../provider/provider.service';
-import { SwapQuoteDto, TokenInfoDto } from '../../common/dto/swapQuote.dto';
+import {
+  ResolvedSwapQuoteDto,
+  ResolvedTokenInfoDto,
+  SwapQuoteDto,
+} from '../../common/dto/swapQuote.dto';
 import { SwapQuote } from '../../common/interface/swap.interface';
 import {
   ChainEnum,
@@ -27,6 +31,8 @@ import {
   ProviderErrorCode,
   throwIfHttpException,
 } from '../../common/utils/provider-error.util';
+import { withProviderControls } from '../../common/utils/retry.util';
+import { withExplicitVerifiedWalletAddress } from '../../common/helpers/requestWallet';
 
 type UniswapSwapRoute = NonNullable<Awaited<ReturnType<AlphaRouter['route']>>>;
 
@@ -40,9 +46,23 @@ export class QuoterService {
     private readonly tokenMetadataService: TokenMetadataService,
   ) {}
 
-  async getQuoteResponse(body: SwapQuoteDto) {
-    const normalizedBody =
-      await this.tokenMetadataService.normalizeSwapQuote(body);
+  private async withProviderControl<T>(
+    action: string,
+    operation: (attempt: number) => Promise<T>,
+  ): Promise<T> {
+    return withProviderControls(`uniswap:quoter:${action}`, operation);
+  }
+
+  async getQuoteResponse(body: SwapQuoteDto, verifiedWalletAddress?: string) {
+    const normalizedBody = await this.tokenMetadataService.normalizeSwapQuote(
+      verifiedWalletAddress
+        ? withExplicitVerifiedWalletAddress(
+            body,
+            verifiedWalletAddress,
+            'recipient',
+          )
+        : body,
+    );
     const { provider, transformed } =
       this.swapProviderResolver.resolve(normalizedBody);
 
@@ -68,9 +88,16 @@ export class QuoterService {
     }
   }
 
-  async buildSwapResponse(dto: SwapQuoteDto) {
-    const normalizedDto =
-      await this.tokenMetadataService.normalizeSwapQuote(dto);
+  async buildSwapResponse(dto: SwapQuoteDto, verifiedWalletAddress?: string) {
+    const normalizedDto = await this.tokenMetadataService.normalizeSwapQuote(
+      verifiedWalletAddress
+        ? withExplicitVerifiedWalletAddress(
+            dto,
+            verifiedWalletAddress,
+            'recipient',
+          )
+        : dto,
+    );
     const quote = await this.buildSwapTx(normalizedDto);
     return {
       success: true,
@@ -132,7 +159,7 @@ export class QuoterService {
     return list.includes(value.toUpperCase());
   }
 
-  private buildToken(token: TokenInfoDto, chainId: number) {
+  private buildToken(token: ResolvedTokenInfoDto, chainId: number) {
     const native = this.isZeroAddress(token.address);
     if (native) {
       return Ether.onChain(chainId);
@@ -147,15 +174,15 @@ export class QuoterService {
   }
 
   async getQuote(
-    swapQuote: SwapQuoteDto,
+    swapQuote: ResolvedSwapQuoteDto,
     internalCall: true,
   ): Promise<UniswapSwapRoute>;
   async getQuote(
-    swapQuote: SwapQuoteDto,
+    swapQuote: ResolvedSwapQuoteDto,
     internalCall?: false,
   ): Promise<SwapQuote>;
   async getQuote(
-    swapQuote: SwapQuoteDto,
+    swapQuote: ResolvedSwapQuoteDto,
     internalCall: boolean = false,
   ): Promise<SwapQuote | UniswapSwapRoute> {
     try {
@@ -180,16 +207,13 @@ export class QuoterService {
         tokenInput,
         rawAmount.toString(),
       );
-      const route = await router.route(
-        amountIn,
-        tokenOutput,
-        TradeType.EXACT_INPUT,
-        {
+      const route = await this.withProviderControl('route', () =>
+        router.route(amountIn, tokenOutput, TradeType.EXACT_INPUT, {
           recipient: recipient,
           slippageTolerance: new Percent('50', '10000'), // 0.5%
           deadline: Math.floor(Date.now() / 1000) + 1800,
           type: SwapType.SWAP_ROUTER_02,
-        },
+        }),
       );
       if (!route) {
         this.logger.error('No route found');
@@ -233,7 +257,9 @@ export class QuoterService {
     }
   }
 
-  async buildSwapTx(swapQuote: SwapQuoteDto): Promise<TransactionRequest[]> {
+  async buildSwapTx(
+    swapQuote: ResolvedSwapQuoteDto,
+  ): Promise<TransactionRequest[]> {
     try {
       const { tokenIn, recipient } = swapQuote;
       const txs: TransactionRequest[] = [];
@@ -244,8 +270,12 @@ export class QuoterService {
       const provider = new JsonRpcProvider(
         this.rpcService.getChainRpcUrl(ChainEnum[ChainId[tokenIn.chainId]]),
       );
-      const nonce = await provider.getTransactionCount(recipient, 'pending');
-      const feeData = await provider.getFeeData();
+      const nonce = await this.withProviderControl('transaction-count', () =>
+        provider.getTransactionCount(recipient, 'pending'),
+      );
+      const feeData = await this.withProviderControl('fee-data', () =>
+        provider.getFeeData(),
+      );
       const isNativeIn = this.isZeroAddress(tokenIn.address);
       const erc20Interface = new ethers.Interface([
         'function approve(address spender,uint256 amount)',

@@ -37,7 +37,9 @@ describe('DeviceService', () => {
 
     it('returns null when device not found', async () => {
       mockDeviceRepo.findOne.mockResolvedValue(null);
-      expect(await service.findOne(new mongoose.Types.ObjectId() as any)).toBeNull();
+      expect(
+        await service.findOne(new mongoose.Types.ObjectId() as any),
+      ).toBeNull();
     });
   });
 });

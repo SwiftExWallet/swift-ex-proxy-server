@@ -1,15 +1,18 @@
 import { Contract } from 'ethers';
 import { QuotedOutput } from '../interface/swap.interface';
+import { withProviderControls } from '../utils/retry.util';
 
 export const getErc20ContractInfo = async (
   tokenContract: Contract,
   walletAddress: string,
 ) => {
   const [name, symbol, decimals, balance] = (await Promise.all([
-    tokenContract.name(),
-    tokenContract.symbol(),
-    tokenContract.decimals(),
-    tokenContract.balanceOf(walletAddress),
+    withProviderControls('contract:erc20-info', () => tokenContract.name()),
+    withProviderControls('contract:erc20-info', () => tokenContract.symbol()),
+    withProviderControls('contract:erc20-info', () => tokenContract.decimals()),
+    withProviderControls('contract:erc20-info', () =>
+      tokenContract.balanceOf(walletAddress),
+    ),
   ])) as [string, string, number, bigint];
   return {
     name,
@@ -24,17 +27,21 @@ export const getPool = async (
   tokenInAddress: string,
   tokenOutAddress: string,
 ): Promise<string> => {
-  return (await factoryContract.getPool(
-    tokenInAddress,
-    tokenOutAddress,
-    process.env.FEE_TIER,
+  return (await withProviderControls('contract:get-pool', () =>
+    factoryContract.getPool(
+      tokenInAddress,
+      tokenOutAddress,
+      process.env.FEE_TIER,
+    ),
   )) as string;
 };
 
 export const getPoolContractFee = async (
   poolContract: Contract,
 ): Promise<bigint> => {
-  return (await poolContract.fee()) as bigint;
+  return (await withProviderControls('contract:pool-fee', () =>
+    poolContract.fee(),
+  )) as bigint;
 };
 
 export const quoteExactInputSingle = async (
@@ -44,11 +51,13 @@ export const quoteExactInputSingle = async (
   fee: bigint,
   amountIn: bigint,
 ): Promise<QuotedOutput> => {
-  return (await quoterContract.quoteExactInputSingle({
-    tokenIn,
-    tokenOut,
-    fee,
-    amountIn,
-    sqrtPriceLimitX96: 0n,
-  })) as QuotedOutput;
+  return (await withProviderControls('contract:quote-exact-input-single', () =>
+    quoterContract.quoteExactInputSingle({
+      tokenIn,
+      tokenOut,
+      fee,
+      amountIn,
+      sqrtPriceLimitX96: 0n,
+    }),
+  )) as QuotedOutput;
 };

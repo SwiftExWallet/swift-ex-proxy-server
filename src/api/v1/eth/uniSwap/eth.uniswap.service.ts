@@ -8,7 +8,7 @@ import {
   Interface,
 } from 'ethers';
 import { Token } from '@uniswap/sdk-core';
-import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
+import { ResolvedSwapQuoteDto } from '../../common/dto/swapQuote.dto';
 import { SwapQuote } from '../../common/interface/swap.interface';
 import {
   ETH_PREPARE_ABI,
@@ -20,6 +20,10 @@ import {
   createProviderBadRequestException,
   throwIfHttpException,
 } from '../../common/utils/provider-error.util';
+import {
+  type ProviderControlOptions,
+  withProviderControls,
+} from '../../common/utils/retry.util';
 
 @Injectable()
 export class UniSwapService {
@@ -42,6 +46,14 @@ export class UniSwapService {
   constructor(providerService: ProviderService) {
     const rpcUrl = providerService.getRpcUrl();
     this.provider = new JsonRpcProvider(rpcUrl);
+  }
+
+  private async withProviderControl<T>(
+    action: string,
+    operation: (attempt: number) => Promise<T>,
+    options?: ProviderControlOptions,
+  ): Promise<T> {
+    return withProviderControls(`eth:uniswap:${action}`, operation, options);
   }
 
   private encodePath(tokens: string[], fees: number[]): string {
@@ -88,9 +100,10 @@ export class UniSwapService {
 
           this.logger.debug(`Testing route ${route.name}, path: ${path}`);
 
-          const result = await quoterContract.quoteExactInput.staticCall(
-            path,
-            amountInWei,
+          const result = await this.withProviderControl(
+            'multi-hop-quote',
+            () => quoterContract.quoteExactInput.staticCall(path, amountInWei),
+            { maxAttempts: 1, shouldRecordFailure: () => false },
           );
 
           const amountOut = result[0];
@@ -120,7 +133,7 @@ export class UniSwapService {
     }
   }
 
-  async getQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
+  async getQuote(swapQuoteDto: ResolvedSwapQuoteDto): Promise<SwapQuote> {
     try {
       this.logger.log(
         `Getting quote for ${swapQuoteDto.amount} ${swapQuoteDto.tokenIn.symbol} → ${swapQuoteDto.tokenOut.symbol}`,
@@ -193,12 +206,17 @@ export class UniSwapService {
         try {
           this.logger.debug(`Trying single-hop with fee tier ${feeTier}...`);
 
-          amountOut = await quoterContract.quoteExactInputSingle.staticCall(
-            tokenIn.address,
-            tokenOut.address,
-            feeTier,
-            amountInWei,
-            0,
+          amountOut = await this.withProviderControl(
+            'single-hop-quote',
+            () =>
+              quoterContract.quoteExactInputSingle.staticCall(
+                tokenIn.address,
+                tokenOut.address,
+                feeTier,
+                amountInWei,
+                0,
+              ),
+            { maxAttempts: 1, shouldRecordFailure: () => false },
           );
           selectedFeeTier = feeTier;
           this.logger.log(
@@ -248,7 +266,9 @@ export class UniSwapService {
       this.logger.log(
         `Quote result: ${formattedAmountOut} ${tokenOut.symbol} (price: ${pricePerToken} per token)`,
       );
-      const feeData = await this.provider.getFeeData();
+      const feeData = await this.withProviderControl('fee-data', () =>
+        this.provider.getFeeData(),
+      );
       const gasPriceWei = feeData.maxFeePerGas ?? feeData.gasPrice ?? 0n;
       const estimatedGasUnits = isMultiHop ? 300000n : 150000n;
       const networkFeeEth = parseFloat(
@@ -283,7 +303,7 @@ export class UniSwapService {
   }
 
   async buildSwapTx(
-    swapQuoteDto: SwapQuoteDto,
+    swapQuoteDto: ResolvedSwapQuoteDto,
     slippageBps = process.env.UNISWAP_SLIPPAGE as any,
   ): Promise<TransactionRequest[]> {
     try {
@@ -324,9 +344,13 @@ export class UniSwapService {
 
       const fromAddress = swapQuoteDto.recipient;
       const [nonce, feeData, balance] = await Promise.all([
-        this.provider.getTransactionCount(fromAddress, 'pending'),
-        this.provider.getFeeData(),
-        this.provider.getBalance(fromAddress),
+        this.withProviderControl('transaction-count', () =>
+          this.provider.getTransactionCount(fromAddress, 'pending'),
+        ),
+        this.withProviderControl('fee-data', () => this.provider.getFeeData()),
+        this.withProviderControl('native-balance', () =>
+          this.provider.getBalance(fromAddress),
+        ),
       ]);
 
       const maxFeePerGas = feeData.maxFeePerGas ?? parseUnits('15', 'gwei');
@@ -346,7 +370,9 @@ export class UniSwapService {
           ERC20_ABI,
           this.provider,
         );
-        const wethBalance = await wethContract.balanceOf(fromAddress);
+        const wethBalance = await this.withProviderControl('weth-balance', () =>
+          wethContract.balanceOf(fromAddress),
+        );
 
         if (wethBalance < amountInWei) {
           throw new BadRequestException(
@@ -372,7 +398,10 @@ export class UniSwapService {
         };
 
         try {
-          const estimatedGas = await this.provider.estimateGas(rawTx);
+          const estimatedGas = await this.withProviderControl(
+            'estimate-gas',
+            () => this.provider.estimateGas(rawTx),
+          );
           rawTx.gasLimit = (estimatedGas * 110n) / 100n;
         } catch {
           rawTx.gasLimit = 50000n;
@@ -435,7 +464,10 @@ export class UniSwapService {
         };
 
         try {
-          const estimatedGas = await this.provider.estimateGas(rawTx);
+          const estimatedGas = await this.withProviderControl(
+            'estimate-gas',
+            () => this.provider.estimateGas(rawTx),
+          );
           rawTx.gasLimit = (estimatedGas * 110n) / 100n;
         } catch (gasError) {
           rawTx.gasLimit = quote.isMultiHop ? 300000n : 200000n;
@@ -472,8 +504,12 @@ export class UniSwapService {
           this.provider,
         );
         const [tokenBalance, currentAllowance] = await Promise.all([
-          tokenContract.balanceOf(fromAddress),
-          tokenContract.allowance(fromAddress, this.SWAP_ROUTER_ADDRESS),
+          this.withProviderControl('erc20-balance', () =>
+            tokenContract.balanceOf(fromAddress),
+          ),
+          this.withProviderControl('erc20-allowance', () =>
+            tokenContract.allowance(fromAddress, this.SWAP_ROUTER_ADDRESS),
+          ),
         ]);
 
         if (tokenBalance < amountInWei) {
@@ -503,7 +539,10 @@ export class UniSwapService {
           };
 
           try {
-            const approveGas = await this.provider.estimateGas(approveTx);
+            const approveGas = await this.withProviderControl(
+              'estimate-gas',
+              () => this.provider.estimateGas(approveTx),
+            );
             approveTx.gasLimit = (approveGas * 110n) / 100n;
           } catch (gasError) {
             approveTx.gasLimit = 60000n;
@@ -556,7 +595,10 @@ export class UniSwapService {
         };
 
         try {
-          const estimatedGas = await this.provider.estimateGas(rawTx);
+          const estimatedGas = await this.withProviderControl(
+            'estimate-gas',
+            () => this.provider.estimateGas(rawTx),
+          );
           rawTx.gasLimit = (estimatedGas * 110n) / 100n;
         } catch (gasError) {
           rawTx.gasLimit = quote.isMultiHop ? 300000n : 200000n;

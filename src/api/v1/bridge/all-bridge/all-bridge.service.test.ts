@@ -2,8 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { AllBridgeService } from './all-bridge.service';
 import { ProviderService } from '../../provider/provider.service';
-import { ChainEnum } from '../../common/enums/chain.enum';
-import { ValidWalletType, ValidPayFeeType } from '../../common/enums/all-bridge.enum';
+import {
+  ValidWalletType,
+  ValidPayFeeType,
+} from '../../common/enums/all-bridge.enum';
 
 // Mock blockchain helpers
 jest.mock('../../common/helpers/blockchainUtilityMethods', () => ({
@@ -31,8 +33,12 @@ const mockSdk = {
   bridge: {
     checkAllowance: jest.fn(),
     rawTxBuilder: {
-      send: jest.fn().mockResolvedValue({ to: '0xBridge', data: '0xdata', value: 0n }),
-      approve: jest.fn().mockResolvedValue({ to: '0xToken', data: '0xapprove', value: 0n }),
+      send: jest
+        .fn()
+        .mockResolvedValue({ to: '0xBridge', data: '0xdata', value: 0n }),
+      approve: jest
+        .fn()
+        .mockResolvedValue({ to: '0xToken', data: '0xapprove', value: 0n }),
     },
   },
   getAmountToBeReceived: jest.fn().mockResolvedValue('95.0'),
@@ -48,7 +54,10 @@ const mockSdk = {
 jest.mock('@allbridge/bridge-core-sdk', () => ({
   AllbridgeCoreSdk: jest.fn().mockImplementation(() => mockSdk),
   Messenger: { ALLBRIDGE: 'ALLBRIDGE' },
-  FeePaymentMethod: { WITH_NATIVE_CURRENCY: 'native', WITH_STABLECOIN: 'stablecoin' },
+  FeePaymentMethod: {
+    WITH_NATIVE_CURRENCY: 'native',
+    WITH_STABLECOIN: 'stablecoin',
+  },
 }));
 
 describe('AllBridgeService', () => {
@@ -58,8 +67,16 @@ describe('AllBridgeService', () => {
     process.env.SLIPPAGE_TOLERANCE = '0.5';
     jest.clearAllMocks();
     mockSdk.chainDetailsMap.mockResolvedValue(mockChainDetailsMap);
-    mockSdk.bridge.rawTxBuilder.send.mockResolvedValue({ to: '0xBridge', data: '0xdata', value: 0n });
-    mockSdk.bridge.rawTxBuilder.approve.mockResolvedValue({ to: '0xToken', data: '0xapprove', value: 0n });
+    mockSdk.bridge.rawTxBuilder.send.mockResolvedValue({
+      to: '0xBridge',
+      data: '0xdata',
+      value: 0n,
+    });
+    mockSdk.bridge.rawTxBuilder.approve.mockResolvedValue({
+      to: '0xToken',
+      data: '0xapprove',
+      value: 0n,
+    });
     mockRpcService.getChainRpcUrl.mockReturnValue('http://rpc.test');
 
     const module: TestingModule = await Test.createTestingModule({
@@ -112,7 +129,9 @@ describe('AllBridgeService', () => {
 
     it('throws BadRequestException when chain not found', async () => {
       mockSdk.chainDetailsMap.mockResolvedValueOnce({});
-      await expect(service.getSwapDetails(dto as any)).rejects.toThrow(BadRequestException);
+      await expect(service.getSwapDetails(dto as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('throws BadRequestException when token not found', async () => {
@@ -120,7 +139,9 @@ describe('AllBridgeService', () => {
         ETH: { tokens: [], chainSymbol: 'ETH' },
         BSC: { tokens: [], chainSymbol: 'BSC' },
       });
-      await expect(service.getSwapDetails(dto as any)).rejects.toThrow(BadRequestException);
+      await expect(service.getSwapDetails(dto as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
@@ -162,7 +183,9 @@ describe('AllBridgeService', () => {
         ETH: { tokens: [], chainSymbol: 'ETH' },
         BSC: { tokens: [], chainSymbol: 'BSC' },
       });
-      await expect(service.prepareTransaction(swapDto as any)).rejects.toThrow(BadRequestException);
+      await expect(service.prepareTransaction(swapDto as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

@@ -10,18 +10,14 @@ describe('TokenMetadataService', () => {
     service = new TokenMetadataService({ getProvider: jest.fn() } as any);
   });
 
-  it('overwrites client supplied native token metadata', async () => {
+  it('adds native token metadata server-side', async () => {
     const normalized = await service.normalizeSwapQuote({
       tokenIn: {
         address: ZeroAddress,
-        symbol: 'FAKE',
-        decimals: '6',
         chainId: ChainId.ETH,
       },
       tokenOut: {
         address: ZeroAddress,
-        symbol: 'ALSO_FAKE',
-        decimals: '0',
         chainId: ChainId.ETH,
       },
       amount: '1',
@@ -34,7 +30,7 @@ describe('TokenMetadataService', () => {
     expect(normalized.tokenOut.decimals).toBe('18');
   });
 
-  it('overwrites client supplied ERC-20 metadata from server cache', async () => {
+  it('adds ERC-20 metadata from server cache', async () => {
     const address = '0x1111111111111111111111111111111111111111';
     (service as any).cache.set(`${ChainId.ETH}:${address.toLowerCase()}`, {
       symbol: 'USDC',
@@ -43,8 +39,6 @@ describe('TokenMetadataService', () => {
 
     const token = await service.resolveToken({
       address,
-      symbol: 'ETH',
-      decimals: '18',
       chainId: ChainId.ETH,
     });
 
@@ -56,8 +50,6 @@ describe('TokenMetadataService', () => {
     await expect(
       service.resolveToken({
         address: ZeroAddress,
-        symbol: 'SOL',
-        decimals: '9',
         chainId: 999999,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);

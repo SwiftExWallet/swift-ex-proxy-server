@@ -2,7 +2,6 @@ import { Body, Controller, Post, Req, Res } from '@nestjs/common';
 import { AllBridgeSwapADto } from './all-bridge/dto/all-bridge-swap.dto';
 import { AllBridgeQuotesDto } from './all-bridge/dto/all-bridge-swap-quotes.dto';
 import { AllBridgeService } from './all-bridge/all-bridge.service';
-import { withVerifiedWalletAddress } from '../common/helpers/requestWallet';
 import {
   RateLimit,
   rateLimitByIpAndDevice,
@@ -32,7 +31,8 @@ export class BridgeController {
     @Body() allBridgeSwapADto: AllBridgeSwapADto,
   ) {
     const response = await this.allBridgeService.prepareTransaction(
-      withVerifiedWalletAddress(allBridgeSwapADto, req, 'fromAddress'),
+      allBridgeSwapADto,
+      req.wallet?.address,
     );
     res.status(200).json(response);
   }

@@ -14,7 +14,10 @@ import {
   ETH_POOL_ABI,
   ETH_QUOTER_ABI,
 } from '../common/abi/eth';
-import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
+import {
+  ResolvedSwapQuoteDto,
+  SwapQuoteDto,
+} from '../common/dto/swapQuote.dto';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import {
   getEstimateGas,
@@ -53,6 +56,9 @@ import {
   ProviderErrorCode,
   throwIfHttpException,
 } from '../common/utils/provider-error.util';
+import { withProviderControls } from '../common/utils/retry.util';
+import { TokenMetadataService } from '../common/services/tokenMetadata.service';
+import { withExplicitVerifiedWalletAddress } from '../common/helpers/requestWallet';
 @Injectable()
 export class EthService {
   provider(chain: ChainEnum = ChainEnum.ETH): JsonRpcProvider {
@@ -65,6 +71,7 @@ export class EthService {
     private readonly providerService: ProviderService,
     private readonly uniSwapService: UniSwapService,
     private readonly ethTestnetSwapService: EthTestnetSwapService,
+    private readonly tokenMetadataService: TokenMetadataService,
   ) {
     const factoryAddress = process.env.POOL_FACTORY_CONTRACT_ADDRESS;
     const quoterAddress = process.env.QUOTER_CONTRACT_ADDRESS;
@@ -87,11 +94,28 @@ export class EthService {
     );
   }
 
-  async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
+  private async withProviderControl<T>(
+    action: string,
+    operation: (attempt: number) => Promise<T>,
+  ): Promise<T> {
+    return withProviderControls(`eth:service:${action}`, operation);
+  }
+
+  async getSwapQuote(
+    swapQuoteDto: SwapQuoteDto | ResolvedSwapQuoteDto,
+    verifiedWalletAddress?: string,
+  ): Promise<SwapQuote> {
     try {
+      const resolvedDto = verifiedWalletAddress
+        ? await this.normalizeSwapQuoteForWallet(
+            swapQuoteDto,
+            verifiedWalletAddress,
+            'recipient',
+          )
+        : (swapQuoteDto as ResolvedSwapQuoteDto);
       return process.env.ENVIRONMENT === 'dev'
-        ? await this.ethTestnetSwapService.getQuote(swapQuoteDto)
-        : await this.uniSwapService.getQuote(swapQuoteDto);
+        ? await this.ethTestnetSwapService.getQuote(resolvedDto)
+        : await this.uniSwapService.getQuote(resolvedDto);
     } catch (error) {
       throwIfHttpException(error);
       throw createProviderBadRequestException(error);
@@ -100,9 +124,17 @@ export class EthService {
 
   async prepareUsdtSwapTransaction(
     usdtSwapQuoteDto: UsdtSwapQuoteDto,
+    verifiedWalletAddress?: string,
   ): Promise<SwapTx> {
     try {
-      const { fromAddress, amount } = usdtSwapQuoteDto;
+      const verifiedDto = verifiedWalletAddress
+        ? withExplicitVerifiedWalletAddress(
+            usdtSwapQuoteDto,
+            verifiedWalletAddress,
+            'fromAddress',
+          )
+        : usdtSwapQuoteDto;
+      const { fromAddress, amount } = verifiedDto;
       const tokenIn = process.env.WETH_ADDRESS!;
       const tokenOut = process.env.USDT_ADDRESS!;
 
@@ -165,9 +197,15 @@ export class EthService {
 
   async getWalletAddressInfo(
     walletAddressDto: WalletAddressDto,
+    verifiedWalletAddress?: string,
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
     try {
-      const { walletAddress } = walletAddressDto;
+      const { walletAddress } = verifiedWalletAddress
+        ? withExplicitVerifiedWalletAddress(
+            walletAddressDto,
+            verifiedWalletAddress,
+          )
+        : walletAddressDto;
       const [transactionCount, gasFeeData] = await Promise.all([
         getTransactionCount(this.provider(), walletAddress),
         getFeeData(this.provider()),
@@ -212,9 +250,13 @@ export class EthService {
       for (let i = 0; i < txArray.length; i++) {
         const signedTransaction = txArray[i];
 
-        const txResponse: TransactionResponse = await this.provider(
-          ChainEnum[broadcastChain],
-        ).broadcastTransaction(signedTransaction);
+        const txResponse: TransactionResponse = await this.withProviderControl(
+          'broadcast',
+          () =>
+            this.provider(ChainEnum[broadcastChain]).broadcastTransaction(
+              signedTransaction,
+            ),
+        );
 
         results.push({
           transactionHash: txResponse.hash,
@@ -261,12 +303,14 @@ export class EthService {
           ? BigInt(txValue)
           : txValue
         : 0n;
-      const estimated = await this.provider().estimateGas({
-        to,
-        data,
-        value: valueInBigInt,
-        from,
-      });
+      const estimated = await this.withProviderControl('estimate-gas', () =>
+        this.provider().estimateGas({
+          to,
+          data,
+          value: valueInBigInt,
+          from,
+        }),
+      );
 
       return Number((estimated * 130n) / 100n);
     } catch {
@@ -278,10 +322,15 @@ export class EthService {
   }
 
   async prepareSwapTransaction(
-    dto: SwapPrepareDto | SwapQuoteDto,
+    dto: SwapPrepareDto | SwapQuoteDto | ResolvedSwapQuoteDto,
+    verifiedWalletAddress?: string,
   ): Promise<any> {
     try {
-      return await this.buildSwapTransaction(dto);
+      const verifiedDto: SwapPrepareDto | ResolvedSwapQuoteDto =
+        verifiedWalletAddress
+          ? await this.prepareSwapInputForWallet(dto, verifiedWalletAddress)
+          : (dto as SwapPrepareDto | ResolvedSwapQuoteDto);
+      return await this.buildSwapTransaction(verifiedDto);
     } catch (error) {
       throwIfHttpException(error);
       throw createProviderBadRequestException(error);
@@ -296,9 +345,13 @@ export class EthService {
       const txResponses: ExecutedTransaction[] = [];
 
       for (const signedTx of txs) {
-        const txResponse: TransactionResponse = await this.provider(
-          ChainEnum[broadcastChain],
-        ).broadcastTransaction(signedTx);
+        const txResponse: TransactionResponse = await this.withProviderControl(
+          'execute-broadcast',
+          () =>
+            this.provider(ChainEnum[broadcastChain]).broadcastTransaction(
+              signedTx,
+            ),
+        );
         txResponses.push({ txResponse });
       }
       return txResponses;
@@ -310,9 +363,17 @@ export class EthService {
     }
   }
 
-  async getTokenInfo(getTokenInfoDto: GetTokenInfoDto): Promise<TokenInfo[]> {
+  async getTokenInfo(
+    getTokenInfoDto: GetTokenInfoDto,
+    verifiedWalletAddress?: string,
+  ): Promise<TokenInfo[]> {
     try {
-      const { addresses, walletAddress } = getTokenInfoDto;
+      const { addresses, walletAddress } = verifiedWalletAddress
+        ? withExplicitVerifiedWalletAddress(
+            getTokenInfoDto,
+            verifiedWalletAddress,
+          )
+        : getTokenInfoDto;
       const validAddresses: string[] = ValidateAddress(addresses);
 
       if (validAddresses.length === 0) {
@@ -350,9 +411,15 @@ export class EthService {
 
   async prepareTransaction(
     prepareTransactionDto: PrepareTransactionDto,
+    verifiedWalletAddress?: string,
   ): Promise<FullTransaction> {
     try {
-      const { unsignedTx, walletAddress } = prepareTransactionDto;
+      const { unsignedTx, walletAddress } = verifiedWalletAddress
+        ? withExplicitVerifiedWalletAddress(
+            prepareTransactionDto,
+            verifiedWalletAddress,
+          )
+        : prepareTransactionDto;
       const [nonce, gasLimit, feeData, network] = await Promise.all([
         getTransactionCount(this.provider(), walletAddress),
         getEstimateGas(this.provider(), walletAddress, unsignedTx),
@@ -373,9 +440,17 @@ export class EthService {
     }
   }
 
-  async getBalance(walletAddressDto: WalletAddressDto): Promise<bigint> {
+  async getBalance(
+    walletAddressDto: WalletAddressDto,
+    verifiedWalletAddress?: string,
+  ): Promise<bigint> {
     try {
-      const { walletAddress } = walletAddressDto;
+      const { walletAddress } = verifiedWalletAddress
+        ? withExplicitVerifiedWalletAddress(
+            walletAddressDto,
+            verifiedWalletAddress,
+          )
+        : walletAddressDto;
       return await getNativeCurrencyBalance(walletAddress, this.provider());
     } catch (error) {
       throw createProviderBadRequestException(error);
@@ -383,13 +458,46 @@ export class EthService {
   }
 
   private async buildSwapTransaction(
-    dto: SwapPrepareDto | SwapQuoteDto,
+    dto: SwapPrepareDto | ResolvedSwapQuoteDto,
   ): Promise<any> {
     if (process.env.ENVIRONMENT === 'dev') {
       return this.ethTestnetSwapService.prepareSwapTransaction(
         dto as SwapPrepareDto,
       );
     }
-    return this.uniSwapService.buildSwapTx(dto as SwapQuoteDto);
+    return this.uniSwapService.buildSwapTx(dto as ResolvedSwapQuoteDto);
+  }
+
+  private async prepareSwapInputForWallet(
+    dto: SwapPrepareDto | SwapQuoteDto | ResolvedSwapQuoteDto,
+    verifiedWalletAddress: string,
+  ): Promise<SwapPrepareDto | ResolvedSwapQuoteDto> {
+    if ('tokenIn' in dto && 'tokenOut' in dto) {
+      return await this.normalizeSwapQuoteForWallet(
+        dto,
+        verifiedWalletAddress,
+        'recipient',
+      );
+    }
+
+    return withExplicitVerifiedWalletAddress(
+      dto,
+      verifiedWalletAddress,
+      'address',
+    );
+  }
+
+  private async normalizeSwapQuoteForWallet(
+    dto: SwapQuoteDto | ResolvedSwapQuoteDto,
+    verifiedWalletAddress: string,
+    walletField: string,
+  ): Promise<ResolvedSwapQuoteDto> {
+    return await this.tokenMetadataService.normalizeSwapQuote(
+      withExplicitVerifiedWalletAddress(
+        dto,
+        verifiedWalletAddress,
+        walletField,
+      ),
+    );
   }
 }

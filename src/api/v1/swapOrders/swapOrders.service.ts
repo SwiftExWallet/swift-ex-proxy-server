@@ -25,6 +25,7 @@ import {
 import { PaginatedResult, PaginationDto } from './dto/pagination.dto';
 import { swapProvider } from '../common/enums/chain.enum';
 import { WalletService } from '../wallet/wallet.service';
+import { withExplicitVerifiedWalletAddress } from '../common/helpers/requestWallet';
 
 @Injectable()
 export class SwapOrderService {
@@ -37,19 +38,26 @@ export class SwapOrderService {
     private readonly walletService: WalletService,
   ) {}
 
-  async store(device: any, dto: StoreSwapOrderDto): Promise<SwapOrders> {
+  async store(
+    device: any,
+    dto: StoreSwapOrderDto,
+    verifiedWalletAddress?: string,
+  ): Promise<SwapOrders> {
     try {
-      let usdValue = dto.usdValue;
+      const verifiedDto = verifiedWalletAddress
+        ? withExplicitVerifiedWalletAddress(dto, verifiedWalletAddress)
+        : dto;
+      let usdValue = verifiedDto.usdValue;
 
-      if (['USDT', 'USDC'].includes(dto.fromToken?.toUpperCase())) {
-        usdValue = Number(dto.amountIn);
+      if (['USDT', 'USDC'].includes(verifiedDto.fromToken?.toUpperCase())) {
+        usdValue = Number(verifiedDto.amountIn);
       }
 
       const doc = new this.swapOrders({
-        ...dto,
+        ...verifiedDto,
         usdValue,
         deviceId: device._id,
-        status: dto.status ?? SwapOrderStatus.PENDING,
+        status: verifiedDto.status ?? SwapOrderStatus.PENDING,
         blockNumber: null,
         confirmedAt: null,
         deviceFcmToken: device.fcmToken,
@@ -84,23 +92,31 @@ export class SwapOrderService {
     txHash: string,
     walletAddress: string,
   ): Promise<DbResult<SwapOrders | null>> {
+    await this.assertWalletBelongsToDevice(deviceId, walletAddress);
     return await this.swapOrderRepository.findByTxHashForWallet(
       txHash,
       walletAddress,
-      deviceId,
     );
   }
 
   async findOrderByHashForDeviceWallet(
     deviceId: string,
     txHash: string,
-    walletAddress: string,
+    walletAddressOrQuery: string | MultiChainWalletAddressDto,
+    verifiedWalletAddress?: string,
   ): Promise<DbResult<SwapOrders | null>> {
+    const walletAddress =
+      typeof walletAddressOrQuery === 'string'
+        ? walletAddressOrQuery
+        : withExplicitVerifiedWalletAddress(
+            walletAddressOrQuery,
+            verifiedWalletAddress,
+            'address',
+          ).address;
     await this.assertWalletBelongsToDevice(deviceId, walletAddress);
     return await this.swapOrderRepository.findByTxHashForWallet(
       txHash,
       walletAddress,
-      deviceId,
     );
   }
 
@@ -108,7 +124,8 @@ export class SwapOrderService {
     deviceId: string,
     walletAddress: string,
   ): Promise<DbResult<SwapOrders[]>> {
-    return await this.swapOrderRepository.findByWallet(deviceId, walletAddress);
+    await this.assertWalletBelongsToDevice(deviceId, walletAddress);
+    return await this.swapOrderRepository.findByWallet(walletAddress);
   }
 
   async findPendingByProvider(
@@ -161,22 +178,32 @@ export class SwapOrderService {
     multiChainWalletAddressDto: MultiChainWalletAddressDto,
     pagination: PaginationDto,
   ): Promise<DbResult<PaginatedResult<SwapOrders>>> {
+    await this.assertWalletBelongsToDevice(
+      deviceId,
+      multiChainWalletAddressDto.address,
+    );
     return await this.swapOrderRepository.findByWalletWithPagination(
       multiChainWalletAddressDto.address,
       pagination,
-      deviceId,
     );
   }
 
   async findOrdersForDeviceWallet(
     deviceId: string,
     query: OrderByWalletQueryDto,
+    verifiedWalletAddress?: string,
   ): Promise<DbResult<PaginatedResult<SwapOrders>>> {
-    await this.assertWalletBelongsToDevice(deviceId, query.address);
+    const verifiedQuery = verifiedWalletAddress
+      ? withExplicitVerifiedWalletAddress(
+          query,
+          verifiedWalletAddress,
+          'address',
+        )
+      : query;
+    await this.assertWalletBelongsToDevice(deviceId, verifiedQuery.address);
     return await this.swapOrderRepository.findByWalletWithPagination(
-      query.address,
-      query,
-      deviceId,
+      verifiedQuery.address,
+      verifiedQuery,
     );
   }
 

@@ -15,7 +15,6 @@ import {
   OrderByWalletQueryDto,
   StoreSwapOrderDto,
 } from './dto/updateOrder.dto';
-import { withVerifiedWalletAddress } from '../common/helpers/requestWallet';
 import {
   RateLimit,
   rateLimitByIpAndDevice,
@@ -46,7 +45,8 @@ export class SwapOrdersController {
   ) {
     const stored = await this.swapOrderService.store(
       req.device,
-      withVerifiedWalletAddress(storeSwapOrderDto, req),
+      storeSwapOrderDto,
+      req.wallet?.address,
     );
     response.send(stored);
   }
@@ -62,7 +62,8 @@ export class SwapOrdersController {
   async orderByWallet(@Req() req: any, @Query() query: OrderByWalletQueryDto) {
     return await this.swapOrderService.findOrdersForDeviceWallet(
       req.device._id,
-      withVerifiedWalletAddress(query, req, 'address'),
+      query,
+      req.wallet?.address,
     );
   }
 
@@ -91,11 +92,11 @@ export class SwapOrdersController {
     @Param('orderHash') orderHash: string,
     @Query() query: MultiChainWalletAddressDto,
   ) {
-    const verifiedQuery = withVerifiedWalletAddress(query, req, 'address');
     return await this.swapOrderService.findOrderByHashForDeviceWallet(
       req.device._id,
       orderHash,
-      verifiedQuery.address,
+      query,
+      req.wallet?.address,
     );
   }
 }

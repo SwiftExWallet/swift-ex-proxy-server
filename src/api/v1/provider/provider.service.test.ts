@@ -2,13 +2,18 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ProviderService } from './provider.service';
 import { ChainEnum } from '../common/enums/chain.enum';
 
-const mockProviderInstance = { getNetwork: jest.fn(), broadcastTransaction: jest.fn() };
+const mockProviderInstance = {
+  getNetwork: jest.fn(),
+  broadcastTransaction: jest.fn(),
+};
 const mockContractInstance = {};
 
 jest.mock('ethers', () => ({
   JsonRpcProvider: jest.fn().mockImplementation(() => mockProviderInstance),
   Contract: jest.fn().mockImplementation(() => mockContractInstance),
-  Network: { from: jest.fn().mockReturnValue({ chainId: 1n, name: 'mainnet' }) },
+  Network: {
+    from: jest.fn().mockReturnValue({ chainId: 1n, name: 'mainnet' }),
+  },
 }));
 
 describe('ProviderService', () => {
@@ -36,9 +41,19 @@ describe('ProviderService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
-    ['PROVIDER_RPC_ETH_1','PROVIDER_RPC_ETH_2','PROVIDER_RPC_ETH_3','PROVIDER_RPC_ETH_4',
-     'PROVIDER_RPC_ETH_5','PROVIDER_RPC_BSC','PROVIDER_RPC_POL_1','PROVIDER_RPC_ARB_1',
-     'PROVIDER_RPC_BASE_1','PROVIDER_RPC_AVAX_1','PROVIDER_RPC_OPT_1'].forEach(k => delete process.env[k]);
+    [
+      'PROVIDER_RPC_ETH_1',
+      'PROVIDER_RPC_ETH_2',
+      'PROVIDER_RPC_ETH_3',
+      'PROVIDER_RPC_ETH_4',
+      'PROVIDER_RPC_ETH_5',
+      'PROVIDER_RPC_BSC',
+      'PROVIDER_RPC_POL_1',
+      'PROVIDER_RPC_ARB_1',
+      'PROVIDER_RPC_BASE_1',
+      'PROVIDER_RPC_AVAX_1',
+      'PROVIDER_RPC_OPT_1',
+    ].forEach((k) => delete process.env[k]);
   });
 
   it('should be defined', () => {
@@ -47,8 +62,14 @@ describe('ProviderService', () => {
 
   describe('getRpcUrl', () => {
     it('rotates through all 5 ETH RPC URLs', () => {
-      const urls = ['http://eth-1.test','http://eth-2.test','http://eth-3.test','http://eth-4.test','http://eth-5.test'];
-      urls.forEach(url => expect(service.getRpcUrl()).toBe(url));
+      const urls = [
+        'http://eth-1.test',
+        'http://eth-2.test',
+        'http://eth-3.test',
+        'http://eth-4.test',
+        'http://eth-5.test',
+      ];
+      urls.forEach((url) => expect(service.getRpcUrl()).toBe(url));
     });
 
     it('wraps around after exhausting the list', () => {
@@ -74,7 +95,9 @@ describe('ProviderService', () => {
       delete process.env.PROVIDER_RPC_POL_1;
       // Rebuild service with missing env var
       const svc = new ProviderService();
-      expect(() => svc.getChainRpcUrl(ChainEnum.POL)).toThrow('No RPC URLs configured');
+      expect(() => svc.getChainRpcUrl(ChainEnum.POL)).toThrow(
+        'No RPC URLs configured',
+      );
     });
   });
 

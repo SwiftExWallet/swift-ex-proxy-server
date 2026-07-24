@@ -9,6 +9,12 @@ export interface VerifiedRequestWallet {
 export function getVerifiedWalletAddress(req: any): string {
   const walletAddress = req?.wallet?.address;
 
+  return assertVerifiedWalletAddress(walletAddress);
+}
+
+export function assertVerifiedWalletAddress(
+  walletAddress: string | undefined | null,
+): string {
   if (typeof walletAddress !== 'string' || !walletAddress.trim()) {
     throw new UnauthorizedException('Verified wallet address not found.');
   }
@@ -48,14 +54,25 @@ export function withVerifiedWalletAddress<T extends Record<string, any>>(
   fieldName = 'walletAddress',
 ): T {
   const verifiedWalletAddress = getVerifiedWalletAddress(req);
-  assertWalletAddressMatches(
-    dto?.[fieldName],
+  return withExplicitVerifiedWalletAddress(
+    dto,
     verifiedWalletAddress,
     fieldName,
   );
+}
+
+export function withExplicitVerifiedWalletAddress<
+  T extends Record<string, any>,
+>(
+  dto: T,
+  verifiedWalletAddress: string | undefined | null,
+  fieldName = 'walletAddress',
+): T {
+  const walletAddress = assertVerifiedWalletAddress(verifiedWalletAddress);
+  assertWalletAddressMatches(dto?.[fieldName], walletAddress, fieldName);
 
   return {
     ...dto,
-    [fieldName]: verifiedWalletAddress,
+    [fieldName]: walletAddress,
   };
 }

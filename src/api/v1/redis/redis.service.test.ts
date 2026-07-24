@@ -65,7 +65,12 @@ describe('RedisService', () => {
     it('calls set with EX when ttlSeconds provided', async () => {
       mockRedisClient.set.mockResolvedValue('OK');
       await service.setKey('myKey', 'myValue', 300);
-      expect(mockRedisClient.set).toHaveBeenCalledWith('myKey', 'myValue', 'EX', expect.anything());
+      expect(mockRedisClient.set).toHaveBeenCalledWith(
+        'myKey',
+        'myValue',
+        'EX',
+        expect.anything(),
+      );
     });
   });
 

@@ -1,12 +1,18 @@
 import { SetMetadata } from '@nestjs/common';
 
 export type RateLimitKeyBy = 'ip' | 'device' | 'wallet';
+export type RedisFailurePolicy =
+  | 'fail-open'
+  | 'fail-closed'
+  | 'fallback-memory';
 
 export interface RateLimitConfig {
   points: number;
   duration: number;
   key?: string; // optional label e.g. 'per-minute', 'per-hour'
   keyBy?: RateLimitKeyBy;
+  redisFailurePolicy?: RedisFailurePolicy;
+  fallbackPoints?: number;
 }
 
 export interface PrincipalRateLimitPoints {
@@ -40,4 +46,13 @@ export function rateLimitByIpDeviceAndWallet(
     ...rateLimitByIpAndDevice(key, points, duration),
     { points: points.wallet, duration, key: `${key}-wallet`, keyBy: 'wallet' },
   ];
+}
+
+export function failClosedRateLimits(
+  limits: RateLimitConfig[],
+): RateLimitConfig[] {
+  return limits.map((limit) => ({
+    ...limit,
+    redisFailurePolicy: 'fail-closed',
+  }));
 }

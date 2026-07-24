@@ -1,7 +1,6 @@
 import { Body, Controller, Post, Req, Res } from '@nestjs/common';
 import { EthService } from './eth.service';
 import { UsdtSwapQuoteDto } from './dto/usdtSwapQuote.dto';
-import { withVerifiedWalletAddress } from '../common/helpers/requestWallet';
 import {
   BodySizeLimit,
   BODY_SIZE_LIMITS,
@@ -19,7 +18,8 @@ export class UsdtController {
     @Body() usdtSwapQuoteDto: UsdtSwapQuoteDto,
   ) {
     const data = await this.ethService.prepareUsdtSwapTransaction(
-      withVerifiedWalletAddress(usdtSwapQuoteDto, req, 'fromAddress'),
+      usdtSwapQuoteDto,
+      req.wallet?.address,
     );
     res.status(200).json(data);
   }

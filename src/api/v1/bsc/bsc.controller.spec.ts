@@ -10,16 +10,10 @@ describe('BscController', () => {
   const bscService = {
     getSwapQuote: jest.fn(),
   };
-  const tokenMetadataService = {
-    normalizeSwapQuote: jest.fn(),
-  };
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new BscController(
-      bscService as any,
-      tokenMetadataService as any,
-    );
+    controller = new BscController(bscService as any);
   });
 
   it('should be defined', () => {
