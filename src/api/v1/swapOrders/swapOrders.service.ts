@@ -18,6 +18,7 @@ import { PaginatedResult, PaginationDto } from './dto/pagination.dto';
 import { InchWsPollerService } from '../swap/1inch/inchWsPoller.service';
 import { ChainId, swapProvider } from '../common/enums/chain.enum';
 import { InchFusionPlusWsPollerService } from '../swap/1inch/inchFusionPlusWsPoller.service';
+import { NearIntentPollerService } from '../swap/nearIntent/nearIntentPoller.service';
 
 @Injectable()
 export class SwapOrderService {
@@ -30,11 +31,12 @@ export class SwapOrderService {
      @Inject(forwardRef(() => InchWsPollerService))
     private readonly inchWsPollerService: InchWsPollerService,
     private readonly inchFusionPlusWsPollerService: InchFusionPlusWsPollerService,
+    private readonly nearIntentPollerService: NearIntentPollerService,
   ) { 
   }
 
   async store(device:any, dto: StoreSwapOrderDto): Promise<SwapOrders> {
-    const {fromChain,txHash,quoteId,provider}=dto;
+    const {fromChain,txHash,quoteId,provider,memo}=dto;
     try {
       let usdValue = dto.usdValue;
 
@@ -57,6 +59,10 @@ export class SwapOrderService {
       if(provider===swapProvider.ONEINCH_FUSION_PLUS)
       {
         this.inchFusionPlusWsPollerService.subscribeOrder(txHash, quoteId);
+      }
+      if(provider===swapProvider.NEARINTENT)
+      {
+        this.nearIntentPollerService.startPolling(txHash, memo);
       }
       return await doc.save();
     } catch (err: any) {

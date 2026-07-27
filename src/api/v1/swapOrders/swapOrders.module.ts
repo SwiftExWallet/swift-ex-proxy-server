@@ -13,6 +13,7 @@ import { EvmTxPollerService } from '../crons/evmTxPoller.service';
 import { RedisService } from '../redis/redis.service';
 import { InchFusionPlusWsPollerService } from '../swap/1inch/inchFusionPlusWsPoller.service';
 import { UniswapTxPollerService } from '../crons/uniswapTxPoller.service';
+import { NearIntentPollerService } from '../swap/nearIntent/nearIntentPoller.service';
 
 @Module({
   imports: [
@@ -29,9 +30,10 @@ import { UniswapTxPollerService } from '../crons/uniswapTxPoller.service';
     EvmTxPollerService,
     InchFusionPlusWsPollerService,
     RedisService,
-    UniswapTxPollerService
+    UniswapTxPollerService,
+    NearIntentPollerService,
   ],
   controllers: [SwapOrdersController],
-  exports: [SwapOrderService, InchWsPollerService,InchFusionPlusWsPollerService],
+  exports: [SwapOrderService, InchWsPollerService,InchFusionPlusWsPollerService, NearIntentPollerService],
 })
 export class SwapOrdersModule {}
