@@ -1,4 +1,6 @@
 import { Injectable, Logger, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import {
   OneClickService,
   OpenAPI,
@@ -9,6 +11,7 @@ import { RedisService } from '../../redis/redis.service';
 import { FirebaseNotificationService } from '../../notification/firebase/notification.service';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { swapProvider } from '../../common/enums/chain.enum';
+import { ExhaustedOrder } from '../../swapOrders/schema/exhaustedOrder.schema';
 
 interface NearIntentRedisState {
   memo?: string;
@@ -40,6 +43,8 @@ export class NearIntentPollerService implements OnModuleInit {
     private readonly swapOrderService: SwapOrderService,
     private readonly redisService: RedisService,
     private readonly firebaseNotificationService: FirebaseNotificationService,
+    @InjectModel(ExhaustedOrder.name)
+    private readonly exhaustedOrderModel: Model<ExhaustedOrder>,
   ) {
     if (process.env.ONECLICK_BASE_URL) {
       OpenAPI.BASE = process.env.ONECLICK_BASE_URL;
@@ -144,7 +149,7 @@ export class NearIntentPollerService implements OnModuleInit {
 
           if (errorRetryCount >= MAX_ERROR_RETRIES) {
             this.logger.error(`[${depositAddress}] Max error retries exceeded, stopping poll`);
-            await this.exhaustPolling(depositAddress);
+            await this.exhaustPolling(depositAddress, memo);
             return { success: false, data: null, error: 'max_error_retries_exceeded' };
           }
 
@@ -163,7 +168,7 @@ export class NearIntentPollerService implements OnModuleInit {
       }
 
       this.logger.warn(`[${depositAddress}] Max polling attempts (${MAX_POLL_ATTEMPTS}) exceeded without reaching a terminal state`);
-      await this.exhaustPolling(depositAddress);
+      await this.exhaustPolling(depositAddress, memo);
       return { success: false, data: null, error: 'max_poll_attempts_exceeded' };
     } finally {
       this.activePolls.delete(depositAddress);
@@ -179,9 +184,34 @@ export class NearIntentPollerService implements OnModuleInit {
     await this.updateOrderStatusAndNotify(depositAddress, orderStatus);
   }
 
-  private async exhaustPolling(depositAddress: string): Promise<void> {
-    await this.updateOrderStatusAndNotify(depositAddress, SwapOrderStatus.EXHAUSTED, false);
+  private async exhaustPolling(depositAddress: string, memo?: string): Promise<void> {
+    const orderStatusUpdate = await this.updateOrderStatusAndNotify(depositAddress, SwapOrderStatus.EXHAUSTED, false);
+    await this.saveExhaustedForReconciliation(depositAddress, memo, orderStatusUpdate);
     await this.removeRedisState(depositAddress);
+  }
+
+  private async saveExhaustedForReconciliation(depositAddress: string, memo?: string, order?: any): Promise<void> {
+    try {
+      await this.exhaustedOrderModel.findOneAndUpdate(
+        { txHash: depositAddress },
+        {
+          txHash: depositAddress,
+          provider: swapProvider.NEARINTENT,
+          memo: memo ?? null,
+          exhaustedAt: new Date(),
+          deviceId: order?.deviceId ?? null,
+          swapOrderId: order?._id ?? null,
+          deviceFcmToken: order?.deviceFcmToken ?? null,
+        },
+        { upsert: true },
+      );
+      this.logger.log(`[${depositAddress}] Saved to ExhaustedOrders for reconciliation`);
+    } catch (err) {
+      this.logger.error(
+        `[${depositAddress}] Failed to save exhausted order for reconciliation`,
+        this.getErrorMessage(err),
+      );
+    }
   }
 
   private async removeRedisState(depositAddress: string): Promise<void> {
