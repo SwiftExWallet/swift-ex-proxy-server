@@ -23,6 +23,7 @@
     "@1inch/cross-chain-sdk": "2.1.0",
     "@1inch/fusion-sdk": "^2.4.9",
     "@allbridge/bridge-core-sdk": "3.17.0",
+    "@defuse-protocol/one-click-sdk-typescript": "^0.1.25",
     "@ethersproject/providers": "^5.8.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",

@@ -74,6 +74,10 @@ export class StoreSwapOrderDto {
   @IsOptional()
   encryptedFusionSecrets?: string;
 
+  @IsString({ message: 'memo must be a string' })
+  @IsOptional()
+  memo?: string;
+
   @IsNumber()
   @IsOptional()
   usdValue?: number;

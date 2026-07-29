@@ -75,6 +75,7 @@ export enum swapProvider {
   EVMTX = 'EVMTX',
   DYDX = 'DYDX',
   SRBTODYDX = 'SRBTODYDX',
+  NEARINTENT = 'NEARINTENT',
 }
 
 export const ChainIdToRango: Record<number, string> = {
