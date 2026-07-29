@@ -50,7 +50,7 @@ export class NearIntentExhaustedReconcilerService {
       this.logger.log(`near intent reconciliation processing ${pending.length} exhausted order(s)`);
       for (const order of pending) {
         try {
-          await this.reconcileOrder(order);
+          this.reconcileOrder(order);
         } catch (err) {
           this.logger.error(`[${order.txHash}] near intent reconciliation failed`, err);
         }
