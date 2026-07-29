@@ -16,6 +16,7 @@ import { InchFusionPlusWsPollerService } from '../swap/1inch/inchFusionPlusWsPol
 import { UniswapTxPollerService } from '../crons/uniswapTxPoller.service';
 import { NearIntentPollerService } from '../swap/nearIntent/nearIntentPoller.service';
 import { NearIntentExhaustedReconcilerService } from '../crons/nearIntentExhaustedReconciler.service';
+import { PortfolioModule } from '../portfolio/portfolio.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { NearIntentExhaustedReconcilerService } from '../crons/nearIntentExhaust
       { name: SwapOrders.name, schema: SwapOrderSchema },
       { name: ExhaustedOrder.name, schema: ExhaustedOrderSchema },
     ]),
+    PortfolioModule,
   ],
   providers: [
     SwapOrderService,

@@ -48,13 +48,13 @@ export class NearIntentExhaustedReconcilerService {
       if (!pending.length) return;
 
       this.logger.log(`near intent reconciliation processing ${pending.length} exhausted order(s)`);
-      const results = await Promise.allSettled(pending.map((order) => this.reconcileOrder(order)));
-
-      results.forEach((r, i) => {
-        if (r.status === 'rejected') {
-          this.logger.error(`near intent reconciliation order[${i}] rejection`, r.reason);
+      for (const order of pending) {
+        try {
+          await this.reconcileOrder(order);
+        } catch (err) {
+          this.logger.error(`[${order.txHash}] near intent reconciliation failed`, err);
         }
-      });
+      }
     } finally {
       this.isRunning = false;
     }

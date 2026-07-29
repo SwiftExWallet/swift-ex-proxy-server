@@ -199,7 +199,6 @@ export class NearIntentPollerService implements OnModuleInit {
           provider: swapProvider.NEARINTENT,
           memo: memo ?? null,
           exhaustedAt: new Date(),
-          deviceId: order?.deviceId ?? null,
           swapOrderId: order?._id ?? null,
           deviceFcmToken: order?.deviceFcmToken ?? null,
         },

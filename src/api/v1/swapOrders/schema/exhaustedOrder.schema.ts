@@ -13,9 +13,6 @@ export class ExhaustedOrder {
   @Prop({ default: null })
   memo: string;
 
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'DeviceSchema', default: null })
-  deviceId: mongoose.Schema.Types.ObjectId;
-
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'SwapOrders', default: null })
   swapOrderId: mongoose.Schema.Types.ObjectId;
 
