@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { OneClickService, GetExecutionStatusResponse } from '@defuse-protocol/one-click-sdk-typescript';
 import { ExhaustedOrder } from '../swapOrders/schema/exhaustedOrder.schema';
 import { SwapOrderRepository } from '../swapOrders/swapOrder.repository';
@@ -50,7 +50,7 @@ export class NearIntentExhaustedReconcilerService {
       this.logger.log(`near intent reconciliation processing ${pending.length} exhausted order(s)`);
       for (const order of pending) {
         try {
-          this.reconcileOrder(order);
+          await this.reconcileOrder(order);
         } catch (err) {
           this.logger.error(`[${order.txHash}] near intent reconciliation failed`, err);
         }
@@ -60,7 +60,7 @@ export class NearIntentExhaustedReconcilerService {
     }
   }
 
-  private async reconcileOrder(order: ExhaustedOrder & { txHash: string }): Promise<void> {
+  private async reconcileOrder(order: ExhaustedOrder & { txHash: string; _id: Types.ObjectId }): Promise<void> {
     let status: GetExecutionStatusResponse;
     try {
       status = order.memo
@@ -79,9 +79,14 @@ export class NearIntentExhaustedReconcilerService {
       return;
     }
 
+    if (!order.swapOrderId) {
+      this.logger.error(`[${order.txHash}] Missing swapOrderId, cannot reconcile safely (txHash may not be unique)`);
+      return;
+    }
+
     let updatedOrder: SwapOrders | null;
     try {
-      updatedOrder = await this.repo.updateOrderStatus(order.txHash, newStatus);
+      updatedOrder = await this.repo.updateOrderStatusById(String(order.swapOrderId), newStatus);
     } catch (err) {
       this.logger.error(`[${order.txHash}] Failed to update swap order during reconciliation`, err);
       return;
@@ -90,7 +95,7 @@ export class NearIntentExhaustedReconcilerService {
     this.logger.log(`[${order.txHash}] Reconciled exhausted order -> ${newStatus}`);
     await this.notify(updatedOrder, newStatus);
 
-    await this.exhaustedModel.deleteOne({ txHash: order.txHash });
+    await this.exhaustedModel.deleteOne({ _id: order._id });
     this.logger.log(`[${order.txHash}] Removed from ExhaustedOrders`);
   }
 

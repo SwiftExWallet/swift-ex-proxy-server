@@ -234,4 +234,36 @@ export class SwapOrderRepository {
       throw new BadRequestException('order data not found');
     }
   }
+
+  async updateOrderStatusById(
+    id: string,
+    status: SwapOrderStatus,
+    blockNumber: number | null = null,
+  ): Promise<SwapOrders | null> {
+    try {
+      const result = await this.model.findByIdAndUpdate(
+        id,
+        {
+          $set: {
+            status,
+            confirmedAt: new Date(),
+            blockNumber,
+          },
+        },
+        { new: true },
+      );
+
+      if (!result) {
+        this.logger.warn(`order data not found for id=${id}`);
+        throw new BadRequestException('order data not found');
+      }
+
+      this.triggerPortfolioRefresh(result, status);
+
+      return result;
+    } catch (err) {
+      this.logger.error('order data not found', { id, status, err });
+      throw new BadRequestException('order data not found');
+    }
+  }
 }

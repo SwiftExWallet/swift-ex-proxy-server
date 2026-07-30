@@ -39,6 +39,10 @@ describe('InchService Fusion+ poller', () => {
   let firebaseNotificationService: {
     sendNotification: jest.Mock;
   };
+  let exhaustedModel: {
+    findOneAndUpdate: jest.Mock;
+    deleteOne: jest.Mock;
+  };
 
   beforeEach(() => {
     jest.useFakeTimers();
@@ -63,12 +67,17 @@ describe('InchService Fusion+ poller', () => {
     firebaseNotificationService = {
       sendNotification: jest.fn().mockResolvedValue(undefined),
     };
+    exhaustedModel = {
+      findOneAndUpdate: jest.fn().mockResolvedValue(undefined),
+      deleteOne: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new InchService(
       swapOrderService as any,
       redisService as any,
       {} as any,
       firebaseNotificationService as any,
+      exhaustedModel as any,
     );
     (service as any).sdk = sdk;
   });
@@ -125,6 +134,7 @@ describe('InchService Fusion+ poller', () => {
     });
     expect(firebaseNotificationService.sendNotification).toHaveBeenCalledTimes(1);
     expect(redisService.delKey).toHaveBeenCalledWith(`fusion_secrets:${orderHash}`);
+    expect(exhaustedModel.deleteOne).toHaveBeenCalledWith({ txHash: orderHash });
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(false);
   });
 
@@ -143,6 +153,11 @@ describe('InchService Fusion+ poller', () => {
       orderStatus: SwapOrderStatus.EXHAUSTED,
     });
     expect(firebaseNotificationService.sendNotification).toHaveBeenCalledTimes(1);
+    expect(exhaustedModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { txHash: orderHash },
+      expect.objectContaining({ provider: swapProvider.ONEINCH_FUSION_PLUS }),
+      { upsert: true },
+    );
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(false);
   });
 
@@ -162,6 +177,30 @@ describe('InchService Fusion+ poller', () => {
       orderStatus: SwapOrderStatus.EXHAUSTED,
     });
     expect(firebaseNotificationService.sendNotification).toHaveBeenCalledTimes(1);
+    expect(exhaustedModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { txHash: orderHash },
+      expect.objectContaining({ provider: swapProvider.ONEINCH_FUSION_PLUS }),
+      { upsert: true },
+    );
+    expect((service as any).activeSecretPollers.has(orderHash)).toBe(false);
+  });
+
+  it('resumes secret-reveal polling for an exhausted order when redis state exists', async () => {
+    sdk.getOrderStatus.mockResolvedValue({ status: SDKOrderStatus.Pending });
+    sdk.getReadyToAcceptSecretFills.mockResolvedValue({ fills: [] });
+
+    const resumed = await service.resumeSecretRevealPolling(orderHash);
+
+    expect(resumed).toBe(true);
+    expect((service as any).activeSecretPollers.has(orderHash)).toBe(true);
+  });
+
+  it('refuses to resume when no secret state exists in redis', async () => {
+    redisService.getKey.mockResolvedValueOnce(null);
+
+    const resumed = await service.resumeSecretRevealPolling(orderHash);
+
+    expect(resumed).toBe(false);
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(false);
   });
 

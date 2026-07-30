@@ -63,7 +63,7 @@ export class SwapOrderService {
       }
       if(provider===swapProvider.NEARINTENT)
       {
-        this.nearIntentPollerService.startPolling(txHash, memo);
+        this.nearIntentPollerService.startPolling(txHash, String(doc._id), memo);
       }
       const response=await doc.save();
       this.logger.debug("save response",response);
@@ -136,5 +136,9 @@ export class SwapOrderService {
 
   async updateOrderByHash(updateTxStatusDto: UpdateTxStatusDto): Promise<SwapOrders|null>  {
     return await this.swapOrderRepository.updateOrderStatus(updateTxStatusDto.txHash,updateTxStatusDto.orderStatus);
+  }
+
+  async updateOrderById(id: string, orderStatus: SwapOrderStatus): Promise<SwapOrders | null> {
+    return await this.swapOrderRepository.updateOrderStatusById(id, orderStatus);
   }
 }
