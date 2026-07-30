@@ -1,6 +1,4 @@
 import { Injectable, Logger, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import {
   OneClickService,
   OpenAPI,
@@ -11,7 +9,7 @@ import { RedisService } from '../../redis/redis.service';
 import { FirebaseNotificationService } from '../../notification/firebase/notification.service';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { swapProvider } from '../../common/enums/chain.enum';
-import { ExhaustedOrder } from '../../swapOrders/schema/exhaustedOrder.schema';
+import { ExhaustedOrderRepository } from '../../swapOrders/exhaustedOrder.repository';
 
 interface NearIntentRedisState {
   memo?: string;
@@ -43,8 +41,7 @@ export class NearIntentPollerService implements OnModuleInit {
     private readonly swapOrderService: SwapOrderService,
     private readonly redisService: RedisService,
     private readonly firebaseNotificationService: FirebaseNotificationService,
-    @InjectModel(ExhaustedOrder.name)
-    private readonly exhaustedOrderModel: Model<ExhaustedOrder>,
+    private readonly exhaustedOrderRepository: ExhaustedOrderRepository,
   ) {
     if (process.env.ONECLICK_BASE_URL) {
       OpenAPI.BASE = process.env.ONECLICK_BASE_URL;
@@ -58,8 +55,8 @@ export class NearIntentPollerService implements OnModuleInit {
     await this.recoverPendingOrders();
   }
 
-  private redisKey(depositAddress: string): string {
-    return `near_intent:${depositAddress}`;
+  private redisKey(orderId: string): string {
+    return `near_intent:${orderId}`;
   }
 
   private getErrorMessage(err: unknown): unknown {
@@ -76,19 +73,19 @@ export class NearIntentPollerService implements OnModuleInit {
 
   // ─── Kick off polling for a freshly stored NEARINTENT order ─────────────────
 
-  async startPolling(depositAddress: string, memo?: string): Promise<void> {
-    if (this.activePolls.has(depositAddress)) {
-      this.logger.warn(`[${depositAddress}] NEARINTENT poller already active, skipping duplicate start`);
+  async startPolling(depositAddress: string, orderId: string, memo?: string): Promise<void> {
+    if (this.activePolls.has(orderId)) {
+      this.logger.warn(`[${orderId}] NEARINTENT poller already active, skipping duplicate start`);
       return;
     }
 
     if (memo) {
       const state: NearIntentRedisState = { memo };
-      await this.redisService.setKey(this.redisKey(depositAddress), JSON.stringify(state), REDIS_TTL_SECONDS);
-      this.logger.log(`[${depositAddress}] Saved memo to redis (ttl=${REDIS_TTL_SECONDS}s)`);
+      await this.redisService.setKey(this.redisKey(orderId), JSON.stringify(state), REDIS_TTL_SECONDS);
+      this.logger.log(`[${orderId}] Saved memo to redis (ttl=${REDIS_TTL_SECONDS}s)`);
     }
 
-    void this.runPollingCycle(depositAddress, memo);
+    void this.runPollingCycle(depositAddress, orderId, memo);
   }
 
   // ─── Recover in-flight orders on process restart ─────────────────────────────
@@ -107,33 +104,34 @@ export class NearIntentPollerService implements OnModuleInit {
     }
 
     for (const order of result.data) {
-      if (this.activePolls.has(order.txHash)) continue;
+      const orderId = String(order._id);
+      if (this.activePolls.has(orderId)) continue;
 
-      const raw = await this.redisService.getKey(this.redisKey(order.txHash));
+      const raw = await this.redisService.getKey(this.redisKey(orderId));
       if (!raw) {
-        this.logger.warn(`[${order.txHash}] No redis state found, skipping NEARINTENT recovery`);
+        this.logger.warn(`[${orderId}] No redis state found, skipping NEARINTENT recovery`);
         continue;
       }
 
       const { memo } = JSON.parse(raw) as NearIntentRedisState;
-      this.logger.log(`[${order.txHash}] Recovering NEARINTENT poller on startup`);
-      void this.runPollingCycle(order.txHash, memo);
+      this.logger.log(`[${orderId}] Recovering NEARINTENT poller on startup`);
+      void this.runPollingCycle(order.txHash, orderId, memo);
     }
   }
 
   // ─── Core polling loop ────────────────────────────────────────────────────────
 
-  private async runPollingCycle(depositAddress: string, memo?: string): Promise<{
+  private async runPollingCycle(depositAddress: string, orderId: string, memo?: string): Promise<{
     success: boolean;
     data: GetExecutionStatusResponse | null;
     error: string | null;
   }> {
-    this.activePolls.add(depositAddress);
+    this.activePolls.add(orderId);
     let errorRetryCount = 0;
 
     try {
       for (let attempt = 1; attempt <= MAX_POLL_ATTEMPTS; attempt++) {
-        this.logger.log(`[${depositAddress}] Poll attempt ${attempt}/${MAX_POLL_ATTEMPTS}`);
+        this.logger.log(`[${orderId}] Poll attempt ${attempt}/${MAX_POLL_ATTEMPTS}`);
 
         let status: GetExecutionStatusResponse;
         try {
@@ -144,12 +142,12 @@ export class NearIntentPollerService implements OnModuleInit {
         } catch (err) {
           errorRetryCount++;
           this.logger.error(
-            `[${depositAddress}] getExecutionStatus error (error retry ${errorRetryCount}/${MAX_ERROR_RETRIES}): ${this.getErrorMessage(err)}`,
+            `[${orderId}] getExecutionStatus error (error retry ${errorRetryCount}/${MAX_ERROR_RETRIES}): ${this.getErrorMessage(err)}`,
           );
 
           if (errorRetryCount >= MAX_ERROR_RETRIES) {
-            this.logger.error(`[${depositAddress}] Max error retries exceeded, stopping poll`);
-            await this.exhaustPolling(depositAddress, memo);
+            this.logger.error(`[${orderId}] Max error retries exceeded, stopping poll`);
+            await this.exhaustPolling(orderId, depositAddress, memo);
             return { success: false, data: null, error: 'max_error_retries_exceeded' };
           }
 
@@ -157,65 +155,59 @@ export class NearIntentPollerService implements OnModuleInit {
           continue;
         }
 
-        this.logger.log(`[${depositAddress}] Current execution status: ${status.status}`);
+        this.logger.log(`[${orderId}] Current execution status: ${status.status}`);
 
         if (TERMINAL_STATES.has(status.status)) {
-          await this.handleTerminalStatus(depositAddress, status);
+          await this.handleTerminalStatus(orderId, status);
           return { success: true, data: status, error: null };
         }
 
         await this.sleep(this.getPollDelayMs(attempt));
       }
 
-      this.logger.warn(`[${depositAddress}] Max polling attempts (${MAX_POLL_ATTEMPTS}) exceeded without reaching a terminal state`);
-      await this.exhaustPolling(depositAddress, memo);
+      this.logger.warn(`[${orderId}] Max polling attempts (${MAX_POLL_ATTEMPTS}) exceeded without reaching a terminal state`);
+      await this.exhaustPolling(orderId, depositAddress, memo);
       return { success: false, data: null, error: 'max_poll_attempts_exceeded' };
     } finally {
-      this.activePolls.delete(depositAddress);
+      this.activePolls.delete(orderId);
     }
   }
 
   // ─── Terminal-state handling (SUCCESS / FAILED / REFUNDED) ───────────────────
 
-  private async handleTerminalStatus(depositAddress: string, status: GetExecutionStatusResponse): Promise<void> {
+  private async handleTerminalStatus(orderId: string, status: GetExecutionStatusResponse): Promise<void> {
     const orderStatus = STATUS_MAP[status.status];
 
-    await this.removeRedisState(depositAddress);
-    await this.updateOrderStatusAndNotify(depositAddress, orderStatus);
+    await this.removeRedisState(orderId);
+    await this.updateOrderStatusAndNotify(orderId, orderStatus);
   }
 
-  private async exhaustPolling(depositAddress: string, memo?: string): Promise<void> {
-    const orderStatusUpdate = await this.updateOrderStatusAndNotify(depositAddress, SwapOrderStatus.EXHAUSTED, false);
-    await this.saveExhaustedForReconciliation(depositAddress, memo, orderStatusUpdate);
-    await this.removeRedisState(depositAddress);
+  private async exhaustPolling(orderId: string, depositAddress: string, memo?: string): Promise<void> {
+    const orderStatusUpdate = await this.updateOrderStatusAndNotify(orderId, SwapOrderStatus.EXHAUSTED, false);
+    await this.saveExhaustedForReconciliation(orderId, depositAddress, memo, orderStatusUpdate);
+    await this.removeRedisState(orderId);
   }
 
-  private async saveExhaustedForReconciliation(depositAddress: string, memo?: string, order?: any): Promise<void> {
+  private async saveExhaustedForReconciliation(orderId: string, depositAddress: string, memo?: string, order?: any): Promise<void> {
     try {
-      await this.exhaustedOrderModel.findOneAndUpdate(
-        { txHash: depositAddress },
-        {
-          txHash: depositAddress,
-          provider: swapProvider.NEARINTENT,
-          memo: memo ?? null,
-          exhaustedAt: new Date(),
-          swapOrderId: order?._id ?? null,
-          deviceFcmToken: order?.deviceFcmToken ?? null,
-        },
-        { upsert: true },
-      );
-      this.logger.log(`[${depositAddress}] Saved to ExhaustedOrders for reconciliation`);
+      await this.exhaustedOrderRepository.upsertBySwapOrderId(orderId, {
+        txHash: depositAddress,
+        provider: swapProvider.NEARINTENT,
+        memo: memo ?? null,
+        deviceFcmToken: order?.deviceFcmToken ?? null,
+      });
+      this.logger.log(`[${orderId}] Saved to ExhaustedOrders for reconciliation`);
     } catch (err) {
       this.logger.error(
-        `[${depositAddress}] Failed to save exhausted order for reconciliation`,
+        `[${orderId}] Failed to save exhausted order for reconciliation`,
         this.getErrorMessage(err),
       );
     }
   }
 
-  private async removeRedisState(depositAddress: string): Promise<void> {
-    await this.redisService.delKey(this.redisKey(depositAddress));
-    this.logger.log(`[${depositAddress}] Removed redis entry`);
+  private async removeRedisState(orderId: string): Promise<void> {
+    await this.redisService.delKey(this.redisKey(orderId));
+    this.logger.log(`[${orderId}] Removed redis entry`);
   }
 
   // ─── Order status + FCM notification, mirroring InchFusionPlusWsPollerService ──
@@ -241,16 +233,13 @@ export class NearIntentPollerService implements OnModuleInit {
     }
   }
 
-  private async updateOrderStatusAndNotify(depositAddress: string, orderStatus: SwapOrderStatus, notify = true): Promise<any> {
-    const orderStatusUpdate = await this.swapOrderService.updateOrderByHash({
-      txHash: depositAddress,
-      orderStatus,
-    });
-    this.logger.log(`[${depositAddress}] Order status updated to ${orderStatus}`);
+  private async updateOrderStatusAndNotify(orderId: string, orderStatus: SwapOrderStatus, notify = true): Promise<any> {
+    const orderStatusUpdate = await this.swapOrderService.updateOrderById(orderId, orderStatus);
+    this.logger.log(`[${orderId}] Order status updated to ${orderStatus}`);
     if (notify) {
       await this.sendOrderStatusNotification(orderStatusUpdate, orderStatus);
     } else {
-      this.logger.log(`[${depositAddress}] Skipping notification for ${orderStatus}`);
+      this.logger.log(`[${orderId}] Skipping notification for ${orderStatus}`);
     }
     return orderStatusUpdate;
   }

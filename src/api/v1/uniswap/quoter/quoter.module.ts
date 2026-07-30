@@ -11,7 +11,11 @@ import { NotificationModule } from '../../notification/notification.module';
 
 
 @Module({
-  imports: [SwapOrdersModule,RedisModule,NotificationModule],
+  imports: [
+    SwapOrdersModule,
+    RedisModule,
+    NotificationModule,
+  ],
   controllers: [QuoterController],
   providers: [QuoterService,ProviderService,InchService,RangoService,SwapProviderResolver],
   exports: [QuoterService],

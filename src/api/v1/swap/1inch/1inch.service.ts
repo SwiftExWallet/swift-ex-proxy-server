@@ -28,6 +28,7 @@ import * as crypto from 'crypto';
 import { CancelFusionOrderDto } from '../dto/cancelFusionOrder';
 import { FirebaseNotificationService } from '../../notification/firebase/notification.service';
 import { NotificationDto } from '../../notification/dto/notification.dto';
+import { ExhaustedOrderRepository } from '../../swapOrders/exhaustedOrder.repository';
 
 interface RedisOrderSecretState {
   secrets: string[];
@@ -66,6 +67,7 @@ export class InchService implements OnModuleInit {
     private readonly redisService: RedisService,
     private readonly inchWsPollerService: InchWsPollerService,
     private readonly firebaseNotificationService: FirebaseNotificationService,
+    private readonly exhaustedOrderRepository: ExhaustedOrderRepository,
   ) {
     this.sdk = new SDK({
       url: 'https://api.1inch.com/fusion-plus',
@@ -422,10 +424,11 @@ export class InchService implements OnModuleInit {
     );
 
     try {
-      await this.updateOrderStatusAndNotify(
+      const orderStatusUpdate = await this.updateOrderStatusAndNotify(
         orderHash,
         SwapOrderStatus.EXHAUSTED,
       );
+      await this.saveExhaustedForReconciliation(orderHash, orderStatusUpdate);
       this.stopSecretRevealPoller(orderHash);
       return true;
     } catch (err) {
@@ -435,6 +438,51 @@ export class InchService implements OnModuleInit {
       );
       return false;
     }
+  }
+
+  private async saveExhaustedForReconciliation(
+    orderHash: string,
+    order?: any,
+  ): Promise<void> {
+    try {
+      await this.exhaustedOrderRepository.upsertByTxHash(orderHash, {
+        provider: swapProvider.ONEINCH_FUSION_PLUS,
+        swapOrderId: order?._id ?? null,
+        deviceFcmToken: order?.deviceFcmToken ?? null,
+      });
+      this.logger.log(
+        `[${orderHash}] Saved to ExhaustedOrders for reconciliation`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `[${orderHash}] Failed to save exhausted order for reconciliation`,
+        this.getErrorMessage(err),
+      );
+    }
+  }
+
+  async resumeSecretRevealPolling(orderHash: string): Promise<boolean> {
+    if (this.activeSecretPollers.has(orderHash)) {
+      this.logger.log(
+        `[${orderHash}] fusion+ poller already active, skipping reconciliation resume`,
+      );
+      return true;
+    }
+
+    const secretState = await this.getSecretState(orderHash);
+    if (!secretState) {
+      this.logger.warn(
+        `[${orderHash}] fusion+ reconciliation found no secret state in redis, cannot resume`,
+      );
+      return false;
+    }
+
+    this.logger.log(
+      `[${orderHash}] fusion+ reconciliation resuming secret reveal polling`,
+    );
+    this.secretPollReschedules.delete(orderHash);
+    this.startSecretRevealPoller(orderHash);
+    return true;
   }
 
   private startSecretRevealPoller(orderHash: string): void {
@@ -536,6 +584,14 @@ export class InchService implements OnModuleInit {
             orderStatusUpdate,
           );
           await this.delSecretState(orderHash);
+          await this.exhaustedOrderRepository
+            .deleteByTxHash(orderHash)
+            .catch((err) =>
+              this.logger.error(
+                `[${orderHash}] Failed to remove ExhaustedOrder record`,
+                this.getErrorMessage(err),
+              ),
+            );
           this.stopSecretRevealPoller(orderHash);
           return;
         }

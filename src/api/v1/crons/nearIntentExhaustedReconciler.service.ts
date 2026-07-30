@@ -1,9 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import { OneClickService, GetExecutionStatusResponse } from '@defuse-protocol/one-click-sdk-typescript';
-import { ExhaustedOrder } from '../swapOrders/schema/exhaustedOrder.schema';
+import { ExhaustedOrderRepository, LeanExhaustedOrder } from '../swapOrders/exhaustedOrder.repository';
 import { SwapOrderRepository } from '../swapOrders/swapOrder.repository';
 import { SwapOrders } from '../swapOrders/schema/swapOrder.schema';
 import { SwapOrderStatus } from '../common/enums/order.enum';
@@ -25,8 +23,7 @@ export class NearIntentExhaustedReconcilerService {
   private isRunning = false;
 
   constructor(
-    @InjectModel(ExhaustedOrder.name)
-    private readonly exhaustedModel: Model<ExhaustedOrder>,
+    private readonly exhaustedOrderRepository: ExhaustedOrderRepository,
     private readonly repo: SwapOrderRepository,
     private readonly firebaseNotificationService: FirebaseNotificationService,
   ) {}
@@ -41,16 +38,13 @@ export class NearIntentExhaustedReconcilerService {
     this.isRunning = true;
     try {
       const since = new Date(Date.now() - RECONCILE_WINDOW_MS);
-      const pending = await this.exhaustedModel
-        .find({ provider: swapProvider.NEARINTENT, exhaustedAt: { $gte: since } })
-        .lean()
-        .exec();
+      const pending = await this.exhaustedOrderRepository.findPendingSince(swapProvider.NEARINTENT, since);
       if (!pending.length) return;
 
       this.logger.log(`near intent reconciliation processing ${pending.length} exhausted order(s)`);
       for (const order of pending) {
         try {
-          this.reconcileOrder(order);
+          await this.reconcileOrder(order);
         } catch (err) {
           this.logger.error(`[${order.txHash}] near intent reconciliation failed`, err);
         }
@@ -60,7 +54,7 @@ export class NearIntentExhaustedReconcilerService {
     }
   }
 
-  private async reconcileOrder(order: ExhaustedOrder & { txHash: string }): Promise<void> {
+  private async reconcileOrder(order: LeanExhaustedOrder): Promise<void> {
     let status: GetExecutionStatusResponse;
     try {
       status = order.memo
@@ -79,9 +73,14 @@ export class NearIntentExhaustedReconcilerService {
       return;
     }
 
+    if (!order.swapOrderId) {
+      this.logger.error(`[${order.txHash}] Missing swapOrderId, cannot reconcile safely (txHash may not be unique)`);
+      return;
+    }
+
     let updatedOrder: SwapOrders | null;
     try {
-      updatedOrder = await this.repo.updateOrderStatus(order.txHash, newStatus);
+      updatedOrder = await this.repo.updateOrderStatusById(String(order.swapOrderId), newStatus);
     } catch (err) {
       this.logger.error(`[${order.txHash}] Failed to update swap order during reconciliation`, err);
       return;
@@ -90,7 +89,7 @@ export class NearIntentExhaustedReconcilerService {
     this.logger.log(`[${order.txHash}] Reconciled exhausted order -> ${newStatus}`);
     await this.notify(updatedOrder, newStatus);
 
-    await this.exhaustedModel.deleteOne({ txHash: order.txHash });
+    await this.exhaustedOrderRepository.deleteById(String(order._id));
     this.logger.log(`[${order.txHash}] Removed from ExhaustedOrders`);
   }
 

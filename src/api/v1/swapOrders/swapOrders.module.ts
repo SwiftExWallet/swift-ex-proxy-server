@@ -4,6 +4,7 @@ import { SwapOrders, SwapOrderSchema } from './schema/swapOrder.schema';
 import { ExhaustedOrder, ExhaustedOrderSchema } from './schema/exhaustedOrder.schema';
 import { SwapOrderService } from './swapOrders.service';
 import { SwapOrderRepository } from './swapOrder.repository';
+import { ExhaustedOrderRepository } from './exhaustedOrder.repository';
 import { SwapOrdersController } from './swapOrders.controller';
 import { RangoPollerService } from '../crons/rangoPoller.service';
 import { AllbridgePollerService } from '../crons/allbridgePoller.service';
@@ -29,6 +30,7 @@ import { PortfolioModule } from '../portfolio/portfolio.module';
   providers: [
     SwapOrderService,
     SwapOrderRepository,
+    ExhaustedOrderRepository,
     RangoPollerService,
     AllbridgePollerService,
     InchWsPollerService,
@@ -42,6 +44,6 @@ import { PortfolioModule } from '../portfolio/portfolio.module';
     NearIntentExhaustedReconcilerService,
   ],
   controllers: [SwapOrdersController],
-  exports: [SwapOrderService, InchWsPollerService,InchFusionPlusWsPollerService, NearIntentPollerService],
+  exports: [SwapOrderService, InchWsPollerService,InchFusionPlusWsPollerService, NearIntentPollerService, ExhaustedOrderRepository],
 })
 export class SwapOrdersModule {}
