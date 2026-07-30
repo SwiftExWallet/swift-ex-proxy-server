@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
-import { ExhaustedOrder } from '../swapOrders/schema/exhaustedOrder.schema';
+import { ExhaustedOrderRepository } from '../swapOrders/exhaustedOrder.repository';
 import { swapProvider } from '../common/enums/chain.enum';
 import { InchService } from '../swap/1inch/1inch.service';
 
@@ -14,8 +12,7 @@ export class FusionPlusExhaustedReconcilerService {
   private isRunning = false;
 
   constructor(
-    @InjectModel(ExhaustedOrder.name)
-    private readonly exhaustedModel: Model<ExhaustedOrder>,
+    private readonly exhaustedOrderRepository: ExhaustedOrderRepository,
     private readonly inchService: InchService,
   ) {}
 
@@ -29,10 +26,10 @@ export class FusionPlusExhaustedReconcilerService {
     this.isRunning = true;
     try {
       const since = new Date(Date.now() - RECONCILE_WINDOW_MS);
-      const pending = await this.exhaustedModel
-        .find({ provider: swapProvider.ONEINCH_FUSION_PLUS, exhaustedAt: { $gte: since } })
-        .lean()
-        .exec();
+      const pending = await this.exhaustedOrderRepository.findPendingSince(
+        swapProvider.ONEINCH_FUSION_PLUS,
+        since,
+      );
       if (!pending.length) return;
 
       this.logger.log(`fusion+ reconciliation processing ${pending.length} exhausted order(s)`);

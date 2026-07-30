@@ -4,8 +4,6 @@ import {
   Logger,
   OnModuleInit,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import { SwapQuoteDto } from '../dto/swapQuote';
 import { ChainId, swapProvider } from '../../common/enums/chain.enum';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
@@ -30,7 +28,7 @@ import * as crypto from 'crypto';
 import { CancelFusionOrderDto } from '../dto/cancelFusionOrder';
 import { FirebaseNotificationService } from '../../notification/firebase/notification.service';
 import { NotificationDto } from '../../notification/dto/notification.dto';
-import { ExhaustedOrder } from '../../swapOrders/schema/exhaustedOrder.schema';
+import { ExhaustedOrderRepository } from '../../swapOrders/exhaustedOrder.repository';
 
 interface RedisOrderSecretState {
   secrets: string[];
@@ -69,8 +67,7 @@ export class InchService implements OnModuleInit {
     private readonly redisService: RedisService,
     private readonly inchWsPollerService: InchWsPollerService,
     private readonly firebaseNotificationService: FirebaseNotificationService,
-    @InjectModel(ExhaustedOrder.name)
-    private readonly exhaustedModel: Model<ExhaustedOrder>,
+    private readonly exhaustedOrderRepository: ExhaustedOrderRepository,
   ) {
     this.sdk = new SDK({
       url: 'https://api.1inch.com/fusion-plus',
@@ -448,17 +445,11 @@ export class InchService implements OnModuleInit {
     order?: any,
   ): Promise<void> {
     try {
-      await this.exhaustedModel.findOneAndUpdate(
-        { txHash: orderHash },
-        {
-          txHash: orderHash,
-          provider: swapProvider.ONEINCH_FUSION_PLUS,
-          exhaustedAt: new Date(),
-          swapOrderId: order?._id ?? null,
-          deviceFcmToken: order?.deviceFcmToken ?? null,
-        },
-        { upsert: true },
-      );
+      await this.exhaustedOrderRepository.upsertByTxHash(orderHash, {
+        provider: swapProvider.ONEINCH_FUSION_PLUS,
+        swapOrderId: order?._id ?? null,
+        deviceFcmToken: order?.deviceFcmToken ?? null,
+      });
       this.logger.log(
         `[${orderHash}] Saved to ExhaustedOrders for reconciliation`,
       );
@@ -593,8 +584,8 @@ export class InchService implements OnModuleInit {
             orderStatusUpdate,
           );
           await this.delSecretState(orderHash);
-          await this.exhaustedModel
-            .deleteOne({ txHash: orderHash })
+          await this.exhaustedOrderRepository
+            .deleteByTxHash(orderHash)
             .catch((err) =>
               this.logger.error(
                 `[${orderHash}] Failed to remove ExhaustedOrder record`,

@@ -39,9 +39,9 @@ describe('InchService Fusion+ poller', () => {
   let firebaseNotificationService: {
     sendNotification: jest.Mock;
   };
-  let exhaustedModel: {
-    findOneAndUpdate: jest.Mock;
-    deleteOne: jest.Mock;
+  let exhaustedOrderRepository: {
+    upsertByTxHash: jest.Mock;
+    deleteByTxHash: jest.Mock;
   };
 
   beforeEach(() => {
@@ -67,9 +67,9 @@ describe('InchService Fusion+ poller', () => {
     firebaseNotificationService = {
       sendNotification: jest.fn().mockResolvedValue(undefined),
     };
-    exhaustedModel = {
-      findOneAndUpdate: jest.fn().mockResolvedValue(undefined),
-      deleteOne: jest.fn().mockResolvedValue(undefined),
+    exhaustedOrderRepository = {
+      upsertByTxHash: jest.fn().mockResolvedValue(undefined),
+      deleteByTxHash: jest.fn().mockResolvedValue(undefined),
     };
 
     service = new InchService(
@@ -77,7 +77,7 @@ describe('InchService Fusion+ poller', () => {
       redisService as any,
       {} as any,
       firebaseNotificationService as any,
-      exhaustedModel as any,
+      exhaustedOrderRepository as any,
     );
     (service as any).sdk = sdk;
   });
@@ -134,7 +134,7 @@ describe('InchService Fusion+ poller', () => {
     });
     expect(firebaseNotificationService.sendNotification).toHaveBeenCalledTimes(1);
     expect(redisService.delKey).toHaveBeenCalledWith(`fusion_secrets:${orderHash}`);
-    expect(exhaustedModel.deleteOne).toHaveBeenCalledWith({ txHash: orderHash });
+    expect(exhaustedOrderRepository.deleteByTxHash).toHaveBeenCalledWith(orderHash);
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(false);
   });
 
@@ -153,10 +153,9 @@ describe('InchService Fusion+ poller', () => {
       orderStatus: SwapOrderStatus.EXHAUSTED,
     });
     expect(firebaseNotificationService.sendNotification).toHaveBeenCalledTimes(1);
-    expect(exhaustedModel.findOneAndUpdate).toHaveBeenCalledWith(
-      { txHash: orderHash },
+    expect(exhaustedOrderRepository.upsertByTxHash).toHaveBeenCalledWith(
+      orderHash,
       expect.objectContaining({ provider: swapProvider.ONEINCH_FUSION_PLUS }),
-      { upsert: true },
     );
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(false);
   });
@@ -177,10 +176,9 @@ describe('InchService Fusion+ poller', () => {
       orderStatus: SwapOrderStatus.EXHAUSTED,
     });
     expect(firebaseNotificationService.sendNotification).toHaveBeenCalledTimes(1);
-    expect(exhaustedModel.findOneAndUpdate).toHaveBeenCalledWith(
-      { txHash: orderHash },
+    expect(exhaustedOrderRepository.upsertByTxHash).toHaveBeenCalledWith(
+      orderHash,
       expect.objectContaining({ provider: swapProvider.ONEINCH_FUSION_PLUS }),
-      { upsert: true },
     );
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(false);
   });

@@ -1,9 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
 import { OneClickService, GetExecutionStatusResponse } from '@defuse-protocol/one-click-sdk-typescript';
-import { ExhaustedOrder } from '../swapOrders/schema/exhaustedOrder.schema';
+import { ExhaustedOrderRepository, LeanExhaustedOrder } from '../swapOrders/exhaustedOrder.repository';
 import { SwapOrderRepository } from '../swapOrders/swapOrder.repository';
 import { SwapOrders } from '../swapOrders/schema/swapOrder.schema';
 import { SwapOrderStatus } from '../common/enums/order.enum';
@@ -25,8 +23,7 @@ export class NearIntentExhaustedReconcilerService {
   private isRunning = false;
 
   constructor(
-    @InjectModel(ExhaustedOrder.name)
-    private readonly exhaustedModel: Model<ExhaustedOrder>,
+    private readonly exhaustedOrderRepository: ExhaustedOrderRepository,
     private readonly repo: SwapOrderRepository,
     private readonly firebaseNotificationService: FirebaseNotificationService,
   ) {}
@@ -41,10 +38,7 @@ export class NearIntentExhaustedReconcilerService {
     this.isRunning = true;
     try {
       const since = new Date(Date.now() - RECONCILE_WINDOW_MS);
-      const pending = await this.exhaustedModel
-        .find({ provider: swapProvider.NEARINTENT, exhaustedAt: { $gte: since } })
-        .lean()
-        .exec();
+      const pending = await this.exhaustedOrderRepository.findPendingSince(swapProvider.NEARINTENT, since);
       if (!pending.length) return;
 
       this.logger.log(`near intent reconciliation processing ${pending.length} exhausted order(s)`);
@@ -60,7 +54,7 @@ export class NearIntentExhaustedReconcilerService {
     }
   }
 
-  private async reconcileOrder(order: ExhaustedOrder & { txHash: string; _id: Types.ObjectId }): Promise<void> {
+  private async reconcileOrder(order: LeanExhaustedOrder): Promise<void> {
     let status: GetExecutionStatusResponse;
     try {
       status = order.memo
@@ -95,7 +89,7 @@ export class NearIntentExhaustedReconcilerService {
     this.logger.log(`[${order.txHash}] Reconciled exhausted order -> ${newStatus}`);
     await this.notify(updatedOrder, newStatus);
 
-    await this.exhaustedModel.deleteOne({ _id: order._id });
+    await this.exhaustedOrderRepository.deleteById(String(order._id));
     this.logger.log(`[${order.txHash}] Removed from ExhaustedOrders`);
   }
 

@@ -1,6 +1,4 @@
 import { Injectable, Logger, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import {
   OneClickService,
   OpenAPI,
@@ -11,7 +9,7 @@ import { RedisService } from '../../redis/redis.service';
 import { FirebaseNotificationService } from '../../notification/firebase/notification.service';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { swapProvider } from '../../common/enums/chain.enum';
-import { ExhaustedOrder } from '../../swapOrders/schema/exhaustedOrder.schema';
+import { ExhaustedOrderRepository } from '../../swapOrders/exhaustedOrder.repository';
 
 interface NearIntentRedisState {
   memo?: string;
@@ -43,8 +41,7 @@ export class NearIntentPollerService implements OnModuleInit {
     private readonly swapOrderService: SwapOrderService,
     private readonly redisService: RedisService,
     private readonly firebaseNotificationService: FirebaseNotificationService,
-    @InjectModel(ExhaustedOrder.name)
-    private readonly exhaustedOrderModel: Model<ExhaustedOrder>,
+    private readonly exhaustedOrderRepository: ExhaustedOrderRepository,
   ) {
     if (process.env.ONECLICK_BASE_URL) {
       OpenAPI.BASE = process.env.ONECLICK_BASE_URL;
@@ -193,18 +190,12 @@ export class NearIntentPollerService implements OnModuleInit {
 
   private async saveExhaustedForReconciliation(orderId: string, depositAddress: string, memo?: string, order?: any): Promise<void> {
     try {
-      await this.exhaustedOrderModel.findOneAndUpdate(
-        { swapOrderId: orderId },
-        {
-          txHash: depositAddress,
-          provider: swapProvider.NEARINTENT,
-          memo: memo ?? null,
-          exhaustedAt: new Date(),
-          swapOrderId: orderId,
-          deviceFcmToken: order?.deviceFcmToken ?? null,
-        },
-        { upsert: true },
-      );
+      await this.exhaustedOrderRepository.upsertBySwapOrderId(orderId, {
+        txHash: depositAddress,
+        provider: swapProvider.NEARINTENT,
+        memo: memo ?? null,
+        deviceFcmToken: order?.deviceFcmToken ?? null,
+      });
       this.logger.log(`[${orderId}] Saved to ExhaustedOrders for reconciliation`);
     } catch (err) {
       this.logger.error(
