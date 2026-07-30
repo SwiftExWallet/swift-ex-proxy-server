@@ -19,7 +19,7 @@ export class UsdtController {
   ) {
     const data = await this.ethService.prepareUsdtSwapTransaction(
       usdtSwapQuoteDto,
-      req.wallet?.address,
+      req.wallet,
     );
     res.status(200).json(data);
   }

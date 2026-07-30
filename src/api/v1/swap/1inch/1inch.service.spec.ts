@@ -1,7 +1,10 @@
 import { ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import { OrderStatus as SDKOrderStatus } from '@1inch/cross-chain-sdk';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
-import { swapProvider } from '../../common/enums/chain.enum';
+import {
+  SupportedWalletChain,
+  swapProvider,
+} from '../../common/enums/chain.enum';
 import { InchService } from './1inch.service';
 import {
   decryptFusionSecretState,
@@ -27,6 +30,10 @@ describe('InchService Fusion+ poller', () => {
     walletAddress: '0x1234567890123456789012345678901234567890',
     fromChain: 'ETH',
   };
+  const verifiedWallet = (address = updatedOrder.walletAddress) =>
+    ({
+      addresses: new Map([[SupportedWalletChain.eth, address]]),
+    }) as any;
 
   let service: InchService;
   let sdk: {
@@ -264,7 +271,7 @@ describe('InchService Fusion+ poller', () => {
           swapProvider: swapProvider.ONEINCH_FUSION,
         } as any,
         'device-id',
-        updatedOrder.walletAddress,
+        verifiedWallet(),
       ),
     ).resolves.toEqual({ status: 'pending' });
 
@@ -293,7 +300,7 @@ describe('InchService Fusion+ poller', () => {
           swapProvider: swapProvider.ONEINCH_FUSION,
         } as any,
         'device-id',
-        updatedOrder.walletAddress,
+        verifiedWallet(),
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
 
@@ -330,6 +337,55 @@ describe('InchService Fusion+ poller', () => {
     expect(JSON.stringify(error.response)).not.toContain('private 1inch route');
   });
 
+  it('does not derive the 1inch quote wallet address from the verified wallet', async () => {
+    const providerGet = jest
+      .spyOn(service as any, 'providerGet')
+      .mockResolvedValue({ quoteId: 'quote-id' });
+    const walletAddress = '0x1111111111111111111111111111111111111111';
+
+    await expect(
+      service.getSwapQuote({
+        tokenIn: '0x2222222222222222222222222222222222222222',
+        tokenOut: '0x3333333333333333333333333333333333333333',
+        amount: '1',
+        walletAddress,
+        chain: 'ETH',
+      } as any),
+    ).resolves.toEqual({ quoteId: 'quote-id' });
+
+    expect(providerGet).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        params: expect.objectContaining({ walletAddress }),
+      }),
+    );
+  });
+
+  it('does not derive the Fusion+ quote wallet address from the verified wallet', async () => {
+    const providerGet = jest
+      .spyOn(service as any, 'providerGet')
+      .mockResolvedValue({ quoteId: 'fusion-plus-quote-id' });
+    const walletAddress = '0x1111111111111111111111111111111111111111';
+
+    await expect(
+      service.getFusionPlusSwapQuote({
+        srcChain: 'ETH',
+        dstChain: 'BSC',
+        srcTokenAddress: '0x2222222222222222222222222222222222222222',
+        dstTokenAddress: '0x3333333333333333333333333333333333333333',
+        amount: '1',
+        walletAddress,
+      } as any),
+    ).resolves.toEqual({ quoteId: 'fusion-plus-quote-id' });
+
+    expect(providerGet).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        params: expect.objectContaining({ walletAddress }),
+      }),
+    );
+  });
+
   it('rejects Fusion submit when order maker does not match the verified wallet', async () => {
     const providerPost = jest.spyOn(service as any, 'providerPost');
 
@@ -343,7 +399,7 @@ describe('InchService Fusion+ poller', () => {
           quoteId: 'quote-id',
           chain: 'ETH',
         } as any,
-        '0x1234567890123456789012345678901234567890',
+        verifiedWallet('0x1234567890123456789012345678901234567890'),
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
 

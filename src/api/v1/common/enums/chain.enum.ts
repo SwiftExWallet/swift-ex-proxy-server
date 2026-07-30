@@ -74,6 +74,7 @@ export enum swapProvider {
   EVMTX = 'EVMTX',
   DYDX = 'DYDX',
   SRBTODYDX = 'SRBTODYDX',
+  NEARINTENT = 'NEARINTENT',
 }
 
 export enum SupportedWalletChain {

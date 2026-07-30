@@ -32,7 +32,7 @@ import { GetTokenInfoDto } from '../common/dto/fetchTokenInfo.dto';
 import { TokenInfo } from '../common/interface/tokenInfo.interface';
 import { UsdtSwapQuoteDto } from './dto/usdtSwapQuote.dto';
 import { ProviderService } from '../provider/provider.service';
-import { ChainEnum } from '../common/enums/chain.enum';
+import { ChainEnum, SupportedWalletChain } from '../common/enums/chain.enum';
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 import {
   ExecutedTransaction,
@@ -58,7 +58,10 @@ import {
 } from '../common/utils/provider-error.util';
 import { withProviderControls } from '../common/utils/retry.util';
 import { TokenMetadataService } from '../common/services/tokenMetadata.service';
-import { withExplicitVerifiedWalletAddress } from '../common/helpers/requestWallet';
+import {
+  type Wallet,
+  withExplicitVerifiedWalletAddress,
+} from '../common/helpers/requestWallet';
 @Injectable()
 export class EthService {
   provider(chain: ChainEnum = ChainEnum.ETH): JsonRpcProvider {
@@ -101,18 +104,9 @@ export class EthService {
     return withProviderControls(`eth:service:${action}`, operation);
   }
 
-  async getSwapQuote(
-    swapQuoteDto: SwapQuoteDto | ResolvedSwapQuoteDto,
-    verifiedWalletAddress?: string,
-  ): Promise<SwapQuote> {
+  async getSwapQuote(swapQuoteDto: SwapQuoteDto): Promise<SwapQuote> {
     try {
-      const resolvedDto = verifiedWalletAddress
-        ? await this.normalizeSwapQuoteForWallet(
-            swapQuoteDto,
-            verifiedWalletAddress,
-            'recipient',
-          )
-        : (swapQuoteDto as ResolvedSwapQuoteDto);
+      const resolvedDto = await this.normalizeSwapQuoteForWallet(swapQuoteDto);
       return process.env.ENVIRONMENT === 'dev'
         ? await this.ethTestnetSwapService.getQuote(resolvedDto)
         : await this.uniSwapService.getQuote(resolvedDto);
@@ -124,14 +118,15 @@ export class EthService {
 
   async prepareUsdtSwapTransaction(
     usdtSwapQuoteDto: UsdtSwapQuoteDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<SwapTx> {
     try {
-      const verifiedDto = verifiedWalletAddress
+      const verifiedDto = verifiedWallet
         ? withExplicitVerifiedWalletAddress(
             usdtSwapQuoteDto,
-            verifiedWalletAddress,
+            verifiedWallet,
             'fromAddress',
+            SupportedWalletChain.eth,
           )
         : usdtSwapQuoteDto;
       const { fromAddress, amount } = verifiedDto;
@@ -197,13 +192,15 @@ export class EthService {
 
   async getWalletAddressInfo(
     walletAddressDto: WalletAddressDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
     try {
-      const { walletAddress } = verifiedWalletAddress
+      const { walletAddress } = verifiedWallet
         ? withExplicitVerifiedWalletAddress(
             walletAddressDto,
-            verifiedWalletAddress,
+            verifiedWallet,
+            'walletAddress',
+            SupportedWalletChain.eth,
           )
         : walletAddressDto;
       const [transactionCount, gasFeeData] = await Promise.all([
@@ -323,13 +320,12 @@ export class EthService {
 
   async prepareSwapTransaction(
     dto: SwapPrepareDto | SwapQuoteDto | ResolvedSwapQuoteDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<any> {
     try {
-      const verifiedDto: SwapPrepareDto | ResolvedSwapQuoteDto =
-        verifiedWalletAddress
-          ? await this.prepareSwapInputForWallet(dto, verifiedWalletAddress)
-          : (dto as SwapPrepareDto | ResolvedSwapQuoteDto);
+      const verifiedDto: SwapPrepareDto | ResolvedSwapQuoteDto = verifiedWallet
+        ? await this.prepareSwapInputForWallet(dto, verifiedWallet)
+        : (dto as SwapPrepareDto | ResolvedSwapQuoteDto);
       return await this.buildSwapTransaction(verifiedDto);
     } catch (error) {
       throwIfHttpException(error);
@@ -365,13 +361,15 @@ export class EthService {
 
   async getTokenInfo(
     getTokenInfoDto: GetTokenInfoDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<TokenInfo[]> {
     try {
-      const { addresses, walletAddress } = verifiedWalletAddress
+      const { addresses, walletAddress } = verifiedWallet
         ? withExplicitVerifiedWalletAddress(
             getTokenInfoDto,
-            verifiedWalletAddress,
+            verifiedWallet,
+            'walletAddress',
+            SupportedWalletChain.eth,
           )
         : getTokenInfoDto;
       const validAddresses: string[] = ValidateAddress(addresses);
@@ -411,13 +409,15 @@ export class EthService {
 
   async prepareTransaction(
     prepareTransactionDto: PrepareTransactionDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<FullTransaction> {
     try {
-      const { unsignedTx, walletAddress } = verifiedWalletAddress
+      const { unsignedTx, walletAddress } = verifiedWallet
         ? withExplicitVerifiedWalletAddress(
             prepareTransactionDto,
-            verifiedWalletAddress,
+            verifiedWallet,
+            'walletAddress',
+            SupportedWalletChain.eth,
           )
         : prepareTransactionDto;
       const [nonce, gasLimit, feeData, network] = await Promise.all([
@@ -442,13 +442,15 @@ export class EthService {
 
   async getBalance(
     walletAddressDto: WalletAddressDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<bigint> {
     try {
-      const { walletAddress } = verifiedWalletAddress
+      const { walletAddress } = verifiedWallet
         ? withExplicitVerifiedWalletAddress(
             walletAddressDto,
-            verifiedWalletAddress,
+            verifiedWallet,
+            'walletAddress',
+            SupportedWalletChain.eth,
           )
         : walletAddressDto;
       return await getNativeCurrencyBalance(walletAddress, this.provider());
@@ -470,34 +472,30 @@ export class EthService {
 
   private async prepareSwapInputForWallet(
     dto: SwapPrepareDto | SwapQuoteDto | ResolvedSwapQuoteDto,
-    verifiedWalletAddress: string,
+    verifiedWallet: Wallet,
   ): Promise<SwapPrepareDto | ResolvedSwapQuoteDto> {
     if ('tokenIn' in dto && 'tokenOut' in dto) {
       return await this.normalizeSwapQuoteForWallet(
-        dto,
-        verifiedWalletAddress,
-        'recipient',
+        withExplicitVerifiedWalletAddress(
+          dto,
+          verifiedWallet,
+          'recipient',
+          SupportedWalletChain.eth,
+        ),
       );
     }
 
     return withExplicitVerifiedWalletAddress(
       dto,
-      verifiedWalletAddress,
+      verifiedWallet,
       'address',
+      SupportedWalletChain.eth,
     );
   }
 
   private async normalizeSwapQuoteForWallet(
-    dto: SwapQuoteDto | ResolvedSwapQuoteDto,
-    verifiedWalletAddress: string,
-    walletField: string,
+    dto: SwapQuoteDto,
   ): Promise<ResolvedSwapQuoteDto> {
-    return await this.tokenMetadataService.normalizeSwapQuote(
-      withExplicitVerifiedWalletAddress(
-        dto,
-        verifiedWalletAddress,
-        walletField,
-      ),
-    );
+    return await this.tokenMetadataService.normalizeSwapQuote(dto);
   }
 }

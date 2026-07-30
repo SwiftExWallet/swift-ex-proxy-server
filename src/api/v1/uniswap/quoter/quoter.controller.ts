@@ -36,8 +36,8 @@ export class QuoterController {
       keyBy: 'wallet',
     },
   )
-  async getQuote(@Req() req: any, @Body() body: SwapQuoteDto) {
-    return await this.quoterService.getQuoteResponse(body, req.wallet?.address);
+  async getQuote(@Body() body: SwapQuoteDto) {
+    return await this.quoterService.getQuoteResponse(body);
   }
 
   @Post('swap')
@@ -59,6 +59,6 @@ export class QuoterController {
     },
   )
   async swapBuild(@Req() req: any, @Body() dto: SwapQuoteDto) {
-    return await this.quoterService.buildSwapResponse(dto, req.wallet?.address);
+    return await this.quoterService.buildSwapResponse(dto, req.wallet);
   }
 }

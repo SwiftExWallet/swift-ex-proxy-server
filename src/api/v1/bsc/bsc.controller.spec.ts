@@ -20,6 +20,19 @@ describe('BscController', () => {
     expect(controller).toBeDefined();
   });
 
+  it('delegates swap quotes without wallet context', async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const dto = { amount: '1' };
+    const result = { outputAmount: '2' };
+    bscService.getSwapQuote.mockResolvedValue(result);
+
+    await controller.getSwapQuote(res, dto as any);
+
+    expect(bscService.getSwapQuote).toHaveBeenCalledWith(dto);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(result);
+  });
+
   it('applies wallet-scoped rate limits to broadcast and prepare routes', () => {
     expect(
       Reflect.getMetadata(RATE_LIMIT_KEY, controller.broadcastTransaction),

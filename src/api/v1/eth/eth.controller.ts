@@ -28,15 +28,8 @@ export class EthController {
       wallet: 30,
     }),
   )
-  async getSwapQuote(
-    @Req() req: any,
-    @Res() res,
-    @Body() swapQuoteDto: SwapQuoteDto,
-  ) {
-    const data = await this.ethService.getSwapQuote(
-      swapQuoteDto,
-      req.wallet?.address,
-    );
+  async getSwapQuote(@Res() res, @Body() swapQuoteDto: SwapQuoteDto) {
+    const data = await this.ethService.getSwapQuote(swapQuoteDto);
     res.status(200).json(data);
   }
 
@@ -78,7 +71,7 @@ export class EthController {
   ) {
     const data = await this.ethService.prepareSwapTransaction(
       swapPrepareDto,
-      req.wallet?.address,
+      req.wallet,
     );
     res.status(200).json(data);
   }
@@ -122,7 +115,7 @@ export class EthController {
   ) {
     const data = await this.ethService.getTokenInfo(
       getTokenInfoDto,
-      req.wallet?.address,
+      req.wallet,
     );
     res.status(200).json(data);
   }
@@ -143,7 +136,7 @@ export class EthController {
   ) {
     const data = await this.ethService.prepareTransaction(
       prepareTransactionDto,
-      req.wallet?.address,
+      req.wallet,
     );
     res.status(200).json(data);
   }
@@ -161,10 +154,7 @@ export class EthController {
     @Res() res,
     @Param() walletAddressDto: WalletAddressDto,
   ) {
-    const data = await this.ethService.getBalance(
-      walletAddressDto,
-      req.wallet?.address,
-    );
+    const data = await this.ethService.getBalance(walletAddressDto, req.wallet);
     res.status(200).json(data);
   }
 
@@ -183,7 +173,7 @@ export class EthController {
   ) {
     const data = await this.ethService.getWalletAddressInfo(
       walletAddressDto,
-      req.wallet?.address,
+      req.wallet,
     );
     res.status(200).json(data);
   }

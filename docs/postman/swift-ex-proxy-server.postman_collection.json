@@ -1,0 +1,1064 @@
+{
+  "info": {
+    "_postman_id": "8e7a6b7a-4b06-4d2f-89b3-0c3bc2a9a3b4",
+    "name": "Swift Ex Proxy Server API",
+    "description": "Import this collection into Postman. Set baseUrl, deviceToken, and walletAddress before running protected requests. Most API routes require x-auth-device-token. Wallet-bound routes also require x-wallet-address.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "x-auth-device-token",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{deviceToken}}",
+        "type": "string"
+      },
+      {
+        "key": "in",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "deviceToken",
+      "value": "paste-device-jwt-here"
+    },
+    {
+      "key": "walletAddress",
+      "value": "0x1234567890123456789012345678901234567890"
+    },
+    {
+      "key": "frontendOrigin",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "ethTokenIn",
+      "value": "0x0000000000000000000000000000000000000000"
+    },
+    {
+      "key": "ethTokenOut",
+      "value": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+    },
+    {
+      "key": "bscTokenIn",
+      "value": "0x0000000000000000000000000000000000000000"
+    },
+    {
+      "key": "bscTokenOut",
+      "value": "0x55d398326f99059fF775485246999027B3197955"
+    },
+    {
+      "key": "inchTokenIn",
+      "value": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+    },
+    {
+      "key": "inchTokenOut",
+      "value": "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+    },
+    {
+      "key": "recipientAddress",
+      "value": "0x1234567890123456789012345678901234567890"
+    },
+    {
+      "key": "signedTx",
+      "value": "0x"
+    },
+    {
+      "key": "unsignedTx",
+      "value": "0x"
+    },
+    {
+      "key": "txHash",
+      "value": "0xtransactionhash"
+    },
+    {
+      "key": "orderHash",
+      "value": "0xorderhash"
+    },
+    {
+      "key": "quoteId",
+      "value": "quote-id"
+    },
+    {
+      "key": "signature",
+      "value": "0xsignature"
+    },
+    {
+      "key": "extension",
+      "value": "0x"
+    },
+    {
+      "key": "approveData",
+      "value": "0x"
+    },
+    {
+      "key": "swapData",
+      "value": "0x"
+    },
+    {
+      "key": "depositData",
+      "value": "0x"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Root",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/"
+          }
+        },
+        {
+          "name": "Health",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Quoter",
+      "item": [
+        {
+          "name": "Quote",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"tokenIn\":{\"address\":\"{{ethTokenIn}}\",\"chainId\":1},\"tokenOut\":{\"address\":\"{{ethTokenOut}}\",\"chainId\":1},\"amount\":\"100000000000000000\",\"slippage\":0.5}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/quoter/quote"
+          }
+        },
+        {
+          "name": "Build Swap",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"tokenIn\":{\"address\":\"{{ethTokenIn}}\",\"chainId\":1},\"tokenOut\":{\"address\":\"{{ethTokenOut}}\",\"chainId\":1},\"amount\":\"100000000000000000\",\"slippage\":0.5}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/quoter/swap"
+          }
+        }
+      ]
+    },
+    {
+      "name": "ETH",
+      "item": [
+        {
+          "name": "Swap Quote",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"tokenIn\":{\"address\":\"{{ethTokenIn}}\",\"symbol\":\"ETH\",\"chainId\":1,\"decimals\":\"18\"},\"tokenOut\":{\"address\":\"{{ethTokenOut}}\",\"symbol\":\"USDT\",\"chainId\":1,\"decimals\":\"6\"},\"amount\":\"100000000000000000\",\"recipient\":\"{{recipientAddress}}\",\"slippage\":0.5}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/eth/swap-quote"
+          }
+        },
+        {
+          "name": "Broadcast Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"signedTx\":\"{{signedTx}}\",\"broadcastChain\":\"ETH\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/eth/transaction/broadcast"
+          }
+        },
+        {
+          "name": "Prepare Swap Transaction - Quote Body",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"tokenIn\":{\"address\":\"{{ethTokenIn}}\",\"chainId\":1},\"tokenOut\":{\"address\":\"{{ethTokenOut}}\",\"chainId\":1},\"amount\":\"100000000000000000\",\"slippage\":0.5}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/eth/swap-transaction/prepare"
+          }
+        },
+        {
+          "name": "Prepare Swap Transaction - Prepared Data Body",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"swapType\":\"swap\",\"approveData\":\"{{approveData}}\",\"depositData\":\"{{depositData}}\",\"swapData\":\"{{swapData}}\",\"value\":\"0\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/eth/swap-transaction/prepare"
+          }
+        },
+        {
+          "name": "Execute Swap Transactions",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"txs\":[\"{{signedTx}}\"],\"broadcastChain\":\"ETH\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/eth/swap-transaction/execute"
+          }
+        },
+        {
+          "name": "Token Info",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"addresses\":[\"{{ethTokenOut}}\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/eth/token/info"
+          }
+        },
+        {
+          "name": "Prepare Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"unsignedTx\":\"{{unsignedTx}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/eth/transaction/prepare"
+          }
+        },
+        {
+          "name": "Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/eth/{{walletAddress}}/balance"
+          }
+        },
+        {
+          "name": "Wallet Info",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/eth/wallet-address/{{walletAddress}}/info"
+          }
+        }
+      ]
+    },
+    {
+      "name": "BSC",
+      "item": [
+        {
+          "name": "Swap Quote",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"tokenIn\":{\"address\":\"{{bscTokenIn}}\",\"chainId\":56},\"tokenOut\":{\"address\":\"{{bscTokenOut}}\",\"chainId\":56},\"amount\":\"100000000000000000\",\"slippage\":0.5}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/bsc/swap-quote"
+          }
+        },
+        {
+          "name": "Broadcast Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"signedTx\":\"{{signedTx}}\",\"broadcastChain\":\"BSC\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/bsc/transaction/broadcast"
+          }
+        },
+        {
+          "name": "Prepare Swap Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"tokenIn\":{\"address\":\"{{bscTokenIn}}\",\"chainId\":56},\"tokenOut\":{\"address\":\"{{bscTokenOut}}\",\"chainId\":56},\"amount\":\"100000000000000000\",\"slippage\":0.5}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/bsc/swap-transaction/prepare"
+          }
+        },
+        {
+          "name": "Token Info",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"addresses\":[\"{{bscTokenOut}}\"]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/bsc/token/info"
+          }
+        },
+        {
+          "name": "Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/bsc/{{walletAddress}}/balance"
+          }
+        },
+        {
+          "name": "Wallet Info",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/bsc/wallet-address/{{walletAddress}}/info"
+          }
+        },
+        {
+          "name": "Token Balance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/bsc/{{walletAddress}}/token/{{bscTokenOut}}/balance"
+          }
+        },
+        {
+          "name": "Prepare Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"unsignedTx\":\"{{unsignedTx}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/bsc/transaction/prepare"
+          }
+        }
+      ]
+    },
+    {
+      "name": "USDT",
+      "item": [
+        {
+          "name": "Prepare USDT Swap Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"amount\":\"100000000000000000\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/usdt/swap-transaction/prepare"
+          }
+        }
+      ]
+    },
+    {
+      "name": "1inch",
+      "item": [
+        {
+          "name": "Get Swap Quote",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"chain\":\"ETH\",\"tokenIn\":\"{{inchTokenIn}}\",\"tokenOut\":\"{{inchTokenOut}}\",\"amount\":\"100000000000000000\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/swap/1inch/getSwapQuote"
+          }
+        },
+        {
+          "name": "Fusion+ Get Swap Quote",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"srcChain\":\"ETH\",\"dstChain\":\"BSC\",\"srcTokenAddress\":\"{{inchTokenIn}}\",\"dstTokenAddress\":\"{{bscTokenOut}}\",\"amount\":\"100000000000000000\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/swap/1inch/fusion-plus/getSwapQuote"
+          }
+        },
+        {
+          "name": "Build Fusion Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"chain\":\"ETH\",\"quote\":{},\"tokenIn\":\"{{inchTokenIn}}\",\"tokenOut\":\"{{inchTokenOut}}\",\"amount\":\"100000000000000000\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/swap/1inch/buildFusionOrder"
+          }
+        },
+        {
+          "name": "Build Fusion+ Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"quoteId\":\"{{quoteId}}\",\"secretCount\":1,\"requiresApprovalTransaction\":false}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/swap/1inch/buildFusionPlusOrder"
+          }
+        },
+        {
+          "name": "Submit Fusion Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"chain\":\"ETH\",\"order\":{\"salt\":\"1\",\"makerAsset\":\"{{inchTokenIn}}\",\"takerAsset\":\"{{inchTokenOut}}\",\"maker\":\"{{walletAddress}}\",\"receiver\":\"{{walletAddress}}\",\"makingAmount\":\"100000000000000000\",\"takingAmount\":\"1\",\"makerTraits\":\"0\"},\"signature\":\"{{signature}}\",\"extension\":\"{{extension}}\",\"quoteId\":\"{{quoteId}}\",\"orderHash\":\"{{orderHash}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/swap/1inch/submitOrder"
+          }
+        },
+        {
+          "name": "Submit Fusion+ Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"chain\":\"ETH\",\"toChain\":\"BSC\",\"order\":{\"salt\":\"1\",\"makerAsset\":\"{{inchTokenIn}}\",\"takerAsset\":\"{{bscTokenOut}}\",\"maker\":\"{{walletAddress}}\",\"receiver\":\"{{walletAddress}}\",\"makingAmount\":\"100000000000000000\",\"takingAmount\":\"1\",\"makerTraits\":\"0\"},\"signature\":\"{{signature}}\",\"extension\":\"{{extension}}\",\"quoteId\":\"{{quoteId}}\",\"orderHash\":\"{{orderHash}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/swap/1inch/submitFusionPlusOrder"
+          }
+        },
+        {
+          "name": "Order Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/swap/1inch/orderStatus?orderHash={{orderHash}}&chain=ETH&swapProvider=ONEINCH_FUSION"
+          }
+        },
+        {
+          "name": "Build Fusion+ Native Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"srcChain\":\"ETH\",\"dstChain\":\"BSC\",\"srcTokenAddress\":\"{{inchTokenIn}}\",\"dstTokenAddress\":\"{{bscTokenOut}}\",\"amount\":\"100000000000000000\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/swap/1inch/buildFusionPlusNativeOrder"
+          }
+        },
+        {
+          "name": "Submit Fusion+ Native Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"orderHash\":\"{{orderHash}}\",\"txHash\":\"{{txHash}}\",\"srcChain\":\"ETH\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/swap/1inch/submitFusionPlusNativeOrder"
+          }
+        },
+        {
+          "name": "Custom Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Origin",
+                "value": "{{frontendOrigin}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\":\"Swap update\",\"body\":\"Your swap status changed.\",\"data\":{\"txHash\":\"{{txHash}}\",\"orderHash\":\"{{orderHash}}\"}}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/swap/1inch/customNotification"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Swap Orders",
+      "item": [
+        {
+          "name": "Store Swap Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"quoteId\":\"{{quoteId}}\",\"txHash\":\"{{txHash}}\",\"provider\":\"ONEINCH_FUSION\",\"fromChain\":\"ETH\",\"toChain\":\"BSC\",\"fromToken\":\"ETH\",\"toToken\":\"USDT\",\"amountIn\":\"0.1\",\"amountOut\":\"100\",\"txType\":\"Swap\",\"status\":\"pending\",\"usdValue\":100}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/swapOrders/store"
+          }
+        },
+        {
+          "name": "Orders By Wallet",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/swapOrders/orderByWallet?address={{walletAddress}}&page=1&limit=10"
+          }
+        },
+        {
+          "name": "Bridge Order Status",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"txHash\":\"{{txHash}}\",\"walletType\":\"ETH\",\"provider\":\"ALLBRIDGE\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/swapOrders/bridgeOrderStatus"
+          }
+        },
+        {
+          "name": "Order By Hash",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/swapOrders/{{orderHash}}?address={{walletAddress}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bridge",
+      "item": [
+        {
+          "name": "Prepare Bridge Transaction",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"toAddress\":\"{{recipientAddress}}\",\"amount\":\"100\",\"sourceToken\":\"USDT\",\"destinationToken\":\"USDT\",\"walletType\":\"ETH\",\"destinationWalletType\":\"BSC\",\"feePayType\":\"native\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/bridge/swap-transaction/prepare"
+          }
+        },
+        {
+          "name": "Bridge Swap Quotes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"amount\":\"100\",\"sourceChain\":\"ETH\",\"sourceToken\":\"USDT\",\"destinationChain\":\"BSC\",\"destinationToken\":\"USDT\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/bridge/swap-quotes"
+          }
+        }
+      ]
+    }
+  ]
+}

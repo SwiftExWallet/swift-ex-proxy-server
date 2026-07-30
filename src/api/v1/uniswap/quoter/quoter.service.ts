@@ -32,7 +32,11 @@ import {
   throwIfHttpException,
 } from '../../common/utils/provider-error.util';
 import { withProviderControls } from '../../common/utils/retry.util';
-import { withExplicitVerifiedWalletAddress } from '../../common/helpers/requestWallet';
+import {
+  resolveWalletChain,
+  type Wallet,
+  withExplicitVerifiedWalletAddress,
+} from '../../common/helpers/requestWallet';
 
 type UniswapSwapRoute = NonNullable<Awaited<ReturnType<AlphaRouter['route']>>>;
 
@@ -53,16 +57,9 @@ export class QuoterService {
     return withProviderControls(`uniswap:quoter:${action}`, operation);
   }
 
-  async getQuoteResponse(body: SwapQuoteDto, verifiedWalletAddress?: string) {
-    const normalizedBody = await this.tokenMetadataService.normalizeSwapQuote(
-      verifiedWalletAddress
-        ? withExplicitVerifiedWalletAddress(
-            body,
-            verifiedWalletAddress,
-            'recipient',
-          )
-        : body,
-    );
+  async getQuoteResponse(body: SwapQuoteDto) {
+    const normalizedBody =
+      await this.tokenMetadataService.normalizeSwapQuote(body);
     const { provider, transformed } =
       this.swapProviderResolver.resolve(normalizedBody);
 
@@ -88,13 +85,17 @@ export class QuoterService {
     }
   }
 
-  async buildSwapResponse(dto: SwapQuoteDto, verifiedWalletAddress?: string) {
+  async buildSwapResponse(dto: SwapQuoteDto, verifiedWallet?: Wallet) {
+    const walletChain = resolveWalletChain(
+      dto.tokenIn?.chainId ?? dto.tokenOut?.chainId,
+    );
     const normalizedDto = await this.tokenMetadataService.normalizeSwapQuote(
-      verifiedWalletAddress
+      verifiedWallet
         ? withExplicitVerifiedWalletAddress(
             dto,
-            verifiedWalletAddress,
+            verifiedWallet,
             'recipient',
+            walletChain,
           )
         : dto,
     );

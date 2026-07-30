@@ -27,7 +27,7 @@ import { TokenInfo } from '../common/interface/tokenInfo.interface';
 import { BSC_IMPORT_TOKEN_ABI, BSC_ROUTER_ABI } from '../common/abi/bsc';
 import { BroadcastTransactionDto } from '../common/dto/broadcastTransaction.dto';
 import { ProviderService } from '../provider/provider.service';
-import { ChainEnum } from '../common/enums/chain.enum';
+import { ChainEnum, SupportedWalletChain } from '../common/enums/chain.enum';
 import { PrepareTransactionDto } from '../common/dto/prepareTransaction.dto';
 import { FullTransaction } from '../common/interface/transaction.interface';
 import { ValidateAddress } from '../common/helpers/utilityMethods';
@@ -42,7 +42,10 @@ import {
 } from '../common/utils/provider-error.util';
 import { withProviderControls } from '../common/utils/retry.util';
 import { TokenMetadataService } from '../common/services/tokenMetadata.service';
-import { withExplicitVerifiedWalletAddress } from '../common/helpers/requestWallet';
+import {
+  type Wallet,
+  withExplicitVerifiedWalletAddress,
+} from '../common/helpers/requestWallet';
 
 @Injectable()
 export class BscService {
@@ -79,15 +82,10 @@ export class BscService {
 
   async getSwapQuote(
     swapQuoteDto: SwapQuoteDto | ResolvedSwapQuoteDto,
-    verifiedWalletAddress?: string,
   ): Promise<string> {
     try {
-      const resolvedDto = verifiedWalletAddress
-        ? await this.normalizeSwapQuoteForWallet(
-            swapQuoteDto,
-            verifiedWalletAddress,
-          )
-        : (swapQuoteDto as ResolvedSwapQuoteDto);
+      const resolvedDto =
+        await this.tokenMetadataService.normalizeSwapQuote(swapQuoteDto);
       if (process.env.ENVIRONMENT === 'prod') {
         return await this.pancakeSwapService.getSwapQuote(resolvedDto);
       }
@@ -109,13 +107,13 @@ export class BscService {
 
   async prepareSwapTransaction(
     prepareSwapTransactionDto: SwapQuoteDto | ResolvedSwapQuoteDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<any> {
     try {
-      const resolvedDto = verifiedWalletAddress
+      const resolvedDto = verifiedWallet
         ? await this.normalizeSwapQuoteForWallet(
             prepareSwapTransactionDto,
-            verifiedWalletAddress,
+            verifiedWallet,
           )
         : (prepareSwapTransactionDto as ResolvedSwapQuoteDto);
       if (process.env.ENVIRONMENT === 'prod') {
@@ -247,13 +245,15 @@ export class BscService {
 
   async getUsdtTokenBalance(
     usdtBalanceDto: UsdtBalanceDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<{ walletBalance: bigint; tokenBalance: bigint }> {
     try {
-      const { walletAddress, tokenAddress } = verifiedWalletAddress
+      const { walletAddress, tokenAddress } = verifiedWallet
         ? withExplicitVerifiedWalletAddress(
             usdtBalanceDto,
-            verifiedWalletAddress,
+            verifiedWallet,
+            'walletAddress',
+            SupportedWalletChain.bnb,
           )
         : usdtBalanceDto;
       const walletAddressDto: WalletAddressDto = {
@@ -277,13 +277,15 @@ export class BscService {
 
   async getBalance(
     walletAddressDto: WalletAddressDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<bigint> {
     try {
-      const { walletAddress } = verifiedWalletAddress
+      const { walletAddress } = verifiedWallet
         ? withExplicitVerifiedWalletAddress(
             walletAddressDto,
-            verifiedWalletAddress,
+            verifiedWallet,
+            'walletAddress',
+            SupportedWalletChain.bnb,
           )
         : walletAddressDto;
       return await getNativeCurrencyBalance(walletAddress, this.provider);
@@ -294,13 +296,15 @@ export class BscService {
 
   async getWalletAddressInfo(
     walletAddressDto: WalletAddressDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<{ transactionCount: number; gasFeeData: FeeData }> {
     try {
-      const { walletAddress } = verifiedWalletAddress
+      const { walletAddress } = verifiedWallet
         ? withExplicitVerifiedWalletAddress(
             walletAddressDto,
-            verifiedWalletAddress,
+            verifiedWallet,
+            'walletAddress',
+            SupportedWalletChain.bnb,
           )
         : walletAddressDto;
       const [transactionCount, gasFeeData] = await Promise.all([
@@ -319,13 +323,15 @@ export class BscService {
 
   async getTokenInfo(
     getTokenInfoDto: GetTokenInfoDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<TokenInfo[]> {
     try {
-      const { addresses, walletAddress } = verifiedWalletAddress
+      const { addresses, walletAddress } = verifiedWallet
         ? withExplicitVerifiedWalletAddress(
             getTokenInfoDto,
-            verifiedWalletAddress,
+            verifiedWallet,
+            'walletAddress',
+            SupportedWalletChain.bnb,
           )
         : getTokenInfoDto;
       const validAddresses: string[] = ValidateAddress(addresses);
@@ -365,13 +371,15 @@ export class BscService {
 
   async prepareTransaction(
     prepareTransactionDto: PrepareTransactionDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<FullTransaction> {
     try {
-      const { unsignedTx, walletAddress } = verifiedWalletAddress
+      const { unsignedTx, walletAddress } = verifiedWallet
         ? withExplicitVerifiedWalletAddress(
             prepareTransactionDto,
-            verifiedWalletAddress,
+            verifiedWallet,
+            'walletAddress',
+            SupportedWalletChain.bnb,
           )
         : prepareTransactionDto;
       const [nonce, gasLimit, feeData, network] = await Promise.all([
@@ -396,13 +404,14 @@ export class BscService {
 
   private async normalizeSwapQuoteForWallet(
     dto: SwapQuoteDto | ResolvedSwapQuoteDto,
-    verifiedWalletAddress: string,
+    verifiedWallet: Wallet,
   ): Promise<ResolvedSwapQuoteDto> {
     return await this.tokenMetadataService.normalizeSwapQuote(
       withExplicitVerifiedWalletAddress(
         dto,
-        verifiedWalletAddress,
+        verifiedWallet,
         'recipient',
+        SupportedWalletChain.bnb,
       ),
     );
   }

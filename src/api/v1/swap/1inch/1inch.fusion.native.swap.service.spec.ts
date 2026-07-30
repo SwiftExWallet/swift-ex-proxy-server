@@ -6,6 +6,7 @@ import {
 } from '../../common/utils/encryption.util';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { ProviderErrorCode } from '../../common/utils/provider-error.util';
+import { SupportedWalletChain } from '../../common/enums/chain.enum';
 
 jest.mock('@1inch/cross-chain-sdk', () => ({
   Address: jest.fn(),
@@ -47,6 +48,10 @@ describe('FustionNativeService secret state TTL', () => {
     updateOrderByHash: jest.Mock;
     findOrderByHashForDeviceWallet: jest.Mock;
   };
+  const verifiedWallet = (address: string) =>
+    ({
+      addresses: new Map([[SupportedWalletChain.eth, address]]),
+    }) as any;
   let firebaseNotificationService: { sendNotification: jest.Mock };
 
   beforeEach(() => {
@@ -211,7 +216,7 @@ describe('FustionNativeService secret state TTL', () => {
           srcChain: 'ETH',
         } as any,
         'device-id',
-        walletAddress,
+        verifiedWallet(walletAddress),
       ),
     ).resolves.toMatchObject({
       success: true,
@@ -243,7 +248,7 @@ describe('FustionNativeService secret state TTL', () => {
           srcChain: 'ETH',
         } as any,
         'device-id',
-        walletAddress,
+        verifiedWallet(walletAddress),
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
 

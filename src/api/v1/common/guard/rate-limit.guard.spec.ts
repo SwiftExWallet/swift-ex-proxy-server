@@ -107,7 +107,11 @@ describe('RateLimitGuard', () => {
       guard.canActivate(
         createContext({
           ip: '127.0.0.1',
-          wallet: { address: '0x1111111111111111111111111111111111111111' },
+          wallet: {
+            addresses: {
+              multi: '0x1111111111111111111111111111111111111111',
+            },
+          },
         }),
       ),
     ).resolves.toBe(true);
@@ -115,7 +119,11 @@ describe('RateLimitGuard', () => {
       guard.canActivate(
         createContext({
           ip: '127.0.0.1',
-          wallet: { address: '0x2222222222222222222222222222222222222222' },
+          wallet: {
+            addresses: {
+              multi: '0x2222222222222222222222222222222222222222',
+            },
+          },
         }),
       ),
     ).resolves.toBe(true);
@@ -123,7 +131,11 @@ describe('RateLimitGuard', () => {
       guard.canActivate(
         createContext({
           ip: '127.0.0.1',
-          wallet: { address: '0x1111111111111111111111111111111111111111' },
+          wallet: {
+            addresses: {
+              multi: '0x1111111111111111111111111111111111111111',
+            },
+          },
         }),
       ),
     ).rejects.toBeInstanceOf(HttpException);
@@ -164,7 +176,9 @@ describe('RateLimitGuard', () => {
     const request = {
       ip: '10.0.0.1',
       device: { _id: 'device-a' },
-      wallet: { address: '0x1111111111111111111111111111111111111111' },
+      wallet: {
+        addresses: { multi: '0x1111111111111111111111111111111111111111' },
+      },
     };
 
     for (let i = 0; i < 100; i += 1) {
@@ -178,7 +192,11 @@ describe('RateLimitGuard', () => {
         createContext({
           ip: '10.0.0.2',
           device: { _id: 'device-a' },
-          wallet: { address: '0x2222222222222222222222222222222222222222' },
+          wallet: {
+            addresses: {
+              multi: '0x2222222222222222222222222222222222222222',
+            },
+          },
         }),
       ),
     ).rejects.toMatchObject({
@@ -190,7 +208,11 @@ describe('RateLimitGuard', () => {
         createContext({
           ip: '10.0.0.3',
           device: { _id: 'device-b' },
-          wallet: { address: '0x1111111111111111111111111111111111111111' },
+          wallet: {
+            addresses: {
+              multi: '0x1111111111111111111111111111111111111111',
+            },
+          },
         }),
       ),
     ).rejects.toMatchObject({

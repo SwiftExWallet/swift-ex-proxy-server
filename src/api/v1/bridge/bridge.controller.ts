@@ -32,7 +32,7 @@ export class BridgeController {
   ) {
     const response = await this.allBridgeService.prepareTransaction(
       allBridgeSwapADto,
-      req.wallet?.address,
+      req.wallet,
     );
     res.status(200).json(response);
   }

@@ -60,7 +60,8 @@ export class TokenMetadataService {
     const metadata = await this.resolveMetadata(token);
 
     return {
-      ...token,
+      address: token.address,
+      chainId: token.chainId,
       symbol: metadata.symbol,
       decimals: metadata.decimals,
     };

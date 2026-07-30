@@ -21,7 +21,7 @@ export class DeviceWalletMiddleware implements NestMiddleware {
     }
 
     if (!req.device?._id) {
-      throw new UnauthorizedException('Device token not found.');
+      throw new UnauthorizedException('Device not found.');
     }
 
     const verifiedWallet = await this.walletService.verifyWalletForDevice(
@@ -41,11 +41,18 @@ export class DeviceWalletMiddleware implements NestMiddleware {
 
   private getWalletAddress(req: any): string | null {
     const headerValue = req.headers?.[WALLET_ADDRESS_HEADER];
-    const walletAddress = Array.isArray(headerValue)
-      ? headerValue[0]
-      : headerValue;
+
+    if (Array.isArray(headerValue)) {
+      return null;
+    }
+
+    const walletAddress = headerValue;
 
     if (typeof walletAddress !== 'string' || !walletAddress.trim()) {
+      return null;
+    }
+
+    if (walletAddress.includes(',')) {
       return null;
     }
 

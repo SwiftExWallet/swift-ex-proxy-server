@@ -2,6 +2,7 @@ import {
   ForbiddenException,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { SupportedWalletChain } from '../common/enums/chain.enum';
 import { SwapOrderService } from './swapOrders.service';
 
 describe('SwapOrderService wallet ownership', () => {
@@ -12,6 +13,13 @@ describe('SwapOrderService wallet ownership', () => {
   const walletService = {
     verifyWalletForDevice: jest.fn(),
   };
+  const nearIntentPollerService = {
+    startPolling: jest.fn(),
+  };
+  const verifiedWallet = (address: string) =>
+    ({
+      addresses: new Map([[SupportedWalletChain.eth, address]]),
+    }) as any;
 
   let service: SwapOrderService;
 
@@ -21,6 +29,7 @@ describe('SwapOrderService wallet ownership', () => {
       {} as any,
       repository as any,
       walletService as any,
+      nearIntentPollerService as any,
     );
   });
 
@@ -57,25 +66,25 @@ describe('SwapOrderService wallet ownership', () => {
       page: 1,
       limit: 10,
     };
-    const verifiedWalletAddress = '0x1234567890123456789012345678901234567890';
+    const walletAddress = '0x1234567890123456789012345678901234567890';
     const result = { ok: true, data: { data: [], total: 0 } };
     walletService.verifyWalletForDevice.mockResolvedValue({
       walletId: 'wallet-id',
-      address: verifiedWalletAddress,
+      address: walletAddress,
     });
     repository.findByWalletWithPagination.mockResolvedValue(result);
 
     await expect(
       service.findOrdersForDeviceWallet(
         'device-id',
-        { ...query, address: verifiedWalletAddress },
-        verifiedWalletAddress,
+        { ...query, address: walletAddress },
+        verifiedWallet(walletAddress),
       ),
     ).resolves.toBe(result);
 
     expect(repository.findByWalletWithPagination).toHaveBeenCalledWith(
-      verifiedWalletAddress,
-      { ...query, address: verifiedWalletAddress },
+      walletAddress,
+      { ...query, address: walletAddress },
     );
   });
 

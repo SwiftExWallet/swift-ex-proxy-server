@@ -44,8 +44,10 @@ import {
   validateProviderUrl,
 } from '../../common/config/provider-url.config';
 import {
-  assertVerifiedWalletAddress,
   assertWalletAddressMatches,
+  getVerifiedWalletAddressFromWallet,
+  resolveWalletChain,
+  type Wallet,
   withExplicitVerifiedWalletAddress,
 } from '../../common/helpers/requestWallet';
 
@@ -230,12 +232,8 @@ export class InchService implements OnModuleInit {
     return response.data;
   }
 
-  async getSwapQuote(swapQuote: SwapQuoteDto, verifiedWalletAddress?: string) {
-    const verifiedSwapQuote = verifiedWalletAddress
-      ? withExplicitVerifiedWalletAddress(swapQuote, verifiedWalletAddress)
-      : swapQuote;
-    const { tokenIn, tokenOut, amount, walletAddress, chain } =
-      verifiedSwapQuote;
+  async getSwapQuote(swapQuote: SwapQuoteDto) {
+    const { tokenIn, tokenOut, amount, walletAddress, chain } = swapQuote;
     const url = this.buildOneInchUrl(
       'QUOTER_BASE',
       `${ChainId[chain]}/quote/receive`,
@@ -260,16 +258,7 @@ export class InchService implements OnModuleInit {
     }
   }
 
-  async getFusionPlusSwapQuote(
-    fusionPlusSwapQuote: FusionPlusSwapQuoteDto,
-    verifiedWalletAddress?: string,
-  ) {
-    const verifiedFusionPlusSwapQuote = verifiedWalletAddress
-      ? withExplicitVerifiedWalletAddress(
-          fusionPlusSwapQuote,
-          verifiedWalletAddress,
-        )
-      : fusionPlusSwapQuote;
+  async getFusionPlusSwapQuote(fusionPlusSwapQuote: FusionPlusSwapQuoteDto) {
     const {
       srcChain,
       dstChain,
@@ -277,7 +266,7 @@ export class InchService implements OnModuleInit {
       dstTokenAddress,
       amount,
       walletAddress,
-    } = verifiedFusionPlusSwapQuote;
+    } = fusionPlusSwapQuote;
     const url = this.buildOneInchUrl(
       'FUSION_PLUS_QUOTER_BASE',
       'quote/receive',
@@ -304,12 +293,14 @@ export class InchService implements OnModuleInit {
     }
   }
 
-  async buildFusionOrder(
-    fusionOrder: FusionOrderDto,
-    verifiedWalletAddress?: string,
-  ) {
-    const verifiedFusionOrder = verifiedWalletAddress
-      ? withExplicitVerifiedWalletAddress(fusionOrder, verifiedWalletAddress)
+  async buildFusionOrder(fusionOrder: FusionOrderDto, verifiedWallet?: Wallet) {
+    const verifiedFusionOrder = verifiedWallet
+      ? withExplicitVerifiedWalletAddress(
+          fusionOrder,
+          verifiedWallet,
+          'walletAddress',
+          resolveWalletChain(fusionOrder.chain),
+        )
       : fusionOrder;
     const { quote, tokenIn, tokenOut, amount, walletAddress, chain } =
       verifiedFusionOrder;
@@ -339,13 +330,10 @@ export class InchService implements OnModuleInit {
 
   async buildFusionPlusOrder(
     fusionPlusOrder: FusionPlusOrderDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ) {
-    const verifiedFusionPlusOrder = verifiedWalletAddress
-      ? withExplicitVerifiedWalletAddress(
-          fusionPlusOrder,
-          verifiedWalletAddress,
-        )
+    const verifiedFusionPlusOrder = verifiedWallet
+      ? withExplicitVerifiedWalletAddress(fusionPlusOrder, verifiedWallet)
       : fusionPlusOrder;
     try {
       const {
@@ -396,12 +384,15 @@ export class InchService implements OnModuleInit {
   async submitFusionOrder(
     _device: any,
     submitOrderDto: SubmitOrderDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ) {
-    if (verifiedWalletAddress) {
+    if (verifiedWallet) {
       assertWalletAddressMatches(
         submitOrderDto.order?.maker,
-        assertVerifiedWalletAddress(verifiedWalletAddress),
+        getVerifiedWalletAddressFromWallet(
+          verifiedWallet,
+          resolveWalletChain(submitOrderDto.chain),
+        ),
         'order.maker',
       );
     }
@@ -430,12 +421,15 @@ export class InchService implements OnModuleInit {
   async submitFusionPlusOrder(
     _device: any,
     submitOrderDto: SubmitOrderDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ) {
-    if (verifiedWalletAddress) {
+    if (verifiedWallet) {
       assertWalletAddressMatches(
         submitOrderDto.order?.maker,
-        assertVerifiedWalletAddress(verifiedWalletAddress),
+        getVerifiedWalletAddressFromWallet(
+          verifiedWallet,
+          resolveWalletChain(submitOrderDto.chain),
+        ),
         'order.maker',
       );
     }
@@ -782,11 +776,14 @@ export class InchService implements OnModuleInit {
   async orderStatus(
     inchOrderStatusDto: InchOrderStatusDto,
     deviceId: string,
-    walletAddress: string | undefined,
+    walletAddress: Wallet,
   ) {
     await this.assertOrderBelongsToDeviceWallet(
       deviceId,
-      assertVerifiedWalletAddress(walletAddress),
+      getVerifiedWalletAddressFromWallet(
+        walletAddress,
+        resolveWalletChain(inchOrderStatusDto.chain),
+      ),
       inchOrderStatusDto.orderHash,
     );
 

@@ -27,15 +27,8 @@ export class BscController {
       wallet: 30,
     }),
   )
-  async getSwapQuote(
-    @Req() req: any,
-    @Res() res,
-    @Body() swapQuoteDto: SwapQuoteDto,
-  ) {
-    const data = await this.bscService.getSwapQuote(
-      swapQuoteDto,
-      req.wallet?.address,
-    );
+  async getSwapQuote(@Res() res, @Body() swapQuoteDto: SwapQuoteDto) {
+    const data = await this.bscService.getSwapQuote(swapQuoteDto);
     res.status(200).json(data);
   }
 
@@ -77,7 +70,7 @@ export class BscController {
   ) {
     const data = await this.bscService.prepareSwapTransaction(
       prepareSwapTransactionDto,
-      req.wallet?.address,
+      req.wallet,
     );
     res.status(200).json(data);
   }
@@ -98,7 +91,7 @@ export class BscController {
   ) {
     const data = await this.bscService.getTokenInfo(
       getTokenInfoDto,
-      req.wallet?.address,
+      req.wallet,
     );
     res.status(200).json(data);
   }
@@ -116,10 +109,7 @@ export class BscController {
     @Res() res,
     @Param() walletAddressDto: WalletAddressDto,
   ) {
-    const data = await this.bscService.getBalance(
-      walletAddressDto,
-      req.wallet?.address,
-    );
+    const data = await this.bscService.getBalance(walletAddressDto, req.wallet);
     res.status(200).json(data);
   }
 
@@ -138,7 +128,7 @@ export class BscController {
   ) {
     const data = await this.bscService.getWalletAddressInfo(
       walletAddressDto,
-      req.wallet?.address,
+      req.wallet,
     );
     res.status(200).json(data);
   }
@@ -158,7 +148,7 @@ export class BscController {
   ) {
     const data = await this.bscService.getUsdtTokenBalance(
       usdtBalanceDto,
-      req.wallet?.address,
+      req.wallet,
     );
     res.status(200).json(data);
   }
@@ -179,7 +169,7 @@ export class BscController {
   ) {
     const data = await this.bscService.prepareTransaction(
       prepareTransactionDto,
-      req.wallet?.address,
+      req.wallet,
     );
     res.status(200).json(data);
   }

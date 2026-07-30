@@ -34,13 +34,19 @@ describe('inchController', () => {
 
   const reqWithWallet = {
     device: { _id: 'device-id' },
-    wallet: { address: '0x3333333333333333333333333333333333333333' },
+    wallet: {
+      addresses: {
+        eth: '0x3333333333333333333333333333333333333333',
+        bnb: '0x4444444444444444444444444444444444444444',
+        multi: '0x5555555555555555555555555555555555555555',
+      },
+    },
   };
 
   it('passes the authenticated device when submitting a Fusion order', async () => {
     const req = {
       device: { _id: 'device-id' },
-      wallet: { address: '0x3333333333333333333333333333333333333333' },
+      wallet: reqWithWallet.wallet,
     };
     const dto = {
       order: { salt: '1' },
@@ -57,14 +63,14 @@ describe('inchController', () => {
     expect(inchService.submitFusionOrder).toHaveBeenCalledWith(
       req.device,
       dto,
-      req.wallet.address,
+      req.wallet,
     );
   });
 
   it('passes the authenticated device when submitting a Fusion+ order', async () => {
     const req = {
       device: { _id: 'device-id' },
-      wallet: { address: '0x3333333333333333333333333333333333333333' },
+      wallet: reqWithWallet.wallet,
     };
     const dto = {
       order: { salt: '1' },
@@ -84,8 +90,24 @@ describe('inchController', () => {
     expect(inchService.submitFusionPlusOrder).toHaveBeenCalledWith(
       req.device,
       dto,
-      req.wallet.address,
+      req.wallet,
     );
+  });
+
+  it('delegates 1inch quote requests without wallet context', async () => {
+    const dto = {
+      chain: SwapNetwork.ETH,
+      tokenIn: '0x1111111111111111111111111111111111111111',
+      tokenOut: '0x2222222222222222222222222222222222222222',
+      walletAddress: '0x3333333333333333333333333333333333333333',
+      amount: '100',
+    };
+    const result = { quoteId: 'quote-id' };
+    inchService.getSwapQuote.mockResolvedValue(result);
+
+    await expect(controller.getQuote(dto as any)).resolves.toBe(result);
+
+    expect(inchService.getSwapQuote).toHaveBeenCalledWith(dto);
   });
 
   it('delegates Fusion+ quote requests to the Inch service', async () => {
@@ -100,14 +122,9 @@ describe('inchController', () => {
     const result = { quoteId: 'quote-id' };
     inchService.getFusionPlusSwapQuote.mockResolvedValue(result);
 
-    await expect(
-      controller.getFusionPlusQuote(reqWithWallet, dto),
-    ).resolves.toBe(result);
+    await expect(controller.getFusionPlusQuote(dto)).resolves.toBe(result);
 
-    expect(inchService.getFusionPlusSwapQuote).toHaveBeenCalledWith(
-      dto,
-      reqWithWallet.wallet.address,
-    );
+    expect(inchService.getFusionPlusSwapQuote).toHaveBeenCalledWith(dto);
   });
 
   it('passes device and wallet context when refreshing order status', async () => {
@@ -126,7 +143,7 @@ describe('inchController', () => {
     expect(inchService.orderStatus).toHaveBeenCalledWith(
       dto,
       reqWithWallet.device._id,
-      reqWithWallet.wallet.address,
+      reqWithWallet.wallet,
     );
   });
 
@@ -164,12 +181,12 @@ describe('inchController', () => {
 
     expect(fustionNativeService.createSwapOrder).toHaveBeenCalledWith(
       createDto,
-      reqWithWallet.wallet.address,
+      reqWithWallet.wallet,
     );
     expect(fustionNativeService.confirmSwapOrder).toHaveBeenCalledWith(
       confirmDto,
       reqWithWallet.device._id,
-      reqWithWallet.wallet.address,
+      reqWithWallet.wallet,
     );
   });
 

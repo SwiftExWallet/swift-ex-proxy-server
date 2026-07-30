@@ -20,7 +20,6 @@ describe('EthService', () => {
   const tokenMetadataService = {
     normalizeSwapQuote: jest.fn(),
   };
-
   beforeEach(() => {
     process.env = {
       ...originalEnv,
@@ -52,9 +51,11 @@ describe('EthService', () => {
   it('delegates swap quotes to testnet service in dev environment', async () => {
     process.env.ENVIRONMENT = 'dev';
     const quote = { outputAmount: '1' };
+    tokenMetadataService.normalizeSwapQuote.mockResolvedValue({});
     ethTestnetSwapService.getQuote.mockResolvedValue(quote);
 
     await expect(service.getSwapQuote({} as any)).resolves.toBe(quote);
+    expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith({});
     expect(ethTestnetSwapService.getQuote).toHaveBeenCalledWith({});
     expect(uniSwapService.getQuote).not.toHaveBeenCalled();
   });
@@ -62,29 +63,84 @@ describe('EthService', () => {
   it('delegates swap quotes to Uniswap service outside dev environment', async () => {
     process.env.ENVIRONMENT = 'prod';
     const quote = { outputAmount: '1' };
+    tokenMetadataService.normalizeSwapQuote.mockResolvedValue({});
     uniSwapService.getQuote.mockResolvedValue(quote);
 
     await expect(service.getSwapQuote({} as any)).resolves.toBe(quote);
+    expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith({});
     expect(uniSwapService.getQuote).toHaveBeenCalledWith({});
     expect(ethTestnetSwapService.getQuote).not.toHaveBeenCalled();
   });
 
-  it('applies the verified wallet and normalizes token metadata before quoting', async () => {
+  it('normalizes token metadata before quoting without a verified wallet', async () => {
     process.env.ENVIRONMENT = 'prod';
-    const dto = { amount: '1', recipient: undefined };
-    const normalizedDto = { amount: '1', recipient: '0xwallet' };
+    const dto = {
+      amount: '1',
+      recipient: '0x1111111111111111111111111111111111111111',
+      tokenIn: {
+        address: '0x2222222222222222222222222222222222222222',
+        chainId: 1,
+        symbol: 'FAKE',
+        decimals: '99',
+      },
+      tokenOut: {
+        address: '0x3333333333333333333333333333333333333333',
+        chainId: 1,
+        symbol: 'ALSO_FAKE',
+        decimals: '1',
+      },
+    };
+    const normalizedDto = {
+      ...dto,
+      tokenIn: {
+        address: dto.tokenIn.address,
+        chainId: dto.tokenIn.chainId,
+        symbol: 'WETH',
+        decimals: '18',
+      },
+      tokenOut: {
+        address: dto.tokenOut.address,
+        chainId: dto.tokenOut.chainId,
+        symbol: 'USDC',
+        decimals: '6',
+      },
+    };
     const quote = { outputAmount: '1' };
     tokenMetadataService.normalizeSwapQuote.mockResolvedValue(normalizedDto);
     uniSwapService.getQuote.mockResolvedValue(quote);
 
-    await expect(service.getSwapQuote(dto as any, '0xwallet')).resolves.toBe(
-      quote,
-    );
+    await expect(service.getSwapQuote(dto as any)).resolves.toBe(quote);
 
-    expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith({
+    expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith(dto);
+    expect(uniSwapService.getQuote).toHaveBeenCalledWith(normalizedDto);
+  });
+
+  it('does not derive the quote recipient from the verified wallet', async () => {
+    process.env.ENVIRONMENT = 'prod';
+    const dto = {
       amount: '1',
-      recipient: '0xwallet',
-    });
+      recipient: '0x1111111111111111111111111111111111111111',
+      tokenIn: {
+        address: '0x2222222222222222222222222222222222222222',
+        chainId: 1,
+      },
+      tokenOut: {
+        address: '0x3333333333333333333333333333333333333333',
+        chainId: 1,
+      },
+    };
+    const normalizedDto = {
+      ...dto,
+      tokenIn: { ...dto.tokenIn, symbol: 'WETH', decimals: '18' },
+      tokenOut: { ...dto.tokenOut, symbol: 'USDC', decimals: '6' },
+    };
+    const quote = { outputAmount: '1' };
+    tokenMetadataService.normalizeSwapQuote.mockResolvedValue(normalizedDto);
+    uniSwapService.getQuote.mockResolvedValue(quote);
+
+    await expect(service.getSwapQuote(dto as any)).resolves.toBe(quote);
+
+    expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith(dto);
     expect(uniSwapService.getQuote).toHaveBeenCalledWith(normalizedDto);
   });
 

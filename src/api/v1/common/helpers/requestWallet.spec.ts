@@ -1,7 +1,11 @@
 import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import mongoose from 'mongoose';
+import { SupportedWalletChain } from '../enums/chain.enum';
+import { Wallet } from '../../wallet/schema/wallet.schema';
 import {
   assertVerifiedWalletAddress,
   assertWalletAddressMatches,
+  getVerifiedWalletAddressFromWallet,
   getVerifiedWalletAddress,
   walletAddressesEqual,
   withExplicitVerifiedWalletAddress,
@@ -10,14 +14,77 @@ import {
 
 describe('requestWallet helpers', () => {
   const walletAddress = '0x1234567890123456789012345678901234567890';
+  const walletWithAddresses = (
+    addresses: Map<SupportedWalletChain, string>,
+  ): Wallet => ({
+    _id: new mongoose.Types.ObjectId() as any,
+    userId: new mongoose.Types.ObjectId() as any,
+    deviceId: new mongoose.Types.ObjectId() as any,
+    addresses,
+    isPrimary: true,
+  });
 
   describe('getVerifiedWalletAddress', () => {
     it('returns the verified wallet address from the request', () => {
       expect(
         getVerifiedWalletAddress({
-          wallet: { address: walletAddress },
+          wallet: { addresses: { multi: walletAddress } },
         }),
       ).toBe(walletAddress);
+    });
+
+    it('returns the chain-specific wallet address from the request wallet addresses object', () => {
+      expect(
+        getVerifiedWalletAddress(
+          {
+            wallet: {
+              addresses: {
+                eth: '0x1111111111111111111111111111111111111111',
+                bnb: '0x2222222222222222222222222222222222222222',
+                multi: '0x3333333333333333333333333333333333333333',
+              },
+            },
+          },
+          SupportedWalletChain.eth,
+        ),
+      ).toBe('0x1111111111111111111111111111111111111111');
+    });
+
+    it('falls back to the multi wallet address when the chain-specific address is missing', () => {
+      expect(
+        getVerifiedWalletAddress(
+          {
+            wallet: {
+              addresses: {
+                multi: '0x3333333333333333333333333333333333333333',
+              },
+            },
+          },
+          SupportedWalletChain.bnb,
+        ),
+      ).toBe('0x3333333333333333333333333333333333333333');
+    });
+
+    it('reads chain-specific wallet addresses from mongoose map-style addresses', () => {
+      expect(
+        getVerifiedWalletAddress(
+          {
+            wallet: {
+              addresses: new Map([
+                [
+                  SupportedWalletChain.eth,
+                  '0x1111111111111111111111111111111111111111',
+                ],
+                [
+                  SupportedWalletChain.bnb,
+                  '0x2222222222222222222222222222222222222222',
+                ],
+              ]),
+            },
+          },
+          SupportedWalletChain.bnb,
+        ),
+      ).toBe('0x2222222222222222222222222222222222222222');
     });
 
     it('rejects a missing wallet address', () => {
@@ -27,6 +94,12 @@ describe('requestWallet helpers', () => {
     it('rejects a blank wallet address', () => {
       expect(() =>
         getVerifiedWalletAddress({ wallet: { address: '   ' } }),
+      ).toThrow(UnauthorizedException);
+    });
+
+    it('rejects a raw address string as verified wallet context', () => {
+      expect(() =>
+        getVerifiedWalletAddressFromWallet(walletAddress as any),
       ).toThrow(UnauthorizedException);
     });
   });
@@ -101,7 +174,7 @@ describe('requestWallet helpers', () => {
 
       expect(
         withVerifiedWalletAddress(dto, {
-          wallet: { address: walletAddress },
+          wallet: { addresses: { multi: walletAddress } },
         }),
       ).toEqual({
         amount: '1',
@@ -115,7 +188,7 @@ describe('requestWallet helpers', () => {
       expect(
         withVerifiedWalletAddress(
           dto,
-          { wallet: { address: walletAddress } },
+          { wallet: { addresses: { multi: walletAddress } } },
           'recipient',
         ),
       ).toEqual({
@@ -130,7 +203,7 @@ describe('requestWallet helpers', () => {
           {
             recipient: '0x9999999999999999999999999999999999999999',
           },
-          { wallet: { address: walletAddress } },
+          { wallet: { addresses: { multi: walletAddress } } },
           'recipient',
         ),
       ).toThrow(ForbiddenException);
@@ -142,7 +215,9 @@ describe('requestWallet helpers', () => {
       expect(
         withExplicitVerifiedWalletAddress(
           { amount: '1' },
-          walletAddress,
+          walletWithAddresses(
+            new Map([[SupportedWalletChain.multi, walletAddress]]),
+          ),
           'recipient',
         ),
       ).toEqual({
@@ -157,7 +232,9 @@ describe('requestWallet helpers', () => {
           {
             recipient: '0x9999999999999999999999999999999999999999',
           },
-          walletAddress,
+          walletWithAddresses(
+            new Map([[SupportedWalletChain.multi, walletAddress]]),
+          ),
           'recipient',
         ),
       ).toThrow(ForbiddenException);

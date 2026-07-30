@@ -15,10 +15,13 @@ import {
   PaginatedResult,
   PAGE_SIZE,
 } from './dto/pagination.dto';
+import { PortfolioService } from '../portfolio/portfolio.service';
 
 export type DbResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 const PUBLIC_ORDER_SELECT = '-deviceId -deviceFcmToken';
+
+const SUCCESS_STATUSES = [SwapOrderStatus.COMPLETED, SwapOrderStatus.EXECUTED];
 
 @Injectable()
 export class SwapOrderRepository {
@@ -27,7 +30,30 @@ export class SwapOrderRepository {
   constructor(
     @InjectModel(SwapOrders.name)
     private readonly model: Model<SwapOrders>,
+    private readonly portfolioService: PortfolioService,
   ) {}
+
+  private triggerPortfolioRefresh(
+    order: SwapOrders | null,
+    status: SwapOrderStatus,
+  ): void {
+    if (!order || !SUCCESS_STATUSES.includes(status)) {
+      return;
+    }
+
+    const chains = [
+      ...new Set([order.fromChain, order.toChain].filter(Boolean)),
+    ];
+
+    this.portfolioService
+      .refreshPortfolio(String(order.deviceId), order.walletAddress, chains)
+      .catch((err) =>
+        this.logger.error('portfolio refresh trigger failed', {
+          txHash: order.txHash,
+          err,
+        }),
+      );
+  }
 
   async create(dto: StoreSwapOrderDto): Promise<SwapOrders> {
     try {
@@ -185,7 +211,7 @@ export class SwapOrderRepository {
   ): Promise<DbResult<void>> {
     try {
       const result = await this.model
-        .updateOne(
+        .findOneAndUpdate(
           { txHash },
           {
             $set: {
@@ -194,13 +220,16 @@ export class SwapOrderRepository {
               blockNumber,
             },
           },
+          { new: true },
         )
         .exec();
 
-      if (result.matchedCount === 0) {
+      if (!result) {
         this.logger.warn(`updateStatus no data found for txHash=${txHash}`);
         return { ok: false, error: 'updateStatus no data found' };
       }
+
+      this.triggerPortfolioRefresh(result, status);
 
       return { ok: true, data: undefined };
     } catch (err) {
@@ -276,6 +305,8 @@ export class SwapOrderRepository {
         this.logger.warn(`order data not found for txHash=${txHash}`);
         throw new BadRequestException('order data not found');
       }
+
+      this.triggerPortfolioRefresh(result, status);
 
       return result;
     } catch (err) {

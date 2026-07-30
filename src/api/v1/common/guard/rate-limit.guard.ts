@@ -21,6 +21,7 @@ import {
   RedisFailurePolicy,
 } from '../decorators/rate-limit.decorator';
 import { createRedisClient } from '../config/datastore.config';
+import { resolveVerifiedWalletAddress } from '../helpers/requestWallet';
 
 interface ManagedRateLimiter {
   primary: RateLimiterAbstract | null;
@@ -294,7 +295,7 @@ export class RateLimitGuard implements CanActivate {
       keyTypes.push('device');
     }
 
-    if (request.wallet?.address) {
+    if (resolveVerifiedWalletAddress(request.wallet)) {
       keyTypes.push('wallet');
     }
 
@@ -317,7 +318,7 @@ export class RateLimitGuard implements CanActivate {
       return `device:${String(deviceId)}`;
     }
 
-    const walletAddress = request.wallet?.address;
+    const walletAddress = resolveVerifiedWalletAddress(request.wallet);
     if (!walletAddress) {
       throw new UnauthorizedException(
         'Wallet context not found for rate limit.',

@@ -5,7 +5,7 @@ import { ChainId } from '../enums/chain.enum';
 import { SwapQuoteDto } from './swapQuote.dto';
 
 describe('SwapQuoteDto', () => {
-  it('rejects client supplied token metadata under the global whitelist policy', async () => {
+  it('allows client supplied token metadata for backwards compatibility', async () => {
     const dto = plainToInstance(SwapQuoteDto, {
       tokenIn: {
         address: '0x1111111111111111111111111111111111111111',
@@ -28,14 +28,7 @@ describe('SwapQuoteDto', () => {
       forbidNonWhitelisted: true,
     });
 
-    const messages = collectValidationMessages(errors);
-
-    expect(messages).toEqual(
-      expect.arrayContaining([
-        'property symbol should not exist',
-        'property decimals should not exist',
-      ]),
-    );
+    expect(collectValidationMessages(errors)).toEqual([]);
   });
 });
 

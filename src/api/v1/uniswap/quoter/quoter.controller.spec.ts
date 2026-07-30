@@ -35,7 +35,10 @@ describe('QuoterController', () => {
   } as SwapQuoteDto;
   const req = {
     wallet: {
-      address: '0x3333333333333333333333333333333333333333',
+      addresses: {
+        eth: '0x3333333333333333333333333333333333333333',
+        multi: '0x3333333333333333333333333333333333333333',
+      },
     },
   };
 
@@ -52,12 +55,9 @@ describe('QuoterController', () => {
     };
     quoterService.getQuoteResponse.mockResolvedValue(result);
 
-    await expect(controller.getQuote(req, dto)).resolves.toBe(result);
+    await expect(controller.getQuote(dto)).resolves.toBe(result);
 
-    expect(quoterService.getQuoteResponse).toHaveBeenCalledWith(
-      dto,
-      req.wallet.address,
-    );
+    expect(quoterService.getQuoteResponse).toHaveBeenCalledWith(dto);
   });
 
   it('delegates swap build requests to the quoter service', async () => {
@@ -68,7 +68,7 @@ describe('QuoterController', () => {
 
     expect(quoterService.buildSwapResponse).toHaveBeenCalledWith(
       dto,
-      req.wallet.address,
+      req.wallet,
     );
   });
 

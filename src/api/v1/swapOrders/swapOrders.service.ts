@@ -23,9 +23,16 @@ import {
   nodeRpcUrlsDefault,
 } from '@allbridge/bridge-core-sdk';
 import { PaginatedResult, PaginationDto } from './dto/pagination.dto';
-import { swapProvider } from '../common/enums/chain.enum';
 import { WalletService } from '../wallet/wallet.service';
-import { withExplicitVerifiedWalletAddress } from '../common/helpers/requestWallet';
+import {
+  getVerifiedWalletAddressFromWallet,
+  resolveWalletChain,
+  type Wallet,
+  walletContainsAddress,
+  withExplicitVerifiedWalletAddress,
+} from '../common/helpers/requestWallet';
+import { swapProvider } from '../common/enums/chain.enum';
+import { NearIntentPollerService } from '../swap/nearIntent/nearIntentPoller.service';
 
 @Injectable()
 export class SwapOrderService {
@@ -36,16 +43,23 @@ export class SwapOrderService {
     private readonly swapOrders: Model<SwapOrders>,
     private readonly swapOrderRepository: SwapOrderRepository,
     private readonly walletService: WalletService,
+    private readonly nearIntentPollerService: NearIntentPollerService,
   ) {}
 
   async store(
     device: any,
     dto: StoreSwapOrderDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<SwapOrders> {
+    const { txHash, provider, memo } = dto;
     try {
-      const verifiedDto = verifiedWalletAddress
-        ? withExplicitVerifiedWalletAddress(dto, verifiedWalletAddress)
+      const verifiedDto = verifiedWallet
+        ? withExplicitVerifiedWalletAddress(
+            dto,
+            verifiedWallet,
+            'walletAddress',
+            resolveWalletChain(dto.fromChain),
+          )
         : dto;
       let usdValue = verifiedDto.usdValue;
 
@@ -62,6 +76,10 @@ export class SwapOrderService {
         confirmedAt: null,
         deviceFcmToken: device.fcmToken,
       });
+
+      if (provider === swapProvider.NEARINTENT) {
+        this.nearIntentPollerService.startPolling(txHash, memo);
+      }
       return await doc.save();
     } catch (err: any) {
       if (err.code === 11000) {
@@ -103,16 +121,17 @@ export class SwapOrderService {
     deviceId: string,
     txHash: string,
     walletAddressOrQuery: string | MultiChainWalletAddressDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<DbResult<SwapOrders | null>> {
     const walletAddress =
       typeof walletAddressOrQuery === 'string'
         ? walletAddressOrQuery
-        : withExplicitVerifiedWalletAddress(
-            walletAddressOrQuery,
-            verifiedWalletAddress,
-            'address',
-          ).address;
+        : verifiedWallet
+          ? this.resolveVerifiedQueryAddress(
+              walletAddressOrQuery.address,
+              verifiedWallet,
+            )
+          : walletAddressOrQuery.address;
     await this.assertWalletBelongsToDevice(deviceId, walletAddress);
     return await this.swapOrderRepository.findByTxHashForWallet(
       txHash,
@@ -191,20 +210,36 @@ export class SwapOrderService {
   async findOrdersForDeviceWallet(
     deviceId: string,
     query: OrderByWalletQueryDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ): Promise<DbResult<PaginatedResult<SwapOrders>>> {
-    const verifiedQuery = verifiedWalletAddress
-      ? withExplicitVerifiedWalletAddress(
-          query,
-          verifiedWalletAddress,
-          'address',
-        )
-      : query;
+    const verifiedQuery = {
+      ...query,
+      address: verifiedWallet
+        ? this.resolveVerifiedQueryAddress(query.address, verifiedWallet)
+        : query.address,
+    };
     await this.assertWalletBelongsToDevice(deviceId, verifiedQuery.address);
     return await this.swapOrderRepository.findByWalletWithPagination(
       verifiedQuery.address,
       verifiedQuery,
     );
+  }
+
+  private resolveVerifiedQueryAddress(
+    queryAddress: string | undefined | null,
+    verifiedWallet: Wallet,
+  ): string {
+    if (queryAddress) {
+      if (!walletContainsAddress(verifiedWallet, queryAddress)) {
+        throw new ForbiddenException(
+          'address does not match the verified wallet address.',
+        );
+      }
+
+      return queryAddress;
+    }
+
+    return getVerifiedWalletAddressFromWallet(verifiedWallet);
   }
 
   private async assertWalletBelongsToDevice(

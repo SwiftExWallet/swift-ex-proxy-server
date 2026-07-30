@@ -21,7 +21,6 @@ describe('BscService', () => {
   const tokenMetadataService = {
     normalizeSwapQuote: jest.fn(),
   };
-
   beforeEach(() => {
     process.env = {
       ...originalEnv,
@@ -49,28 +48,83 @@ describe('BscService', () => {
   it('delegates swap quotes to PancakeSwap service in prod', async () => {
     process.env.ENVIRONMENT = 'prod';
     const quote = { outputAmount: '1' };
+    tokenMetadataService.normalizeSwapQuote.mockResolvedValue({});
     pancakeSwapService.getSwapQuote.mockResolvedValue(quote);
 
     await expect(service.getSwapQuote({} as any)).resolves.toBe(quote);
+    expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith({});
     expect(pancakeSwapService.getSwapQuote).toHaveBeenCalledWith({});
   });
 
-  it('applies the verified wallet and normalizes token metadata before quoting', async () => {
+  it('normalizes token metadata before quoting without a verified wallet', async () => {
     process.env.ENVIRONMENT = 'prod';
-    const dto = { amount: '1', recipient: undefined };
-    const normalizedDto = { amount: '1', recipient: '0xwallet' };
+    const dto = {
+      amount: '1',
+      recipient: '0x1111111111111111111111111111111111111111',
+      tokenIn: {
+        address: '0x2222222222222222222222222222222222222222',
+        chainId: 56,
+        symbol: 'FAKE',
+        decimals: '99',
+      },
+      tokenOut: {
+        address: '0x3333333333333333333333333333333333333333',
+        chainId: 56,
+        symbol: 'ALSO_FAKE',
+        decimals: '1',
+      },
+    };
+    const normalizedDto = {
+      ...dto,
+      tokenIn: {
+        address: dto.tokenIn.address,
+        chainId: dto.tokenIn.chainId,
+        symbol: 'WBNB',
+        decimals: '18',
+      },
+      tokenOut: {
+        address: dto.tokenOut.address,
+        chainId: dto.tokenOut.chainId,
+        symbol: 'USDT',
+        decimals: '18',
+      },
+    };
     const quote = { outputAmount: '1' };
     tokenMetadataService.normalizeSwapQuote.mockResolvedValue(normalizedDto);
     pancakeSwapService.getSwapQuote.mockResolvedValue(quote);
 
-    await expect(service.getSwapQuote(dto as any, '0xwallet')).resolves.toBe(
-      quote,
-    );
+    await expect(service.getSwapQuote(dto as any)).resolves.toBe(quote);
 
-    expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith({
+    expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith(dto);
+    expect(pancakeSwapService.getSwapQuote).toHaveBeenCalledWith(normalizedDto);
+  });
+
+  it('does not derive the quote recipient from the verified wallet', async () => {
+    process.env.ENVIRONMENT = 'prod';
+    const dto = {
       amount: '1',
-      recipient: '0xwallet',
-    });
+      recipient: '0x1111111111111111111111111111111111111111',
+      tokenIn: {
+        address: '0x2222222222222222222222222222222222222222',
+        chainId: 56,
+      },
+      tokenOut: {
+        address: '0x3333333333333333333333333333333333333333',
+        chainId: 56,
+      },
+    };
+    const normalizedDto = {
+      ...dto,
+      tokenIn: { ...dto.tokenIn, symbol: 'WBNB', decimals: '18' },
+      tokenOut: { ...dto.tokenOut, symbol: 'USDT', decimals: '18' },
+    };
+    const quote = { outputAmount: '1' };
+    tokenMetadataService.normalizeSwapQuote.mockResolvedValue(normalizedDto);
+    pancakeSwapService.getSwapQuote.mockResolvedValue(quote);
+
+    await expect(service.getSwapQuote(dto as any)).resolves.toBe(quote);
+
+    expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith(dto);
     expect(pancakeSwapService.getSwapQuote).toHaveBeenCalledWith(normalizedDto);
   });
 

@@ -8,9 +8,9 @@ import { Wallet } from './schema/wallet.schema';
 const EVM_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 const STELLAR_ADDRESS_PATTERN =
   /^G[A-Z0-9]{55}$|^[A-Z0-9]{1,12}-G[A-Z0-9]{55}$/;
-const SUPPORTED_WALLET_CHAINS = Object.values(SupportedWalletChain);
+const SUPPORTED_WALLET_ADDRESS_FIELDS = Object.values(SupportedWalletChain);
 
-export interface VerifiedDeviceWallet {
+export interface VerifiedDeviceWallet extends Wallet {
   walletId: string;
   address: string;
 }
@@ -30,7 +30,7 @@ export class WalletService {
     const wallet = await this.walletModel
       .findOne({
         deviceId,
-        $or: this.buildAddressConditions(normalizedAddress),
+        $or: this.buildAddressLookup(normalizedAddress),
       })
       .exec();
 
@@ -43,8 +43,10 @@ export class WalletService {
       rawWalletId instanceof mongoose.Types.ObjectId
         ? rawWalletId.toHexString()
         : (rawWalletId as string);
+    const walletObject = this.toPlainWallet(wallet);
 
     return {
+      ...walletObject,
       walletId,
       address: normalizedAddress,
     };
@@ -68,15 +70,28 @@ export class WalletService {
     throw new BadRequestException('Invalid wallet address format.');
   }
 
-  private buildAddressConditions(walletAddress: string): Record<string, any>[] {
-    const exactAddressPattern = new RegExp(
-      `^${this.escapeRegExp(walletAddress)}$`,
-      'i',
-    );
+  private buildExactAddressPattern(walletAddress: string): RegExp {
+    return new RegExp(`^${this.escapeRegExp(walletAddress)}$`, 'i');
+  }
 
-    return SUPPORTED_WALLET_CHAINS.map((chain) => ({
-      [`addresses.${chain}`]: exactAddressPattern,
+  private buildAddressLookup(walletAddress: string): Record<string, RegExp>[] {
+    const addressPattern = this.buildExactAddressPattern(walletAddress);
+
+    return SUPPORTED_WALLET_ADDRESS_FIELDS.map((chain) => ({
+      [`addresses.${chain}`]: addressPattern,
     }));
+  }
+
+  private toPlainWallet(wallet: Wallet): Wallet {
+    const walletWithToObject = wallet as Wallet & {
+      toObject?: () => Wallet;
+    };
+
+    if (typeof walletWithToObject.toObject === 'function') {
+      return walletWithToObject.toObject();
+    }
+
+    return wallet;
   }
 
   private escapeRegExp(value: string): string {

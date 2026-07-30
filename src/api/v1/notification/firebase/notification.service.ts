@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { NotificationDto } from '../dto/notification.dto';
 import * as firebaseAccount from './firebaseServiceAccount.json';
 
 @Injectable()
 export class FirebaseNotificationService {
+  private readonly logger = new Logger(FirebaseNotificationService.name);
+
   onModuleInit() {
     if (!admin.apps.length) {
       admin.initializeApp({
@@ -19,25 +21,26 @@ export class FirebaseNotificationService {
   async sendNotification(
     token: string,
     payload: NotificationDto,
-  ): Promise<string> {
+  ): Promise<string | null> {
     try {
       const { title, body, data } = payload;
-      const message: admin.messaging.Message = {
-        token: token,
+      const message: any = {
+        token,
         notification: {
           title: title,
           body: body,
         },
-        data: data,
+        data: data || {},
         android: {
-          priority: 'high',
+          priority: 'high' as any,
           notification: {
-            channelId: '1',
-            sound: 'default',
-            priority: 'high',
-            defaultVibrateTimings: true,
-            visibility: 'public',
+            priority: 'max' as any,
+            defaultSound: true as any,
+            visibility: 'public' as any,
+            channelId: '1' as any,
+            notificationPriority: 'PRIORITY_MAX' as any,
           },
+          ttl: 3600 * 1000,
         },
         apns: {
           headers: {
@@ -51,7 +54,6 @@ export class FirebaseNotificationService {
                 body: body,
               },
               sound: 'default',
-              badge: 0,
             },
           },
         },
@@ -59,8 +61,8 @@ export class FirebaseNotificationService {
       const response = await admin.messaging().send(message);
       return response;
     } catch (error) {
-      console.error('Error sending FCM notification:', error);
-      throw new Error('Failed to send notification');
+      this.logger.error('Error sending FCM notification', error);
+      return null;
     }
   }
 }

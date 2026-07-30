@@ -47,7 +47,9 @@ import {
   validateProviderUrl,
 } from '../../common/config/provider-url.config';
 import {
-  assertVerifiedWalletAddress,
+  getVerifiedWalletAddressFromWallet,
+  resolveWalletChain,
+  type Wallet,
   withExplicitVerifiedWalletAddress,
 } from '../../common/helpers/requestWallet';
 
@@ -280,10 +282,15 @@ export class FustionNativeService {
 
   async createSwapOrder(
     dto: FusionPlusSwapQuoteDto,
-    verifiedWalletAddress?: string,
+    verifiedWallet?: Wallet,
   ) {
-    const verifiedDto = verifiedWalletAddress
-      ? withExplicitVerifiedWalletAddress(dto, verifiedWalletAddress)
+    const verifiedDto = verifiedWallet
+      ? withExplicitVerifiedWalletAddress(
+          dto,
+          verifiedWallet,
+          'walletAddress',
+          resolveWalletChain(dto.srcChain),
+        )
       : dto;
     try {
       const {
@@ -443,14 +450,17 @@ export class FustionNativeService {
   async confirmSwapOrder(
     dto: ConfirmSwapOrderDto,
     deviceId: string,
-    walletAddress: string | undefined,
+    walletAddress: Wallet,
   ) {
     try {
       const { orderHash, txHash, srcChain } = dto;
 
       await this.assertOrderBelongsToDeviceWallet(
         deviceId,
-        assertVerifiedWalletAddress(walletAddress),
+        getVerifiedWalletAddressFromWallet(
+          walletAddress,
+          resolveWalletChain(srcChain),
+        ),
         orderHash,
       );
 

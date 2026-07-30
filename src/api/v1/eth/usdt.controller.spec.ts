@@ -31,7 +31,12 @@ describe('UsdtController', () => {
 
   it('returns prepared USDT swap transaction data with status 200', async () => {
     const req = {
-      wallet: { address: '0x1234567890123456789012345678901234567890' },
+      wallet: {
+        addresses: {
+          eth: '0x1234567890123456789012345678901234567890',
+          multi: '0x1234567890123456789012345678901234567890',
+        },
+      },
     };
     const res = createResponse();
     const body = { amount: '100' } as any;
@@ -42,7 +47,7 @@ describe('UsdtController', () => {
 
     expect(ethService.prepareUsdtSwapTransaction).toHaveBeenCalledWith(
       body,
-      req.wallet.address,
+      req.wallet,
     );
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(result);
@@ -50,7 +55,12 @@ describe('UsdtController', () => {
 
   it('passes the verified wallet address when body does not include fromAddress', async () => {
     const req = {
-      wallet: { address: '0x1234567890123456789012345678901234567890' },
+      wallet: {
+        addresses: {
+          eth: '0x1234567890123456789012345678901234567890',
+          multi: '0x1234567890123456789012345678901234567890',
+        },
+      },
     };
     const res = createResponse();
     const body = { amount: '100' } as any;
@@ -60,13 +70,18 @@ describe('UsdtController', () => {
 
     expect(ethService.prepareUsdtSwapTransaction).toHaveBeenCalledWith(
       body,
-      req.wallet.address,
+      req.wallet,
     );
   });
 
   it('allows a matching fromAddress from the request body', async () => {
     const req = {
-      wallet: { address: '0x1234567890123456789012345678901234567890' },
+      wallet: {
+        addresses: {
+          eth: '0x1234567890123456789012345678901234567890',
+          multi: '0x1234567890123456789012345678901234567890',
+        },
+      },
     };
     const res = createResponse();
     const body = {
@@ -79,7 +94,7 @@ describe('UsdtController', () => {
 
     expect(ethService.prepareUsdtSwapTransaction).toHaveBeenCalledWith(
       body,
-      req.wallet.address,
+      req.wallet,
     );
   });
 

@@ -15,8 +15,13 @@ describe('DeviceWalletMiddleware', () => {
 
   it('attaches the verified wallet to the request', async () => {
     const verifiedWallet = {
+      _id: 'wallet-id',
       walletId: 'wallet-id',
       address: '0x3333333333333333333333333333333333333333',
+      addresses: new Map([
+        ['multi', '0x3333333333333333333333333333333333333333'],
+      ]),
+      isPrimary: true,
     };
     const req: any = {
       device: { _id: 'device-id' },
@@ -46,6 +51,40 @@ describe('DeviceWalletMiddleware', () => {
     await expect(
       middleware.use(req, {} as any, jest.fn()),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('rejects repeated wallet address headers', async () => {
+    const req: any = {
+      device: { _id: 'device-id' },
+      headers: {
+        'x-wallet-address': [
+          '0x3333333333333333333333333333333333333333',
+          '0x4444444444444444444444444444444444444444',
+        ],
+      },
+    };
+
+    await expect(
+      middleware.use(req, {} as any, jest.fn()),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(walletService.verifyWalletForDevice).not.toHaveBeenCalled();
+  });
+
+  it('rejects comma-separated wallet address header values', async () => {
+    const req: any = {
+      device: { _id: 'device-id' },
+      headers: {
+        'x-wallet-address':
+          '0x3333333333333333333333333333333333333333, 0x4444444444444444444444444444444444444444',
+      },
+    };
+
+    await expect(
+      middleware.use(req, {} as any, jest.fn()),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(walletService.verifyWalletForDevice).not.toHaveBeenCalled();
   });
 
   it('rejects wallets that are not attached to the device', async () => {

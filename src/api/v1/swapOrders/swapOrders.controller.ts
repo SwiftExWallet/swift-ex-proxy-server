@@ -46,7 +46,7 @@ export class SwapOrdersController {
     const stored = await this.swapOrderService.store(
       req.device,
       storeSwapOrderDto,
-      req.wallet?.address,
+      req.wallet,
     );
     response.send(stored);
   }
@@ -63,7 +63,7 @@ export class SwapOrdersController {
     return await this.swapOrderService.findOrdersForDeviceWallet(
       req.device._id,
       query,
-      req.wallet?.address,
+      req.wallet,
     );
   }
 
@@ -96,7 +96,7 @@ export class SwapOrdersController {
       req.device._id,
       orderHash,
       query,
-      req.wallet?.address,
+      req.wallet,
     );
   }
 }

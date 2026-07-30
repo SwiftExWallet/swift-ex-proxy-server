@@ -22,7 +22,12 @@ describe('SwapOrdersController', () => {
   it('gets orders for the verified wallet after authenticating the device wallet', async () => {
     const req = {
       device: { _id: 'device-id' },
-      wallet: { address: '0x1234567890123456789012345678901234567890' },
+      wallet: {
+        addresses: {
+          eth: '0x1234567890123456789012345678901234567890',
+          multi: '0x1234567890123456789012345678901234567890',
+        },
+      },
     };
     const query = {
       address: '0x1234567890123456789012345678901234567890',
@@ -37,14 +42,19 @@ describe('SwapOrdersController', () => {
     expect(swapOrderService.findOrdersForDeviceWallet).toHaveBeenCalledWith(
       'device-id',
       query,
-      req.wallet.address,
+      req.wallet,
     );
   });
 
   it('gets an order only when the tx hash matches the verified wallet', async () => {
     const req = {
       device: { _id: 'device-id' },
-      wallet: { address: '0x1234567890123456789012345678901234567890' },
+      wallet: {
+        addresses: {
+          eth: '0x1234567890123456789012345678901234567890',
+          multi: '0x1234567890123456789012345678901234567890',
+        },
+      },
     };
     const result = { ok: true, data: null };
     swapOrderService.findOrderByHashForDeviceWallet.mockResolvedValue(result);
@@ -63,7 +73,7 @@ describe('SwapOrdersController', () => {
       {
         address: '0x1234567890123456789012345678901234567890',
       },
-      req.wallet.address,
+      req.wallet,
     );
   });
 

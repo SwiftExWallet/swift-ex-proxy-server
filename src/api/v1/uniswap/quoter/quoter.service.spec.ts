@@ -27,7 +27,6 @@ describe('QuoterService', () => {
   const tokenMetadataService = {
     normalizeSwapQuote: jest.fn(),
   };
-
   let service: QuoterService;
 
   const requestDto = {
@@ -88,6 +87,29 @@ describe('QuoterService', () => {
     expect(swapProviderResolver.resolve).toHaveBeenCalledWith(resolvedDto);
     expect(service.getQuote).toHaveBeenCalledWith(
       expect.objectContaining({ amount: requestDto.amount }),
+    );
+  });
+
+  it('does not derive the quote recipient from the verified wallet', async () => {
+    const quote = { outputAmount: '100', fee: '3000' };
+    tokenMetadataService.normalizeSwapQuote.mockResolvedValue(resolvedDto);
+    swapProviderResolver.resolve.mockReturnValue({
+      provider: swapProvider.UNISWAP,
+      transformed: resolvedDto,
+    });
+    jest.spyOn(service, 'getQuote').mockResolvedValue(quote as any);
+
+    await expect(service.getQuoteResponse(requestDto)).resolves.toEqual({
+      success: true,
+      provider: swapProvider.UNISWAP,
+      data: quote,
+    });
+
+    expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith(
+      requestDto,
+    );
+    expect(service.getQuote).toHaveBeenCalledWith(
+      expect.objectContaining({ recipient: requestDto.recipient }),
     );
   });
 

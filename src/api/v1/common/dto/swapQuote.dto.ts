@@ -1,4 +1,5 @@
 import {
+  Allow,
   IsEnum,
   IsNotEmpty,
   IsOptional,
@@ -19,6 +20,12 @@ export class TokenInfoDto {
   @IsNotEmpty()
   @IsEnum(ChainId)
   chainId: number;
+
+  @Allow()
+  symbol?: string;
+
+  @Allow()
+  decimals?: string;
 }
 
 export class SwapQuoteDto {
