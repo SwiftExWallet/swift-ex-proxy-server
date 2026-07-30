@@ -9,34 +9,30 @@ import {
 } from '@uniswap/sdk-core';
 import { ethers, parseUnits, TransactionRequest, ZeroAddress } from 'ethers';
 import { JsonRpcProvider } from '@ethersproject/providers';
-import { ProviderService } from '../../provider/provider.service';
+import { ProviderService } from '../provider/provider.service';
 import {
   ResolvedSwapQuoteDto,
   ResolvedTokenInfoDto,
   SwapQuoteDto,
-} from '../../common/dto/swapQuote.dto';
-import { SwapQuote } from '../../common/interface/swap.interface';
-import {
-  ChainEnum,
-  ChainId,
-  swapProvider,
-} from '../../common/enums/chain.enum';
-import { InchService } from '../../swap/1inch/1inch.service';
+} from '../common/dto/swapQuote.dto';
+import { SwapQuote } from '../common/interface/swap.interface';
+import { ChainEnum, ChainId, swapProvider } from '../common/enums/chain.enum';
+import { InchService } from '../swap/1inch/1inch.service';
 import { SwapProviderResolver } from './dto/swap-provider.resolver';
-import { TokenMetadataService } from '../../common/services/tokenMetadata.service';
+import { TokenMetadataService } from '../common/services/tokenMetadata.service';
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
 import {
   createProviderBadRequestException,
   ProviderErrorCode,
   throwIfHttpException,
-} from '../../common/utils/provider-error.util';
-import { withProviderControls } from '../../common/utils/retry.util';
+} from '../common/utils/provider-error.util';
+import { withProviderControls } from '../common/utils/retry.util';
 import {
   resolveWalletChain,
   type Wallet,
   withExplicitVerifiedWalletAddress,
-} from '../../common/helpers/requestWallet';
+} from '../common/helpers/requestWallet';
 
 type UniswapSwapRoute = NonNullable<Awaited<ReturnType<AlphaRouter['route']>>>;
 

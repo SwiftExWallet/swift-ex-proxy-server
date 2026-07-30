@@ -17,7 +17,7 @@ import { RedisModule } from './api/v1/redis/redis.module';
 import { SwapModule } from './api/v1/swap/swap.module';
 import { APP_GUARD } from '@nestjs/core';
 import { RateLimitGuard } from './api/v1/common/guard/rate-limit.guard';
-import { QuoterModule } from './api/v1/uniswap/quoter/quoter.module';
+import { QuoterModule } from './api/v1/quoter/quoter.module';
 import { SwapOrdersModule } from './api/v1/swapOrders/swapOrders.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { getMongoConnectionConfig } from './api/v1/common/config/datastore.config';

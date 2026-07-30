@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
-import { ChainId, swapProvider } from '../../../common/enums/chain.enum';
-import { SwapQuoteDto } from '../../../common/dto/swapQuote.dto';
+import { ChainId, swapProvider } from '../../common/enums/chain.enum';
+import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
 import { SwapProviderResolver } from './swap-provider.resolver';
 
 describe('SwapProviderResolver', () => {

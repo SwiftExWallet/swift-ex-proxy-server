@@ -67,22 +67,27 @@ export class PortfolioMapper {
         continue;
       }
 
-      const nativeMeta = entry.tokenAddress === null
-        ? PortfolioMapper.NATIVE_TOKEN_META[entry.network]
-        : undefined;
+      const nativeMeta =
+        entry.tokenAddress === null
+          ? PortfolioMapper.NATIVE_TOKEN_META[entry.network]
+          : undefined;
 
-      const decimals = entry.tokenMetadata.decimals ?? nativeMeta?.decimals ?? null;
+      const decimals =
+        entry.tokenMetadata.decimals ?? nativeMeta?.decimals ?? null;
       const symbol = entry.tokenMetadata.symbol ?? nativeMeta?.symbol ?? null;
       const name = entry.tokenMetadata.name ?? nativeMeta?.name ?? null;
       const logo = entry.tokenMetadata.logo ?? null;
 
-      const priceUsd = entry.tokenPrices.find((p) => p.currency === 'usd')?.value ?? null;
-      const balance = decimals !== null
-        ? this.hexToDecimalString(entry.tokenBalance, decimals)
-        : null;
-      const valueUsd = balance && priceUsd
-        ? (Number(balance) * Number(priceUsd)).toString()
-        : null;
+      const priceUsd =
+        entry.tokenPrices.find((p) => p.currency === 'usd')?.value ?? null;
+      const balance =
+        decimals !== null
+          ? this.hexToDecimalString(entry.tokenBalance, decimals)
+          : null;
+      const valueUsd =
+        balance && priceUsd
+          ? (Number(balance) * Number(priceUsd)).toString()
+          : null;
 
       if (valueUsd) {
         totalValueUsd += Number(valueUsd);

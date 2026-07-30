@@ -7,12 +7,12 @@ import {
   Req,
 } from '@nestjs/common';
 import { QuoterService } from './quoter.service';
-import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
-import { RateLimit } from '../../common/decorators/rate-limit.decorator';
+import { SwapQuoteDto } from '../common/dto/swapQuote.dto';
+import { RateLimit } from '../common/decorators/rate-limit.decorator';
 import {
   BodySizeLimit,
   BODY_SIZE_LIMITS,
-} from '../../common/decorators/body-size-limit.decorator';
+} from '../common/decorators/body-size-limit.decorator';
 
 @Controller('api/v1/quoter')
 export class QuoterController {

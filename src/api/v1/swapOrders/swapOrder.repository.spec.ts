@@ -14,6 +14,9 @@ describe('SwapOrderRepository', () => {
     findOneAndUpdate: jest.Mock;
   };
   let save: jest.Mock;
+  const portfolioService = {
+    refreshPortfolio: jest.fn(),
+  };
 
   const publicOrderSelect = '-deviceId -deviceFcmToken';
 
@@ -59,8 +62,10 @@ describe('SwapOrderRepository', () => {
     model.updateOne = jest.fn();
     model.countDocuments = jest.fn();
     model.findOneAndUpdate = jest.fn();
+    portfolioService.refreshPortfolio.mockReset();
+    portfolioService.refreshPortfolio.mockResolvedValue(undefined);
 
-    repository = new SwapOrderRepository(model as any);
+    repository = new SwapOrderRepository(model as any, portfolioService as any);
   });
 
   afterEach(() => {
@@ -272,8 +277,15 @@ describe('SwapOrderRepository', () => {
   });
 
   it('updates order status by transaction hash', async () => {
-    const query = createQuery({ matchedCount: 1 });
-    model.updateOne.mockReturnValue(query);
+    const updatedOrder = {
+      txHash: '0xtxhash',
+      deviceId: { toString: () => 'device-id' },
+      walletAddress: '0xwallet',
+      fromChain: 'ETH',
+      toChain: 'BSC',
+    };
+    const query = createQuery(updatedOrder);
+    model.findOneAndUpdate.mockReturnValue(query);
 
     await expect(
       repository.updateStatus('0xtxhash', SwapOrderStatus.COMPLETED, 123),
@@ -282,7 +294,7 @@ describe('SwapOrderRepository', () => {
       data: undefined,
     });
 
-    expect(model.updateOne).toHaveBeenCalledWith(
+    expect(model.findOneAndUpdate).toHaveBeenCalledWith(
       { txHash: '0xtxhash' },
       {
         $set: {
@@ -291,13 +303,19 @@ describe('SwapOrderRepository', () => {
           blockNumber: 123,
         },
       },
+      { new: true },
+    );
+    expect(portfolioService.refreshPortfolio).toHaveBeenCalledWith(
+      'device-id',
+      updatedOrder.walletAddress,
+      ['ETH', 'BSC'],
     );
     expect(query.exec).toHaveBeenCalledTimes(1);
   });
 
   it('returns an error result when updating status finds no order', async () => {
-    const query = createQuery({ matchedCount: 0 });
-    model.updateOne.mockReturnValue(query);
+    const query = createQuery(null);
+    model.findOneAndUpdate.mockReturnValue(query);
 
     await expect(
       repository.updateStatus('0xtxhash', SwapOrderStatus.COMPLETED),

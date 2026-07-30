@@ -7,12 +7,12 @@ jest.mock('@uniswap/smart-order-router', () => ({
 
 import { BadRequestException } from '@nestjs/common';
 import { QuoterService } from './quoter.service';
-import { ChainId, swapProvider } from '../../common/enums/chain.enum';
+import { ChainId, swapProvider } from '../common/enums/chain.enum';
 import {
   ResolvedSwapQuoteDto,
   SwapQuoteDto,
-} from '../../common/dto/swapQuote.dto';
-import { ProviderErrorCode } from '../../common/utils/provider-error.util';
+} from '../common/dto/swapQuote.dto';
+import { ProviderErrorCode } from '../common/utils/provider-error.util';
 
 describe('QuoterService', () => {
   const providerService = {

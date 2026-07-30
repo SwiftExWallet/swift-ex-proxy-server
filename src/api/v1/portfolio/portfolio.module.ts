@@ -7,7 +7,9 @@ import { PortfolioMapper } from './portfolio.mapper';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Portfolio.name, schema: PortfolioSchema }]),
+    MongooseModule.forFeature([
+      { name: Portfolio.name, schema: PortfolioSchema },
+    ]),
   ],
   providers: [PortfolioService, PortfolioRepository, PortfolioMapper],
   exports: [PortfolioService],

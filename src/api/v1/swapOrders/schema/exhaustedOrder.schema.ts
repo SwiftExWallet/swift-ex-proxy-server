@@ -13,7 +13,11 @@ export class ExhaustedOrder {
   @Prop({ default: null })
   memo: string;
 
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'SwapOrders', default: null })
+  @Prop({
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SwapOrders',
+    default: null,
+  })
   swapOrderId: mongoose.Schema.Types.ObjectId;
 
   @Prop({ default: null })
@@ -23,4 +27,5 @@ export class ExhaustedOrder {
   exhaustedAt: Date;
 }
 
-export const ExhaustedOrderSchema = SchemaFactory.createForClass(ExhaustedOrder);
+export const ExhaustedOrderSchema =
+  SchemaFactory.createForClass(ExhaustedOrder);

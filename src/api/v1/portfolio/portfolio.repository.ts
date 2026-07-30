@@ -10,7 +10,10 @@ export class PortfolioRepository {
     private readonly model: Model<Portfolio>,
   ) {}
 
-  async findByDeviceAndAddress(deviceId: string, address: string): Promise<Portfolio | null> {
+  async findByDeviceAndAddress(
+    deviceId: string,
+    address: string,
+  ): Promise<Portfolio | null> {
     return this.model.findOne({ deviceId, address }).exec();
   }
 
@@ -44,7 +47,11 @@ export class PortfolioRepository {
       .exec();
   }
 
-  async markFailed(deviceId: string, address: string, error: string): Promise<void> {
+  async markFailed(
+    deviceId: string,
+    address: string,
+    error: string,
+  ): Promise<void> {
     await this.model
       .updateOne(
         { deviceId, address },

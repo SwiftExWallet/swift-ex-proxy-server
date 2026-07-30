@@ -36,7 +36,8 @@ export class PortfolioToken {
   valueUsd: string | null;
 }
 
-export const PortfolioTokenSchema = SchemaFactory.createForClass(PortfolioToken);
+export const PortfolioTokenSchema =
+  SchemaFactory.createForClass(PortfolioToken);
 
 @Schema({ timestamps: true })
 export class Portfolio {

@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { OneClickService, GetExecutionStatusResponse } from '@defuse-protocol/one-click-sdk-typescript';
+import {
+  OneClickService,
+  GetExecutionStatusResponse,
+} from '@defuse-protocol/one-click-sdk-typescript';
 import { ExhaustedOrder } from '../swapOrders/schema/exhaustedOrder.schema';
 import { SwapOrderRepository } from '../swapOrders/swapOrder.repository';
 import { SwapOrders } from '../swapOrders/schema/swapOrder.schema';
@@ -21,7 +24,9 @@ const TERMINAL_STATUS_MAP: Record<string, SwapOrderStatus> = {
 
 @Injectable()
 export class NearIntentExhaustedReconcilerService {
-  private readonly logger = new Logger(NearIntentExhaustedReconcilerService.name);
+  private readonly logger = new Logger(
+    NearIntentExhaustedReconcilerService.name,
+  );
   private isRunning = false;
 
   constructor(
@@ -34,7 +39,9 @@ export class NearIntentExhaustedReconcilerService {
   @Cron('0 */4 * * *', { name: 'near-intent-exhausted-reconciler' })
   async poll(): Promise<void> {
     if (this.isRunning) {
-      this.logger.warn('near intent exhausted reconciliation previous run still in progress, skipping.');
+      this.logger.warn(
+        'near intent exhausted reconciliation previous run still in progress, skipping.',
+      );
       return;
     }
 
@@ -42,17 +49,25 @@ export class NearIntentExhaustedReconcilerService {
     try {
       const since = new Date(Date.now() - RECONCILE_WINDOW_MS);
       const pending = await this.exhaustedModel
-        .find({ provider: swapProvider.NEARINTENT, exhaustedAt: { $gte: since } })
+        .find({
+          provider: swapProvider.NEARINTENT,
+          exhaustedAt: { $gte: since },
+        })
         .lean()
         .exec();
       if (!pending.length) return;
 
-      this.logger.log(`near intent reconciliation processing ${pending.length} exhausted order(s)`);
+      this.logger.log(
+        `near intent reconciliation processing ${pending.length} exhausted order(s)`,
+      );
       for (const order of pending) {
         try {
           this.reconcileOrder(order);
         } catch (err) {
-          this.logger.error(`[${order.txHash}] near intent reconciliation failed`, err);
+          this.logger.error(
+            `[${order.txHash}] near intent reconciliation failed`,
+            err,
+          );
         }
       }
     } finally {
@@ -60,22 +75,31 @@ export class NearIntentExhaustedReconcilerService {
     }
   }
 
-  private async reconcileOrder(order: ExhaustedOrder & { txHash: string }): Promise<void> {
+  private async reconcileOrder(
+    order: ExhaustedOrder & { txHash: string },
+  ): Promise<void> {
     let status: GetExecutionStatusResponse;
     try {
       status = order.memo
         ? await OneClickService.getExecutionStatus(order.txHash, order.memo)
         : await OneClickService.getExecutionStatus(order.txHash);
     } catch (err) {
-      this.logger.error(`[${order.txHash}] getExecutionStatus failed during reconciliation`, err);
+      this.logger.error(
+        `[${order.txHash}] getExecutionStatus failed during reconciliation`,
+        err,
+      );
       return;
     }
 
-    this.logger.log(`[${order.txHash}] Reconciliation current status: ${status.status}`);
+    this.logger.log(
+      `[${order.txHash}] Reconciliation current status: ${status.status}`,
+    );
 
     const newStatus = TERMINAL_STATUS_MAP[status.status];
     if (!newStatus) {
-      this.logger.log(`[${order.txHash}] Still unresolved (${status.status}), keeping for next reconciliation run`);
+      this.logger.log(
+        `[${order.txHash}] Still unresolved (${status.status}), keeping for next reconciliation run`,
+      );
       return;
     }
 
@@ -83,18 +107,26 @@ export class NearIntentExhaustedReconcilerService {
     try {
       updatedOrder = await this.repo.updateOrderStatus(order.txHash, newStatus);
     } catch (err) {
-      this.logger.error(`[${order.txHash}] Failed to update swap order during reconciliation`, err);
+      this.logger.error(
+        `[${order.txHash}] Failed to update swap order during reconciliation`,
+        err,
+      );
       return;
     }
 
-    this.logger.log(`[${order.txHash}] Reconciled exhausted order -> ${newStatus}`);
+    this.logger.log(
+      `[${order.txHash}] Reconciled exhausted order -> ${newStatus}`,
+    );
     await this.notify(updatedOrder, newStatus);
 
     await this.exhaustedModel.deleteOne({ txHash: order.txHash });
     this.logger.log(`[${order.txHash}] Removed from ExhaustedOrders`);
   }
 
-  private async notify(order: SwapOrders | null, status: SwapOrderStatus): Promise<void> {
+  private async notify(
+    order: SwapOrders | null,
+    status: SwapOrderStatus,
+  ): Promise<void> {
     if (!order?.deviceFcmToken) return;
 
     const notificationPayload: NotificationDto = {
@@ -104,9 +136,15 @@ export class NearIntentExhaustedReconcilerService {
     };
 
     try {
-      await this.firebaseNotificationService.sendNotification(order.deviceFcmToken as string, notificationPayload);
+      await this.firebaseNotificationService.sendNotification(
+        order.deviceFcmToken,
+        notificationPayload,
+      );
     } catch (err) {
-      this.logger.error(`[${order.txHash}] Failed to send ${status} notification`, err);
+      this.logger.error(
+        `[${order.txHash}] Failed to send ${status} notification`,
+        err,
+      );
     }
   }
 }

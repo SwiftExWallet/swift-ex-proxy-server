@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { SwapQuoteDto } from '../../../common/dto/swapQuote.dto';
-import { swapProvider } from '../../../common/enums/chain.enum';
+import { SwapQuoteDto } from '../../common/dto/swapQuote.dto';
+import { swapProvider } from '../../common/enums/chain.enum';
 
 interface ProviderRule {
   provider: swapProvider;

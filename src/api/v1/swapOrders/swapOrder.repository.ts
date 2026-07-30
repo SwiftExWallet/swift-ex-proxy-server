@@ -46,7 +46,7 @@ export class SwapOrderRepository {
     ];
 
     this.portfolioService
-      .refreshPortfolio(String(order.deviceId), order.walletAddress, chains)
+      .refreshPortfolio(order.deviceId.toString(), order.walletAddress, chains)
       .catch((err) =>
         this.logger.error('portfolio refresh trigger failed', {
           txHash: order.txHash,

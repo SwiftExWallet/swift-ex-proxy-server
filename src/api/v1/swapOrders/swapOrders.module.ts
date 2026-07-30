@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SwapOrders, SwapOrderSchema } from './schema/swapOrder.schema';
-import { ExhaustedOrder, ExhaustedOrderSchema } from './schema/exhaustedOrder.schema';
+import {
+  ExhaustedOrder,
+  ExhaustedOrderSchema,
+} from './schema/exhaustedOrder.schema';
 import { SwapOrderService } from './swapOrders.service';
 import { SwapOrderRepository } from './swapOrder.repository';
 import { SwapOrdersController } from './swapOrders.controller';

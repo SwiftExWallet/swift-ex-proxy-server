@@ -280,10 +280,7 @@ export class FustionNativeService {
     return provider;
   }
 
-  async createSwapOrder(
-    dto: FusionPlusSwapQuoteDto,
-    verifiedWallet?: Wallet,
-  ) {
+  async createSwapOrder(dto: FusionPlusSwapQuoteDto, verifiedWallet?: Wallet) {
     const verifiedDto = verifiedWallet
       ? withExplicitVerifiedWalletAddress(
           dto,

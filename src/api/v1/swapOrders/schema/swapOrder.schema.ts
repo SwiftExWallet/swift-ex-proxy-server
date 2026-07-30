@@ -15,7 +15,7 @@ export class SwapOrders {
     ref: 'DeviceSchema',
     required: true,
   })
-  deviceId: mongoose.Schema.Types.ObjectId;
+  deviceId: mongoose.Types.ObjectId;
 
   @Prop({
     required: true,

@@ -28,11 +28,14 @@ export class PortfolioService {
 
   async getPortfolio(deviceId: string, address: string): Promise<Portfolio> {
     address = this.normalizeAddress(address);
-    const existing = await this.repository.findByDeviceAndAddress(deviceId, address);
+    const existing = await this.repository.findByDeviceAndAddress(
+      deviceId,
+      address,
+    );
     const isFresh = !!existing && existing.stale === false;
 
     if (isFresh) {
-      return existing as Portfolio;
+      return existing;
     }
 
     try {
@@ -45,10 +48,18 @@ export class PortfolioService {
         totalValueUsd,
       )) as Portfolio;
     } catch (error) {
-      this.logger.error('Failed to sync portfolio', { deviceId, address, error });
+      this.logger.error('Failed to sync portfolio', {
+        deviceId,
+        address,
+        error,
+      });
 
       if (existing) {
-        await this.repository.markFailed(deviceId, address, (error as Error).message);
+        await this.repository.markFailed(
+          deviceId,
+          address,
+          (error as Error).message,
+        );
         return existing;
       }
 
@@ -56,7 +67,11 @@ export class PortfolioService {
     }
   }
 
-  async refreshPortfolio(deviceId: string, address: string, chains?: string[]): Promise<void> {
+  async refreshPortfolio(
+    deviceId: string,
+    address: string,
+    chains?: string[],
+  ): Promise<void> {
     address = this.normalizeAddress(address);
     try {
       const existing = chains?.length
@@ -71,8 +86,16 @@ export class PortfolioService {
         await this.repository.upsert(deviceId, address, tokens, totalValueUsd);
       }
     } catch (error) {
-      this.logger.error('Failed to refresh portfolio', { deviceId, address, error });
-      await this.repository.markFailed(deviceId, address, (error as Error).message);
+      this.logger.error('Failed to refresh portfolio', {
+        deviceId,
+        address,
+        error,
+      });
+      await this.repository.markFailed(
+        deviceId,
+        address,
+        (error as Error).message,
+      );
     }
   }
 
@@ -84,7 +107,9 @@ export class PortfolioService {
   ): Promise<void> {
     const networks = this.resolveNetworks(chains);
     if (networks.length === 0) {
-      this.logger.debug(`No supported Alchemy network for chains=[${chains.join(',')}], skipping refresh`);
+      this.logger.debug(
+        `No supported Alchemy network for chains=[${chains.join(',')}], skipping refresh`,
+      );
       return;
     }
 
@@ -92,10 +117,17 @@ export class PortfolioService {
     const { tokens: freshTokens } = this.mapper.normalize(response);
 
     const targetNetworks = new Set(networks);
-    const preserved = existing.tokens.filter((t) => !targetNetworks.has(t.network));
+    const preserved = existing.tokens.filter(
+      (t) => !targetNetworks.has(t.network),
+    );
     const merged = [...preserved, ...freshTokens];
 
-    await this.repository.upsert(deviceId, address, merged, this.sumValueUsd(merged));
+    await this.repository.upsert(
+      deviceId,
+      address,
+      merged,
+      this.sumValueUsd(merged),
+    );
   }
 
   private resolveNetworks(chains: string[]): string[] {
