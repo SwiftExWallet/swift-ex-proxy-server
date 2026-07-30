@@ -27,7 +27,7 @@ export class SwapOrders {
   
   @Prop({
     required: true,
-    unique: true,
+    unique: false,
     index: true
   })
   txHash: string;

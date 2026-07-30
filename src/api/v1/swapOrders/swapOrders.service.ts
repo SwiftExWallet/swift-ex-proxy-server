@@ -53,6 +53,7 @@ export class SwapOrderService {
         confirmedAt: null,
         deviceFcmToken: device.fcmToken,
       });
+      this.logger.debug("doc",doc);
       // if(provider===swapProvider.ONEINCH_FUSION){
       //   await this.inchWsPollerService.subscribeOrder(txHash, ChainId[fromChain] as any, quoteId);
       // }
@@ -64,7 +65,9 @@ export class SwapOrderService {
       {
         this.nearIntentPollerService.startPolling(txHash, memo);
       }
-      return await doc.save();
+      const response=await doc.save();
+      this.logger.debug("save response",response);
+      return response;
     } catch (err: any) {
       if (err.code === 11000) {
         throw new ConflictException(

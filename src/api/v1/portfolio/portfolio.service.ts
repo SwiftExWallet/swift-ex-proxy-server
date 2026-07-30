@@ -28,7 +28,7 @@ export class PortfolioService {
 
   async getPortfolio(deviceId: string, address: string): Promise<Portfolio> {
     address = this.normalizeAddress(address);
-    const existing = await this.repository.findByDeviceAndAddress(deviceId, address);
+    const existing = await this.repository.findByAddress(address);
     const isFresh = !!existing && existing.stale === false;
 
     if (isFresh) {
@@ -60,7 +60,7 @@ export class PortfolioService {
     address = this.normalizeAddress(address);
     try {
       const existing = chains?.length
-        ? await this.repository.findByDeviceAndAddress(deviceId, address)
+        ? await this.repository.findByAddress(address)
         : null;
 
       if (chains?.length && existing) {
