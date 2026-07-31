@@ -1,6 +1,7 @@
 import {
   Allow,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -9,6 +10,17 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ChainId } from '../enums/chain.enum';
+
+export enum SwapQuoteOption {
+  GAS = 'gas',
+  GASLESS = 'gasLess',
+}
+
+const SWAP_QUOTE_OPTIONS = [
+  SwapQuoteOption.GAS,
+  SwapQuoteOption.GASLESS,
+  '',
+] as const;
 
 export class TokenInfoDto {
   @Matches(
@@ -46,6 +58,10 @@ export class SwapQuoteDto {
 
   @IsOptional()
   slippage?: number;
+
+  @IsOptional()
+  @IsIn(SWAP_QUOTE_OPTIONS)
+  option?: SwapQuoteOption | '';
 }
 
 export interface ResolvedTokenInfoDto extends TokenInfoDto {

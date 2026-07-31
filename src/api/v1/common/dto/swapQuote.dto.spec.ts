@@ -2,9 +2,22 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
 import { ChainId } from '../enums/chain.enum';
-import { SwapQuoteDto } from './swapQuote.dto';
+import { SwapQuoteDto, SwapQuoteOption } from './swapQuote.dto';
 
 describe('SwapQuoteDto', () => {
+  const validPayload = {
+    tokenIn: {
+      address: '0x1111111111111111111111111111111111111111',
+      chainId: ChainId.ETH,
+    },
+    tokenOut: {
+      address: '0x2222222222222222222222222222222222222222',
+      chainId: ChainId.BSC,
+    },
+    amount: '1',
+    recipient: '0x3333333333333333333333333333333333333333',
+  };
+
   it('allows client supplied token metadata for backwards compatibility', async () => {
     const dto = plainToInstance(SwapQuoteDto, {
       tokenIn: {
@@ -29,6 +42,39 @@ describe('SwapQuoteDto', () => {
     });
 
     expect(collectValidationMessages(errors)).toEqual([]);
+  });
+
+  it('accepts the gasless quote option', async () => {
+    const dto = plainToInstance(SwapQuoteDto, {
+      ...validPayload,
+      option: SwapQuoteOption.GASLESS,
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+  });
+
+  it('accepts an empty quote option as gas-paid default', async () => {
+    const dto = plainToInstance(SwapQuoteDto, {
+      ...validPayload,
+      option: '',
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+  });
+
+  it('rejects unknown quote options', async () => {
+    const dto = plainToInstance(SwapQuoteDto, {
+      ...validPayload,
+      option: 'free',
+    });
+
+    const errors = await validate(dto);
+
+    expect(errors).toEqual([
+      expect.objectContaining({
+        property: 'option',
+      }),
+    ]);
   });
 });
 

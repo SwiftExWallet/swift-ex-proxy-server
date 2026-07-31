@@ -9,6 +9,7 @@ import {
 } from '@uniswap/sdk-core';
 import { ethers, parseUnits, TransactionRequest, ZeroAddress } from 'ethers';
 import { JsonRpcProvider } from '@ethersproject/providers';
+import axios, { AxiosRequestConfig } from 'axios';
 import { ProviderService } from '../provider/provider.service';
 import {
   ResolvedSwapQuoteDto,
@@ -18,6 +19,8 @@ import {
 import { SwapQuote } from '../common/interface/swap.interface';
 import { ChainEnum, ChainId, swapProvider } from '../common/enums/chain.enum';
 import { InchService } from '../swap/1inch/1inch.service';
+import { FusionPlusSwapQuoteDto } from '../swap/dto/fusionPlusSwapQuote';
+import { SwapQuoteDto as OneInchSwapQuoteDto } from '../swap/dto/swapQuote';
 import { SwapProviderResolver } from './dto/swap-provider.resolver';
 import { TokenMetadataService } from '../common/services/tokenMetadata.service';
 import { plainToInstance } from 'class-transformer';
@@ -27,7 +30,11 @@ import {
   ProviderErrorCode,
   throwIfHttpException,
 } from '../common/utils/provider-error.util';
-import { withProviderControls } from '../common/utils/retry.util';
+import {
+  getProviderHttpTimeoutMs,
+  withProviderControls,
+} from '../common/utils/retry.util';
+import { validateProviderUrl } from '../common/config/provider-url.config';
 import {
   resolveWalletChain,
   type Wallet,
@@ -35,6 +42,9 @@ import {
 } from '../common/helpers/requestWallet';
 
 type UniswapSwapRoute = NonNullable<Awaited<ReturnType<AlphaRouter['route']>>>;
+
+const DEFAULT_UNISWAP_API_BASE_URL = 'https://trade-api.gateway.uniswap.org/v1';
+const UNISWAP_ALLOWED_HOSTS = ['trade-api.gateway.uniswap.org'];
 
 @Injectable()
 export class QuoterService {
@@ -64,15 +74,23 @@ export class QuoterService {
         return await this.handleValidationAndRun(
           SwapQuoteDto,
           transformed,
-          this.getQuote.bind(this),
+          this.getUniswapQuote.bind(this),
           provider,
         );
 
       case swapProvider.ONEINCH_FUSION:
         return await this.handleValidationAndRun(
-          SwapQuoteDto,
+          OneInchSwapQuoteDto,
           transformed,
           this.inchService.getSwapQuote.bind(this.inchService),
+          provider,
+        );
+
+      case swapProvider.ONEINCH_FUSION_PLUS:
+        return await this.handleValidationAndRun(
+          FusionPlusSwapQuoteDto,
+          transformed,
+          this.inchService.getFusionPlusSwapQuote.bind(this.inchService),
           provider,
         );
 
@@ -170,6 +188,92 @@ export class QuoterService {
     );
   }
 
+  private async getUniswapQuote(
+    swapQuote: ResolvedSwapQuoteDto,
+  ): Promise<SwapQuote | Record<string, unknown>> {
+    if (this.isCrossChainQuote(swapQuote)) {
+      return await this.getCrossChainUniswapQuote(swapQuote);
+    }
+
+    return await this.getQuote(swapQuote);
+  }
+
+  private isCrossChainQuote(swapQuote: SwapQuoteDto): boolean {
+    return (
+      String(swapQuote.tokenIn?.chainId) !== String(swapQuote.tokenOut?.chainId)
+    );
+  }
+
+  private async getCrossChainUniswapQuote(
+    swapQuote: ResolvedSwapQuoteDto,
+  ): Promise<Record<string, unknown>> {
+    const apiKey = process.env.UNISWAP_API_KEY;
+
+    if (!apiKey) {
+      throw new BadRequestException(
+        'UNISWAP_API_KEY is required for cross-chain Uniswap quotes',
+      );
+    }
+
+    if (!swapQuote.recipient) {
+      throw new BadRequestException(
+        'recipient is required for cross-chain Uniswap quotes',
+      );
+    }
+
+    const url = `${this.getUniswapApiBaseUrl()}/quote`;
+    const payload = {
+      amount: this.toBaseUnitAmount(swapQuote),
+      slippageTolerance: swapQuote.slippage ?? 0.5,
+      swapper: swapQuote.recipient,
+      tokenIn: swapQuote.tokenIn.address,
+      tokenInChainId: swapQuote.tokenIn.chainId,
+      tokenOut: swapQuote.tokenOut.address,
+      tokenOutChainId: swapQuote.tokenOut.chainId,
+      type: 'EXACT_INPUT',
+    };
+    const config: AxiosRequestConfig = {
+      timeout: getProviderHttpTimeoutMs(),
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+      },
+    };
+
+    try {
+      const response = await withProviderControls(
+        'uniswap:trading-api:quote',
+        () => axios.post<Record<string, unknown>>(url, payload, config),
+      );
+
+      return response.data;
+    } catch (error) {
+      throwIfHttpException(error);
+      throw createProviderBadRequestException(error);
+    }
+  }
+
+  private getUniswapApiBaseUrl(): string {
+    return validateProviderUrl(
+      process.env.UNISWAP_API_BASE_URL ?? DEFAULT_UNISWAP_API_BASE_URL,
+      {
+        source: 'UNISWAP_API_BASE_URL',
+        allowedHosts: UNISWAP_ALLOWED_HOSTS,
+      },
+    );
+  }
+
+  private toBaseUnitAmount(swapQuote: ResolvedSwapQuoteDto): string {
+    const decimals = Number(swapQuote.tokenIn.decimals);
+
+    if (!Number.isInteger(decimals) || decimals < 0) {
+      throw new BadRequestException('tokenIn decimals are required');
+    }
+
+    return parseUnits(swapQuote.amount, decimals).toString();
+  }
+
   async getQuote(
     swapQuote: ResolvedSwapQuoteDto,
     internalCall: true,
@@ -199,7 +303,7 @@ export class QuoterService {
       const tokenOutput = isNativeOut
         ? Ether.onChain(tokenOut.chainId)
         : this.buildToken(tokenOut, tokenOut.chainId);
-      const rawAmount = parseUnits(amount, tokenIn.decimals);
+      const rawAmount = parseUnits(amount, Number(tokenIn.decimals));
       const amountIn = CurrencyAmount.fromRawAmount(
         tokenInput,
         rawAmount.toString(),

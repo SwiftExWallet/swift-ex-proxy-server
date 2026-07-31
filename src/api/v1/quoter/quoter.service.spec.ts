@@ -5,6 +5,16 @@ jest.mock('@uniswap/smart-order-router', () => ({
   },
 }));
 
+jest.mock('axios', () => ({
+  ...jest.requireActual('axios'),
+  __esModule: true,
+  default: {
+    ...jest.requireActual('axios').default,
+    post: jest.fn(),
+  },
+}));
+
+import axios from 'axios';
 import { BadRequestException } from '@nestjs/common';
 import { QuoterService } from './quoter.service';
 import { ChainId, swapProvider } from '../common/enums/chain.enum';
@@ -20,6 +30,7 @@ describe('QuoterService', () => {
   };
   const inchService = {
     getSwapQuote: jest.fn(),
+    getFusionPlusSwapQuote: jest.fn(),
   };
   const swapProviderResolver = {
     resolve: jest.fn(),
@@ -58,6 +69,8 @@ describe('QuoterService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    delete process.env.UNISWAP_API_KEY;
+    delete process.env.UNISWAP_API_BASE_URL;
     service = new QuoterService(
       providerService as any,
       inchService as any,
@@ -114,11 +127,18 @@ describe('QuoterService', () => {
   });
 
   it('normalizes and routes 1inch quote requests through the Inch service', async () => {
+    const fusionPayload = {
+      chain: 'ETH',
+      tokenIn: requestDto.tokenIn.address,
+      tokenOut: requestDto.tokenOut.address,
+      walletAddress: requestDto.recipient,
+      amount: '1000000000000000000',
+    };
     const quote = { quoteId: 'quote-id' };
     tokenMetadataService.normalizeSwapQuote.mockResolvedValue(resolvedDto);
     swapProviderResolver.resolve.mockReturnValue({
       provider: swapProvider.ONEINCH_FUSION,
-      transformed: resolvedDto,
+      transformed: fusionPayload,
     });
     inchService.getSwapQuote.mockResolvedValue(quote);
 
@@ -129,7 +149,83 @@ describe('QuoterService', () => {
     });
 
     expect(inchService.getSwapQuote).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: requestDto.amount }),
+      expect.objectContaining({ amount: fusionPayload.amount }),
+    );
+  });
+
+  it('normalizes and routes Fusion Plus quote requests through the Inch service', async () => {
+    const fusionPlusPayload = {
+      srcChain: 'ETH',
+      dstChain: 'BSC',
+      srcTokenAddress: requestDto.tokenIn.address,
+      dstTokenAddress: requestDto.tokenOut.address,
+      walletAddress: requestDto.recipient,
+      amount: '1000000000000000000',
+    };
+    const quote = { quoteId: 'fusion-plus-quote-id' };
+    tokenMetadataService.normalizeSwapQuote.mockResolvedValue(resolvedDto);
+    swapProviderResolver.resolve.mockReturnValue({
+      provider: swapProvider.ONEINCH_FUSION_PLUS,
+      transformed: fusionPlusPayload,
+    });
+    inchService.getFusionPlusSwapQuote.mockResolvedValue(quote);
+
+    await expect(service.getQuoteResponse(requestDto)).resolves.toEqual({
+      success: true,
+      provider: swapProvider.ONEINCH_FUSION_PLUS,
+      data: quote,
+    });
+
+    expect(inchService.getFusionPlusSwapQuote).toHaveBeenCalledWith(
+      fusionPlusPayload,
+    );
+  });
+
+  it('posts cross-chain gas-paid Uniswap quote requests to the Trading API', async () => {
+    const crossChainDto = {
+      ...resolvedDto,
+      tokenOut: {
+        ...resolvedDto.tokenOut,
+        chainId: ChainId.BSC,
+      },
+      slippage: 1,
+    };
+    const quote = { routing: 'CHAINED', quoteId: 'uniswap-cross-chain' };
+    process.env.UNISWAP_API_KEY = 'test-uniswap-api-key';
+    process.env.UNISWAP_API_BASE_URL =
+      'https://trade-api.gateway.uniswap.org/v1';
+    tokenMetadataService.normalizeSwapQuote.mockResolvedValue(crossChainDto);
+    swapProviderResolver.resolve.mockReturnValue({
+      provider: swapProvider.UNISWAP,
+      transformed: crossChainDto,
+    });
+    (axios.post as jest.Mock).mockResolvedValue({ data: quote });
+
+    await expect(service.getQuoteResponse(requestDto)).resolves.toEqual({
+      success: true,
+      provider: swapProvider.UNISWAP,
+      data: quote,
+    });
+
+    expect(axios.post).toHaveBeenCalledWith(
+      'https://trade-api.gateway.uniswap.org/v1/quote',
+      {
+        amount: '1000000000000000000',
+        slippageTolerance: 1,
+        swapper: crossChainDto.recipient,
+        tokenIn: crossChainDto.tokenIn.address,
+        tokenInChainId: ChainId.ETH,
+        tokenOut: crossChainDto.tokenOut.address,
+        tokenOutChainId: ChainId.BSC,
+        type: 'EXACT_INPUT',
+      },
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          accept: 'application/json',
+          'content-type': 'application/json',
+          'x-api-key': 'test-uniswap-api-key',
+        }),
+      }),
     );
   });
 
