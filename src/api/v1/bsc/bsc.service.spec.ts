@@ -25,6 +25,7 @@ describe('BscService', () => {
     process.env = {
       ...originalEnv,
       BSC_ROUTER_ADDRESS: '0x0000000000000000000000000000000000000001',
+      PROVIDER_RETRY_MAX_ATTEMPTS: '1',
     };
     jest.clearAllMocks();
     providerService.getProvider.mockReturnValue(provider);

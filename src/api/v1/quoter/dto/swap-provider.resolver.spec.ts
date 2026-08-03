@@ -42,13 +42,7 @@ describe('SwapProviderResolver', () => {
 
     expect(resolver.resolve(gaslessDto)).toEqual({
       provider: swapProvider.ONEINCH_FUSION,
-      transformed: {
-        chain: 'ETH',
-        tokenIn: dto.tokenIn.address,
-        tokenOut: dto.tokenOut.address,
-        walletAddress: dto.recipient,
-        amount: '1000000000000000000',
-      },
+      transformed: gaslessDto,
     });
   });
 
@@ -79,14 +73,7 @@ describe('SwapProviderResolver', () => {
 
     expect(resolver.resolve(crossChainDto)).toEqual({
       provider: swapProvider.ONEINCH_FUSION_PLUS,
-      transformed: {
-        srcChain: 'ETH',
-        dstChain: 'BSC',
-        srcTokenAddress: dto.tokenIn.address,
-        dstTokenAddress: dto.tokenOut.address,
-        walletAddress: dto.recipient,
-        amount: '1000000000000000000',
-      },
+      transformed: crossChainDto,
     });
   });
 });

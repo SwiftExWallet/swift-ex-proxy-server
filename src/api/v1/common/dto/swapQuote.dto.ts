@@ -1,15 +1,16 @@
 import {
   Allow,
-  IsEnum,
   IsIn,
+  IsInt,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
-import { ChainId } from '../enums/chain.enum';
+import { Transform, Type } from 'class-transformer';
+import { SUPPORTED_QUOTE_CHAIN_IDS } from '../enums/chain.enum';
 
 export enum SwapQuoteOption {
   GAS = 'gas',
@@ -29,8 +30,10 @@ export class TokenInfoDto {
   )
   address: string;
 
+  @Type(() => Number)
   @IsNotEmpty()
-  @IsEnum(ChainId)
+  @IsInt()
+  @IsIn(SUPPORTED_QUOTE_CHAIN_IDS, { message: 'Unsupported chainId' })
   chainId: number;
 
   @Allow()
@@ -56,7 +59,13 @@ export class SwapQuoteDto {
   @IsString()
   recipient: string;
 
+  @Transform(({ value }) =>
+    value === '' || value === undefined || value === null
+      ? undefined
+      : Number(value),
+  )
   @IsOptional()
+  @IsNumber()
   slippage?: number;
 
   @IsOptional()

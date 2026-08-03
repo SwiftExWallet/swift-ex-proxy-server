@@ -47,7 +47,7 @@ describe('QuoterController', () => {
     controller = new QuoterController(quoterService as any);
   });
 
-  it('delegates quote requests to the quoter service', async () => {
+  it('delegates quote requests to the quoter service with the verified wallet', async () => {
     const result = {
       success: true,
       provider: 'UNISWAP',
@@ -55,9 +55,12 @@ describe('QuoterController', () => {
     };
     quoterService.getQuoteResponse.mockResolvedValue(result);
 
-    await expect(controller.getQuote(dto)).resolves.toBe(result);
+    await expect(controller.getQuote(req, dto)).resolves.toBe(result);
 
-    expect(quoterService.getQuoteResponse).toHaveBeenCalledWith(dto);
+    expect(quoterService.getQuoteResponse).toHaveBeenCalledWith(
+      dto,
+      req.wallet,
+    );
   });
 
   it('delegates swap build requests to the quoter service', async () => {

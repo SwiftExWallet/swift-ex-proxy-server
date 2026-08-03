@@ -62,6 +62,64 @@ describe('SwapQuoteDto', () => {
     await expect(validate(dto)).resolves.toHaveLength(0);
   });
 
+  it('converts string chain ids and ignores empty slippage', async () => {
+    const dto = plainToInstance(SwapQuoteDto, {
+      ...validPayload,
+      tokenIn: {
+        ...validPayload.tokenIn,
+        chainId: '137',
+      },
+      tokenOut: {
+        ...validPayload.tokenOut,
+        chainId: '137',
+      },
+      slippage: '',
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.tokenIn.chainId).toBe(ChainId.POL);
+    expect(dto.tokenOut.chainId).toBe(ChainId.POL);
+    expect(dto.slippage).toBeUndefined();
+  });
+
+  it('accepts supported chain id 138 as a string', async () => {
+    const dto = plainToInstance(SwapQuoteDto, {
+      ...validPayload,
+      tokenIn: {
+        ...validPayload.tokenIn,
+        chainId: '138',
+      },
+      tokenOut: {
+        ...validPayload.tokenOut,
+        chainId: '138',
+      },
+    });
+
+    await expect(validate(dto)).resolves.toHaveLength(0);
+    expect(dto.tokenIn.chainId).toBe(138);
+    expect(dto.tokenOut.chainId).toBe(138);
+  });
+
+  it('rejects unsupported chain ids', async () => {
+    const dto = plainToInstance(SwapQuoteDto, {
+      ...validPayload,
+      tokenIn: {
+        ...validPayload.tokenIn,
+        chainId: '84113',
+      },
+      tokenOut: {
+        ...validPayload.tokenOut,
+        chainId: '84113',
+      },
+    });
+
+    const errors = await validate(dto);
+
+    expect(collectValidationMessages(errors)).toEqual(
+      expect.arrayContaining(['Unsupported chainId']),
+    );
+  });
+
   it('rejects unknown quote options', async () => {
     const dto = plainToInstance(SwapQuoteDto, {
       ...validPayload,

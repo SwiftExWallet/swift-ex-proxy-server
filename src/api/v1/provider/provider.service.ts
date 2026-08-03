@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { JsonRpcProvider, Contract, Network } from 'ethers';
-import { ChainEnum } from '../common/enums/chain.enum';
+import { ChainEnum, ChainId } from '../common/enums/chain.enum';
 import {
   getProviderRpcAllowedHosts,
   validateOptionalProviderUrl,
@@ -12,11 +12,11 @@ export class ProviderService {
   readonly bscProvider: JsonRpcProvider;
   readonly rpcUrls: string[];
   counter: number = 0;
+  private readonly rpcAllowedHosts = getProviderRpcAllowedHosts();
   private readonly chainRpcUrls: Partial<Record<ChainEnum, string[]>>;
   private readonly chainCounters: Partial<Record<ChainEnum, number>> = {};
 
   constructor() {
-    const rpcAllowedHosts = getProviderRpcAllowedHosts();
     this.rpcUrls = this.getValidatedRpcUrls(
       [
         process.env.PROVIDER_RPC_ETH_1,
@@ -26,14 +26,14 @@ export class ProviderService {
         process.env.PROVIDER_RPC_ETH_5,
       ],
       'PROVIDER_RPC_ETH',
-      rpcAllowedHosts,
+      this.rpcAllowedHosts,
     );
 
     const bscRpcUrl = validateOptionalProviderUrl(
       process.env.PROVIDER_RPC_BSC,
       {
         source: 'PROVIDER_RPC_BSC',
-        allowedHosts: rpcAllowedHosts,
+        allowedHosts: this.rpcAllowedHosts,
       },
     );
     this.bscProvider = new JsonRpcProvider(bscRpcUrl || '');
@@ -51,7 +51,7 @@ export class ProviderService {
           process.env.PROVIDER_RPC_POL_3,
         ],
         'PROVIDER_RPC_POL',
-        rpcAllowedHosts,
+        this.rpcAllowedHosts,
       ),
       [ChainEnum.MATIC]: this.getValidatedRpcUrls(
         [
@@ -60,7 +60,7 @@ export class ProviderService {
           process.env.PROVIDER_RPC_POL_3,
         ],
         'PROVIDER_RPC_POL',
-        rpcAllowedHosts,
+        this.rpcAllowedHosts,
       ),
 
       [ChainEnum.ARB]: this.getValidatedRpcUrls(
@@ -70,7 +70,7 @@ export class ProviderService {
           process.env.PROVIDER_RPC_ARB_3,
         ],
         'PROVIDER_RPC_ARB',
-        rpcAllowedHosts,
+        this.rpcAllowedHosts,
       ),
 
       [ChainEnum.BASE]: this.getValidatedRpcUrls(
@@ -80,7 +80,7 @@ export class ProviderService {
           process.env.PROVIDER_RPC_BASE_3,
         ],
         'PROVIDER_RPC_BASE',
-        rpcAllowedHosts,
+        this.rpcAllowedHosts,
       ),
 
       [ChainEnum.AVAX]: this.getValidatedRpcUrls(
@@ -90,7 +90,7 @@ export class ProviderService {
           process.env.PROVIDER_RPC_AVAX_3,
         ],
         'PROVIDER_RPC_AVAX',
-        rpcAllowedHosts,
+        this.rpcAllowedHosts,
       ),
 
       [ChainEnum.OP]: this.getValidatedRpcUrls(
@@ -100,7 +100,17 @@ export class ProviderService {
           process.env.PROVIDER_RPC_OPT_3,
         ],
         'PROVIDER_RPC_OPT',
-        rpcAllowedHosts,
+        this.rpcAllowedHosts,
+      ),
+
+      [ChainEnum.OP138]: this.getValidatedRpcUrls(
+        [
+          process.env.PROVIDER_RPC_138_1,
+          process.env.PROVIDER_RPC_138_2,
+          process.env.PROVIDER_RPC_138_3,
+        ],
+        'PROVIDER_RPC_138',
+        this.rpcAllowedHosts,
       ),
     };
   }
@@ -124,6 +134,7 @@ export class ProviderService {
     [ChainEnum.BASE]: 8453,
     [ChainEnum.AVAX]: 43114,
     [ChainEnum.OP]: 10,
+    [ChainEnum.OP138]: 138,
   };
 
   getProvider(chain: ChainEnum): JsonRpcProvider {
@@ -145,6 +156,21 @@ export class ProviderService {
     });
   }
 
+  getProviderForChainId(chainId: number): JsonRpcProvider {
+    const chain = this.resolveChainEnum(chainId);
+    if (chain) {
+      return this.getProvider(chain);
+    }
+
+    return new JsonRpcProvider(
+      this.getDynamicChainRpcUrl(chainId),
+      Network.from(chainId),
+      {
+        staticNetwork: true,
+      },
+    );
+  }
+
   getContract(address: string, abi: any, chain: ChainEnum): Contract {
     const provider = this.getProvider(chain);
     return new Contract(address, abi, provider);
@@ -164,5 +190,32 @@ export class ProviderService {
     this.chainCounters[chain] = this.chainCounters[chain] ?? 0;
     const url = urls[this.chainCounters[chain]++ % urls.length];
     return url;
+  }
+
+  private resolveChainEnum(chainId: number): ChainEnum | undefined {
+    const chainKey = ChainId[chainId] as keyof typeof ChainEnum | undefined;
+    return chainKey ? ChainEnum[chainKey] : undefined;
+  }
+
+  private getDynamicChainRpcUrl(chainId: number): string {
+    const source = `PROVIDER_RPC_${chainId}`;
+    const urls = this.getValidatedRpcUrls(
+      [
+        process.env[source],
+        process.env[`${source}_1`],
+        process.env[`${source}_2`],
+        process.env[`${source}_3`],
+        process.env[`${source}_4`],
+        process.env[`${source}_5`],
+      ],
+      source,
+      this.rpcAllowedHosts,
+    );
+
+    if (urls.length === 0) {
+      throw new Error(`No RPC URLs configured for chain: ${chainId}`);
+    }
+
+    return urls[0];
   }
 }

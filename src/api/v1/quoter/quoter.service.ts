@@ -17,14 +17,16 @@ import {
   SwapQuoteDto,
 } from '../common/dto/swapQuote.dto';
 import { SwapQuote } from '../common/interface/swap.interface';
-import { ChainEnum, ChainId, swapProvider } from '../common/enums/chain.enum';
+import {
+  ChainEnum,
+  ChainId,
+  SupportedWalletChain,
+  SwapNetwork,
+  swapProvider,
+} from '../common/enums/chain.enum';
 import { InchService } from '../swap/1inch/1inch.service';
-import { FusionPlusSwapQuoteDto } from '../swap/dto/fusionPlusSwapQuote';
-import { SwapQuoteDto as OneInchSwapQuoteDto } from '../swap/dto/swapQuote';
 import { SwapProviderResolver } from './dto/swap-provider.resolver';
 import { TokenMetadataService } from '../common/services/tokenMetadata.service';
-import { plainToInstance } from 'class-transformer';
-import { validate, ValidationError } from 'class-validator';
 import {
   createProviderBadRequestException,
   ProviderErrorCode,
@@ -36,6 +38,7 @@ import {
 } from '../common/utils/retry.util';
 import { validateProviderUrl } from '../common/config/provider-url.config';
 import {
+  getVerifiedWalletAddressFromWallet,
   resolveWalletChain,
   type Wallet,
   withExplicitVerifiedWalletAddress,
@@ -63,7 +66,7 @@ export class QuoterService {
     return withProviderControls(`uniswap:quoter:${action}`, operation);
   }
 
-  async getQuoteResponse(body: SwapQuoteDto) {
+  async getQuoteResponse(body: SwapQuoteDto, verifiedWallet?: Wallet) {
     const normalizedBody =
       await this.tokenMetadataService.normalizeSwapQuote(body);
     const { provider, transformed } =
@@ -71,28 +74,27 @@ export class QuoterService {
 
     switch (provider) {
       case swapProvider.UNISWAP:
-        return await this.handleValidationAndRun(
-          SwapQuoteDto,
-          transformed,
-          this.getUniswapQuote.bind(this),
+        return {
+          success: true,
           provider,
-        );
+          data: await this.getUniswapQuote(transformed),
+        };
 
       case swapProvider.ONEINCH_FUSION:
-        return await this.handleValidationAndRun(
-          OneInchSwapQuoteDto,
-          transformed,
-          this.inchService.getSwapQuote.bind(this.inchService),
+        return {
+          success: true,
           provider,
-        );
+          data: await this.getFusionQuote(transformed, verifiedWallet),
+        };
 
       case swapProvider.ONEINCH_FUSION_PLUS:
-        return await this.handleValidationAndRun(
-          FusionPlusSwapQuoteDto,
-          transformed,
-          this.inchService.getFusionPlusSwapQuote.bind(this.inchService),
+        console.log('====== called =====');
+        console.log(await this.getFusionPlusQuote(transformed, verifiedWallet));
+        return {
+          success: true,
           provider,
-        );
+          data: await this.getFusionPlusQuote(transformed, verifiedWallet),
+        };
 
       default:
         throw new BadRequestException('Invalid provider');
@@ -120,47 +122,6 @@ export class QuoterService {
     };
   }
 
-  private async handleValidationAndRun(
-    dtoClass: any,
-    payload: any,
-    serviceMethod: (data: any) => Promise<any>,
-    typeOfProvider: any,
-  ) {
-    const dto = plainToInstance(dtoClass, payload);
-
-    const errors = await validate(dto);
-
-    if (errors.length > 0) {
-      const messages = this.extractErrors(errors);
-
-      throw new BadRequestException(messages);
-    }
-
-    const result = await serviceMethod(dto);
-
-    return {
-      success: true,
-      provider: typeOfProvider,
-      data: result,
-    };
-  }
-
-  private extractErrors(errors: ValidationError[]): string[] {
-    const messages: string[] = [];
-
-    for (const error of errors) {
-      if (error.constraints) {
-        messages.push(...Object.values(error.constraints));
-      }
-
-      if (error.children?.length) {
-        messages.push(...this.extractErrors(error.children));
-      }
-    }
-
-    return messages;
-  }
-
   private isZeroAddress(value: string): boolean {
     const list = [
       '0X0000000000000000000000000000000000000000',
@@ -185,6 +146,46 @@ export class QuoterService {
       token.address,
       Number(token.decimals),
       token.symbol,
+    );
+  }
+
+  private async getFusionQuote(
+    swapQuote: ResolvedSwapQuoteDto,
+    verifiedWallet?: Wallet,
+  ) {
+    return await this.inchService.getSwapQuote({
+      chain: this.toSwapNetwork(swapQuote.tokenIn.chainId),
+      tokenIn: swapQuote.tokenIn.address,
+      tokenOut: swapQuote.tokenOut.address,
+      walletAddress: this.getFusionWalletAddress(verifiedWallet),
+      amount: this.toBaseUnitAmount(swapQuote),
+    });
+  }
+
+  private async getFusionPlusQuote(
+    swapQuote: ResolvedSwapQuoteDto,
+    verifiedWallet?: Wallet,
+  ) {
+    return await this.inchService.getFusionPlusSwapQuote({
+      srcChain: this.toSwapNetwork(swapQuote.tokenIn.chainId),
+      dstChain: this.toSwapNetwork(swapQuote.tokenOut.chainId),
+      srcTokenAddress: swapQuote.tokenIn.address,
+      dstTokenAddress: swapQuote.tokenOut.address,
+      walletAddress: this.getFusionWalletAddress(verifiedWallet),
+      amount: this.toBaseUnitAmount(swapQuote),
+    });
+  }
+
+  private getFusionWalletAddress(verifiedWallet?: Wallet): string {
+    if (!verifiedWallet) {
+      throw new BadRequestException(
+        'Verified wallet is required for gasless quotes',
+      );
+    }
+
+    return getVerifiedWalletAddressFromWallet(
+      verifiedWallet,
+      SupportedWalletChain.multi,
     );
   }
 
@@ -262,6 +263,19 @@ export class QuoterService {
         allowedHosts: UNISWAP_ALLOWED_HOSTS,
       },
     );
+  }
+
+  private toSwapNetwork(chainId: number): SwapNetwork {
+    const chainKey = ChainId[Number(chainId)] as
+      | keyof typeof SwapNetwork
+      | undefined;
+    const network = chainKey ? SwapNetwork[chainKey] : undefined;
+
+    if (!network) {
+      throw new BadRequestException(`Unsupported swap chainId: ${chainId}`);
+    }
+
+    return network;
   }
 
   private toBaseUnitAmount(swapQuote: ResolvedSwapQuoteDto): string {

@@ -1,8 +1,18 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  Optional,
+} from '@nestjs/common';
 import { Contract, ZeroAddress } from 'ethers';
 import { ETH_ERC20_ABI } from '../abi/eth';
-import { ChainEnum, ChainId } from '../enums/chain.enum';
+import {
+  ChainEnum,
+  ChainId,
+  SUPPORTED_QUOTE_CHAIN_IDS,
+} from '../enums/chain.enum';
 import { ProviderService } from '../../provider/provider.service';
+import { RedisService } from '../../redis/redis.service';
 import {
   ResolvedSwapQuoteDto,
   ResolvedTokenInfoDto,
@@ -16,6 +26,24 @@ type TokenMetadata = {
   decimals: string;
 };
 
+interface TokenCatalogEntry {
+  address: string;
+  symbol: string;
+  decimals: string | number;
+}
+
+const TOKEN_FILE_BY_CHAIN_ID: Record<number, string> = {
+  1: 'eth',
+  10: 'op',
+  56: 'bsc',
+  138: 'op',
+  137: 'poly',
+  42161: 'arb',
+  43114: 'avax',
+  8453: 'base',
+  501: 'stellar',
+};
+
 const NATIVE_TOKEN_ADDRESSES = new Set([
   ZeroAddress.toLowerCase(),
   '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
@@ -27,6 +55,7 @@ const NATIVE_TOKEN_SYMBOL_BY_CHAIN_ID: Partial<Record<ChainId, string>> = {
   [ChainId.POL]: 'POL',
   [ChainId.ARB]: 'ETH',
   [ChainId.OPT]: 'ETH',
+  [ChainId.OP138]: 'OPT',
   [ChainId.AVA]: 'AVAX',
   [ChainId.BAS]: 'ETH',
   [ChainId.GNO]: 'XDAI',
@@ -39,9 +68,11 @@ const NATIVE_TOKEN_SYMBOL_BY_CHAIN_ID: Partial<Record<ChainId, string>> = {
 @Injectable()
 export class TokenMetadataService {
   private readonly logger = new Logger(TokenMetadataService.name);
-  private readonly cache = new Map<string, TokenMetadata>();
 
-  constructor(private readonly providerService: ProviderService) {}
+  constructor(
+    private readonly providerService: ProviderService,
+    @Optional() private readonly redisService?: RedisService,
+  ) {}
 
   async normalizeSwapQuote(dto: SwapQuoteDto): Promise<ResolvedSwapQuoteDto> {
     const [tokenIn, tokenOut] = await Promise.all([
@@ -68,11 +99,20 @@ export class TokenMetadataService {
   }
 
   private async resolveMetadata(token: TokenInfoDto): Promise<TokenMetadata> {
-    const chainId = Number(token.chainId) as ChainId;
-    if (!this.isSupportedChainId(chainId)) {
+    const chainId = Number(token.chainId);
+    if (!this.isSupportedQuoteChainId(chainId)) {
       throw new BadRequestException(
         `Unsupported token chainId: ${token.chainId}`,
       );
+    }
+
+    const catalogMetadata = await this.getCatalogMetadata(
+      chainId,
+      token.address,
+    );
+
+    if (catalogMetadata) {
+      return catalogMetadata;
     }
 
     if (this.isNativeToken(token.address)) {
@@ -83,17 +123,17 @@ export class TokenMetadataService {
     }
 
     const cacheKey = `${chainId}:${token.address.toLowerCase()}`;
-    const cached = this.cache.get(cacheKey);
-    if (cached) {
-      return cached;
+    const redisCached = await this.getRedisCachedMetadata(cacheKey);
+
+    if (redisCached) {
+      return redisCached;
     }
 
     try {
-      const chain = this.getChainEnum(chainId);
       const contract = new Contract(
         token.address,
         ETH_ERC20_ABI,
-        this.providerService.getProvider(chain),
+        this.providerService.getProviderForChainId(chainId),
       );
       const [symbol, decimalsRaw] = await Promise.all([
         withProviderControls('token-metadata:symbol', () => contract.symbol()),
@@ -113,7 +153,7 @@ export class TokenMetadataService {
         symbol: String(symbol),
         decimals: decimals.toString(),
       };
-      this.cache.set(cacheKey, metadata);
+      await this.setRedisCachedMetadata(cacheKey, metadata);
       return metadata;
     } catch (err) {
       if (err instanceof BadRequestException) {
@@ -134,6 +174,166 @@ export class TokenMetadataService {
     return NATIVE_TOKEN_ADDRESSES.has(address.toLowerCase());
   }
 
+  private isSupportedQuoteChainId(chainId: number): chainId is ChainId {
+    return (SUPPORTED_QUOTE_CHAIN_IDS as readonly number[]).includes(chainId);
+  }
+
+  private async getCatalogMetadata(
+    chainId: number,
+    address: string,
+  ): Promise<TokenMetadata | undefined> {
+    const catalog = await this.getTokenCatalog(chainId);
+
+    if (!catalog) {
+      return undefined;
+    }
+
+    const entry = catalog[address];
+
+    return entry
+      ? {
+          symbol: entry.symbol,
+          decimals: String(entry.decimals),
+        }
+      : undefined;
+  }
+
+  private getTokenCatalog(
+    chainId: number,
+  ): Promise<Record<string, TokenCatalogEntry> | undefined> {
+    return this.loadTokenCatalog(chainId);
+  }
+
+  private async loadTokenCatalog(
+    chainId: number,
+  ): Promise<Record<string, TokenCatalogEntry> | undefined> {
+    for (const fileName of this.getTokenCatalogFileNames(chainId)) {
+      try {
+        const catalogModule = (await import(`../tokens/${fileName}`)) as Record<
+          string,
+          unknown
+        >;
+        const catalog = this.extractTokenCatalog(catalogModule);
+
+        if (catalog) {
+          return catalog;
+        }
+      } catch (err) {
+        if (!this.isMissingTokenCatalogError(err)) {
+          throw err;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private getTokenCatalogFileNames(chainId: number): string[] {
+    const chainKey = ChainId[chainId] as keyof typeof ChainEnum | undefined;
+    const chainName = chainKey ? ChainEnum[chainKey] : undefined;
+
+    return Array.from(
+      new Set(
+        [TOKEN_FILE_BY_CHAIN_ID[chainId], chainName, String(chainId)].filter(
+          (value): value is string => Boolean(value),
+        ),
+      ),
+    );
+  }
+
+  private extractTokenCatalog(
+    catalogModule: Record<string, unknown>,
+  ): Record<string, TokenCatalogEntry> | undefined {
+    const catalog = Object.values(catalogModule).find((value) =>
+      this.isTokenCatalog(value),
+    ) as Record<string, TokenCatalogEntry> | undefined;
+
+    return catalog;
+  }
+
+  private isTokenCatalog(value: unknown): boolean {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return false;
+    }
+
+    return Object.values(value).some((entry) => this.normalizeMetadata(entry));
+  }
+
+  private isMissingTokenCatalogError(err: unknown): boolean {
+    const candidate = err as { code?: unknown; message?: unknown };
+
+    return (
+      candidate.code === 'MODULE_NOT_FOUND' ||
+      candidate.code === 'ERR_MODULE_NOT_FOUND' ||
+      (typeof candidate.message === 'string' &&
+        candidate.message.includes('Cannot find module'))
+    );
+  }
+
+  private async getRedisCachedMetadata(
+    cacheKey: string,
+  ): Promise<TokenMetadata | undefined> {
+    if (!this.redisService) {
+      return undefined;
+    }
+
+    try {
+      const raw = await this.redisService.getKey(cacheKey);
+      if (!raw) {
+        return undefined;
+      }
+
+      return this.normalizeMetadata(JSON.parse(raw));
+    } catch (err) {
+      this.logger.warn(
+        `Failed to read token metadata cache for ${cacheKey}`,
+        err instanceof Error ? err.message : err,
+      );
+      return undefined;
+    }
+  }
+
+  private async setRedisCachedMetadata(
+    cacheKey: string,
+    metadata: TokenMetadata,
+  ): Promise<void> {
+    if (!this.redisService) {
+      return;
+    }
+
+    try {
+      await this.redisService.setKey(cacheKey, JSON.stringify(metadata));
+    } catch (err) {
+      this.logger.warn(
+        `Failed to write token metadata cache for ${cacheKey}`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  private normalizeMetadata(value: unknown): TokenMetadata | undefined {
+    const candidate = value as {
+      symbol?: unknown;
+      decimals?: unknown;
+    };
+    const decimals = Number(candidate?.decimals);
+
+    if (
+      typeof candidate?.symbol !== 'string' ||
+      !candidate.symbol.trim() ||
+      !Number.isInteger(decimals) ||
+      decimals < 0 ||
+      decimals > 36
+    ) {
+      return undefined;
+    }
+
+    return {
+      symbol: candidate.symbol,
+      decimals: decimals.toString(),
+    };
+  }
+
   private getNativeTokenSymbol(chainId: ChainId): string {
     const symbol = NATIVE_TOKEN_SYMBOL_BY_CHAIN_ID[chainId];
     if (!symbol) {
@@ -143,20 +343,5 @@ export class TokenMetadataService {
     }
 
     return symbol;
-  }
-
-  private getChainEnum(chainId: ChainId): ChainEnum {
-    const chainKey = ChainId[chainId] as keyof typeof ChainEnum | undefined;
-    const chain = chainKey ? ChainEnum[chainKey] : undefined;
-
-    if (!chain) {
-      throw new BadRequestException(`Unsupported token chainId: ${chainId}`);
-    }
-
-    return chain;
-  }
-
-  private isSupportedChainId(chainId: number): chainId is ChainId {
-    return Object.values(ChainId).includes(chainId as ChainId);
   }
 }

@@ -7,6 +7,7 @@ export enum ChainEnum {
   ARB = 'arb',
   OP = 'opt',
   OPT = 'opt',
+  OP138 = 'op',
   AVAX = 'avax',
   AVA = 'avax',
   BASE = 'base',
@@ -32,6 +33,7 @@ export enum SwapNetwork {
   ARB = 'ARB',
   OP = 'OPT',
   OPT = 'OPT',
+  OP138 = 'OP138',
   AVAX = 'AVAX',
   AVA = 'AVAX',
   BASE = 'BASE',
@@ -54,6 +56,7 @@ export enum ChainId {
   ARB = 42161,
   OP = 10,
   OPT = 10,
+  OP138 = 138,
   AVAX = 43114,
   AVA = 43114,
   BASE = 8453,
@@ -65,6 +68,16 @@ export enum ChainId {
   UNI = 130,
   SOL = 501,
 }
+
+export const SUPPORTED_QUOTE_CHAIN_IDS = [
+  ChainId.ETH,
+  ChainId.ARB,
+  ChainId.AVAX,
+  ChainId.BASE,
+  ChainId.BSC,
+  ChainId.POL,
+  ChainId.OP138,
+] as const;
 
 export enum swapProvider {
   UNISWAP = 'UNISWAP',

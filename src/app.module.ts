@@ -88,6 +88,18 @@ export class AppModule {
           path: 'health',
           method: RequestMethod.GET,
         },
+        {
+          path: 'docs',
+          method: RequestMethod.ALL,
+        },
+        {
+          path: 'docs/(.*)',
+          method: RequestMethod.ALL,
+        },
+        {
+          path: 'docs-json',
+          method: RequestMethod.GET,
+        },
       )
       .forRoutes('*');
 

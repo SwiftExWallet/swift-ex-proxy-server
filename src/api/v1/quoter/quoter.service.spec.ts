@@ -52,6 +52,12 @@ describe('QuoterService', () => {
     amount: '1',
     recipient: '0x3333333333333333333333333333333333333333',
   } as SwapQuoteDto;
+  const verifiedWallet = {
+    addresses: {
+      eth: '0x3333333333333333333333333333333333333333',
+      multi: '0x9999999999999999999999999999999999999999',
+    },
+  };
 
   const resolvedDto = {
     ...requestDto,
@@ -127,58 +133,102 @@ describe('QuoterService', () => {
   });
 
   it('normalizes and routes 1inch quote requests through the Inch service', async () => {
-    const fusionPayload = {
-      chain: 'ETH',
-      tokenIn: requestDto.tokenIn.address,
-      tokenOut: requestDto.tokenOut.address,
-      walletAddress: requestDto.recipient,
-      amount: '1000000000000000000',
-    };
     const quote = { quoteId: 'quote-id' };
     tokenMetadataService.normalizeSwapQuote.mockResolvedValue(resolvedDto);
     swapProviderResolver.resolve.mockReturnValue({
       provider: swapProvider.ONEINCH_FUSION,
-      transformed: fusionPayload,
+      transformed: resolvedDto,
     });
     inchService.getSwapQuote.mockResolvedValue(quote);
 
-    await expect(service.getQuoteResponse(requestDto)).resolves.toEqual({
+    await expect(
+      service.getQuoteResponse(requestDto, verifiedWallet as any),
+    ).resolves.toEqual({
       success: true,
       provider: swapProvider.ONEINCH_FUSION,
       data: quote,
     });
 
-    expect(inchService.getSwapQuote).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: fusionPayload.amount }),
-    );
+    expect(inchService.getSwapQuote).toHaveBeenCalledWith({
+      chain: 'ETH',
+      tokenIn: requestDto.tokenIn.address,
+      tokenOut: requestDto.tokenOut.address,
+      walletAddress: verifiedWallet.addresses.multi,
+      amount: '1000000000000000000',
+    });
+  });
+
+  it('routes gasless chain 138 quotes through the Inch service', async () => {
+    const quote = { quoteId: 'quote-id' };
+    const chain138Dto = {
+      ...resolvedDto,
+      tokenIn: {
+        ...resolvedDto.tokenIn,
+        chainId: 138,
+        decimals: '6',
+      },
+      tokenOut: {
+        ...resolvedDto.tokenOut,
+        chainId: 138,
+        decimals: '6',
+      },
+    };
+    tokenMetadataService.normalizeSwapQuote.mockResolvedValue(chain138Dto);
+    swapProviderResolver.resolve.mockReturnValue({
+      provider: swapProvider.ONEINCH_FUSION,
+      transformed: chain138Dto,
+    });
+    inchService.getSwapQuote.mockResolvedValue(quote);
+
+    await expect(
+      service.getQuoteResponse(requestDto, verifiedWallet as any),
+    ).resolves.toEqual({
+      success: true,
+      provider: swapProvider.ONEINCH_FUSION,
+      data: quote,
+    });
+
+    expect(inchService.getSwapQuote).toHaveBeenCalledWith({
+      chain: 'OP138',
+      tokenIn: requestDto.tokenIn.address,
+      tokenOut: requestDto.tokenOut.address,
+      walletAddress: verifiedWallet.addresses.multi,
+      amount: '1000000',
+    });
   });
 
   it('normalizes and routes Fusion Plus quote requests through the Inch service', async () => {
-    const fusionPlusPayload = {
-      srcChain: 'ETH',
-      dstChain: 'BSC',
-      srcTokenAddress: requestDto.tokenIn.address,
-      dstTokenAddress: requestDto.tokenOut.address,
-      walletAddress: requestDto.recipient,
-      amount: '1000000000000000000',
+    const crossChainDto = {
+      ...resolvedDto,
+      tokenOut: {
+        ...resolvedDto.tokenOut,
+        chainId: ChainId.BSC,
+      },
     };
     const quote = { quoteId: 'fusion-plus-quote-id' };
-    tokenMetadataService.normalizeSwapQuote.mockResolvedValue(resolvedDto);
+    tokenMetadataService.normalizeSwapQuote.mockResolvedValue(crossChainDto);
     swapProviderResolver.resolve.mockReturnValue({
       provider: swapProvider.ONEINCH_FUSION_PLUS,
-      transformed: fusionPlusPayload,
+      transformed: crossChainDto,
     });
     inchService.getFusionPlusSwapQuote.mockResolvedValue(quote);
 
-    await expect(service.getQuoteResponse(requestDto)).resolves.toEqual({
+    await expect(
+      service.getQuoteResponse(requestDto, verifiedWallet as any),
+    ).resolves.toEqual({
       success: true,
       provider: swapProvider.ONEINCH_FUSION_PLUS,
       data: quote,
     });
 
-    expect(inchService.getFusionPlusSwapQuote).toHaveBeenCalledWith(
-      fusionPlusPayload,
-    );
+    expect(inchService.getFusionPlusSwapQuote).toHaveBeenCalledWith({
+      srcChain: 'ETH',
+      dstChain: 'BSC',
+      srcTokenAddress: requestDto.tokenIn.address,
+      dstTokenAddress: requestDto.tokenOut.address,
+      walletAddress: verifiedWallet.addresses.multi,
+      amount: '1000000000000000000',
+    });
   });
 
   it('posts cross-chain gas-paid Uniswap quote requests to the Trading API', async () => {
@@ -227,29 +277,6 @@ describe('QuoterService', () => {
         }),
       }),
     );
-  });
-
-  it('throws flattened validation messages for invalid transformed payloads', async () => {
-    const invalidDto = {
-      ...resolvedDto,
-      tokenIn: {
-        ...resolvedDto.tokenIn,
-        address: 'invalid-address',
-      },
-    };
-    tokenMetadataService.normalizeSwapQuote.mockResolvedValue(resolvedDto);
-    swapProviderResolver.resolve.mockReturnValue({
-      provider: swapProvider.UNISWAP,
-      transformed: invalidDto,
-    });
-    jest.spyOn(service, 'getQuote').mockResolvedValue({} as any);
-
-    await expect(service.getQuoteResponse(requestDto)).rejects.toMatchObject({
-      response: {
-        message: expect.arrayContaining(['Invalid public key format']),
-      },
-    });
-    expect(service.getQuote).not.toHaveBeenCalled();
   });
 
   it('throws BadRequestException for unsupported providers', async () => {

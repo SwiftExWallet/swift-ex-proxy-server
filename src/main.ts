@@ -5,6 +5,7 @@ import { bigintJsonSerializerMiddleware } from './api/v1/common/middleware/bigin
 import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import { createCorsOptions } from './api/v1/common/config/cors.config';
+import { setupSwagger } from './api/v1/common/config/swagger.config';
 
 const DEFAULT_API_BODY_LIMIT = '512kb';
 
@@ -23,6 +24,7 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+  setupSwagger(app);
   app.use(helmet());
   app.use(bigintJsonSerializerMiddleware);
   app.enableCors(createCorsOptions());
