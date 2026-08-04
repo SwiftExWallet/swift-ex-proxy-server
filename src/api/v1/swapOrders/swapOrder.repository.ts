@@ -12,7 +12,7 @@ export type DbResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: string };
 
-const SUCCESS_STATUSES = [SwapOrderStatus.COMPLETED, SwapOrderStatus.EXECUTED];
+const SUCCESS_STATUSES = [SwapOrderStatus.COMPLETED, SwapOrderStatus.EXECUTED, SwapOrderStatus.FILLED];
 
 @Injectable()
 export class SwapOrderRepository {

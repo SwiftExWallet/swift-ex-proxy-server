@@ -1,58 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { SwapOrderRepository } from '../swapOrders/swapOrder.repository';
-import { SwapOrderStatus } from '../common/enums/order.enum';
 import { swapProvider } from '../common/enums/chain.enum';
 import { SwapOrders } from '../swapOrders/schema/swapOrder.schema';
 import { NotificationDto } from '../notification/dto/notification.dto';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';
+import { TxReceiptStatusService } from './txReceiptStatus.service';
 
 
 const BATCH_SIZE = 10;
 
-interface BlockscoutReceiptResponse {
-    status: '0' | '1';
-    message: string;
-    result: {
-        status: '0' | '1';
-    } | null;
-}
-
-function mapBlockscoutStatus(result: BlockscoutReceiptResponse): SwapOrderStatus | null {
-    if (result.status === '0' || !result.result) {
-        return SwapOrderStatus.FAILED;
-    }
-
-    const txStatus = result.result.status;
-
-    if (txStatus === '0') {
-        return SwapOrderStatus.FAILED;
-    }
-
-    if (txStatus === '1' || txStatus === '') {
-        return SwapOrderStatus.COMPLETED;
-    }
-
-    return null;
-}
-
 @Injectable()
 export class EvmTxPollerService {
-    private readonly BLOCKSCOUT_URLS: Record<string, string> = {
-        ETH: process.env.BLOCKSCOUT_ETH as string,
-        BSC: process.env.BLOCKSCOUT_BSC as string,
-        POL: process.env.BLOCKSCOUT_POL as string,
-        ARB: process.env.BLOCKSCOUT_ARB as string,
-        OPT: process.env.BLOCKSCOUT_OPT as string,
-        BASE: process.env.BLOCKSCOUT_BAS as string,
-        AVAX: process.env.BLOCKSCOUT_AVA as string,
-    };
     private readonly logger = new Logger(EvmTxPollerService.name);
     private isRunning = false;
 
     constructor(
         private readonly repo: SwapOrderRepository,
-        private readonly firebaseNotificationService: FirebaseNotificationService
+        private readonly firebaseNotificationService: FirebaseNotificationService,
+        private readonly txReceiptStatusService: TxReceiptStatusService,
     ) { }
 
     @Cron('*/15 * * * * *', { name: 'EvmTx-Cron' })
@@ -92,43 +58,8 @@ export class EvmTxPollerService {
         }
     }
 
-
     private async processTx(tx: SwapOrders): Promise<void> {
-        const chainKey = tx.fromChain?.toUpperCase();
-        const baseUrl = this.BLOCKSCOUT_URLS[chainKey];
-
-        if (!baseUrl) {
-            this.logger.warn(`No blockscout URL for chain ${tx.fromChain} txHash ${tx.txHash}`,);
-            return;
-        }
-
-        let response: BlockscoutReceiptResponse;
-        try {
-            const url =
-                `${baseUrl}/api` +
-                `?module=transaction` +
-                `&action=gettxreceiptstatus` +
-                `&txhash=${encodeURIComponent(tx.txHash)}`;
-
-            const res = await fetch(url, {
-                headers: { 'Content-Type': 'application/json' },
-                signal: AbortSignal.timeout(8_000),
-            });
-
-            if (!res.ok) {
-                this.logger.warn(
-                    `blockscout HTTP ${res.status} for txHash ${tx.txHash} chain ${tx.fromChain}`,
-                );
-                return;
-            }
-
-            response = (await res.json()) as BlockscoutReceiptResponse;
-        } catch (err) {
-            this.logger.error(`blockscout fetch error txHash ${tx.txHash} chain ${tx.fromChain}`, err,);
-            return;
-        }
-
-        const newStatus = mapBlockscoutStatus(response);
+        const newStatus = await this.txReceiptStatusService.getStatus(tx.fromChain, tx.txHash);
         if (!newStatus) {
             this.logger.debug(`EvmTx ${tx.txHash} not yet mined on ${tx.fromChain}`,);
             return;
@@ -141,10 +72,10 @@ export class EvmTxPollerService {
         }
 
         this.logger.log(`EvmTx ${tx.txHash} ${tx.fromChain} to ${newStatus}`,);
-        this.processTxNotification(tx, newStatus ,dbResult.txType);
+        this.processTxNotification(tx, newStatus, dbResult.txType);
     }
 
-    private async processTxNotification(tx: SwapOrders, status: string,txType: string): Promise<void> {
+    private async processTxNotification(tx: SwapOrders, status: string, txType: string): Promise<void> {
         const notificationPayload: NotificationDto = {
                 title: `Order Completed: ${tx.amountOut} ${tx.toToken}`,
                 body: `From ${tx.walletAddress?.slice(0, 4)}.....${tx.walletAddress?.slice(-4)}`,

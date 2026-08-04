@@ -17,6 +17,7 @@ import { InchFusionPlusWsPollerService } from '../swap/1inch/inchFusionPlusWsPol
 import { UniswapTxPollerService } from '../crons/uniswapTxPoller.service';
 import { NearIntentPollerService } from '../swap/nearIntent/nearIntentPoller.service';
 import { NearIntentExhaustedReconcilerService } from '../crons/nearIntentExhaustedReconciler.service';
+import { TxReceiptStatusService } from '../crons/txReceiptStatus.service';
 import { PortfolioModule } from '../portfolio/portfolio.module';
 
 @Module({
@@ -40,6 +41,7 @@ import { PortfolioModule } from '../portfolio/portfolio.module';
     InchFusionPlusWsPollerService,
     RedisService,
     UniswapTxPollerService,
+    TxReceiptStatusService,
     NearIntentPollerService,
     NearIntentExhaustedReconcilerService,
   ],

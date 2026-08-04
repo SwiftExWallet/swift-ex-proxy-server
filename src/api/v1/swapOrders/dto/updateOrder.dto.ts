@@ -3,6 +3,36 @@ import { } from '../schema/swapOrder.schema';
 import { SwapNetwork, swapProvider } from '../../common/enums/chain.enum';
 import { SwapOrderStatus as OrderStatus, OrderTxType } from '../../common/enums/order.enum';
 import { ValidWalletType } from '../../common/enums/all-bridge.enum';
+import { Transform } from 'class-transformer';
+
+const RAW_TO_CANONICAL: Record<string, SwapNetwork> = {
+  ETH: SwapNetwork.ETH,
+  BSC: SwapNetwork.BSC,
+  BNB: SwapNetwork.BSC,
+  POL: SwapNetwork.POL,
+  MATIC: SwapNetwork.MATIC,
+  ARB: SwapNetwork.ARB,
+  OP: SwapNetwork.OPT,
+  OPT: SwapNetwork.OPT,
+  AVAX: SwapNetwork.AVAX,
+  AVA: SwapNetwork.AVAX,
+  BASE: SwapNetwork.BASE,
+  BAS: SwapNetwork.BASE,
+  GNO: SwapNetwork.GNO,
+  ZK: SwapNetwork.ZK,
+  LINEA: SwapNetwork.LINEA,
+  SONIC: SwapNetwork.SONIC,
+  UNI: SwapNetwork.UNI,
+  SOL: SwapNetwork.SOL,
+  SRB: SwapNetwork.SRB,
+};
+
+export function NormalizeChain() {
+  return Transform(({ value }) => {
+    if (typeof value !== 'string') return value;
+    return RAW_TO_CANONICAL[value.toUpperCase()] ?? value;
+  });
+}
 
 export class StoreSwapOrderDto {
 
@@ -38,11 +68,13 @@ export class StoreSwapOrderDto {
 
   @IsString()
   @IsNotEmpty()
+  @NormalizeChain()
   @IsEnum(SwapNetwork)
   fromChain: SwapNetwork;
 
   @IsString()
   @IsNotEmpty()
+  @NormalizeChain()
   @IsEnum(SwapNetwork)
   toChain: SwapNetwork;
 
