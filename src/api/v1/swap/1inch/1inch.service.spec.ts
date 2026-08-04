@@ -14,6 +14,7 @@ describe('InchService Fusion+ poller', () => {
   };
   const updatedOrder = {
     txHash: orderHash,
+    deviceId: 'device-1',
     deviceFcmToken: 'fcm-token',
     amountOut: '10',
     toToken: 'USDC',
@@ -30,6 +31,7 @@ describe('InchService Fusion+ poller', () => {
   let swapOrderService: {
     updateOrderByHash: jest.Mock;
     findByProviderAndStatusesSince: jest.Mock;
+    findByTxHash: jest.Mock;
   };
   let redisService: {
     getKey: jest.Mock;
@@ -42,6 +44,9 @@ describe('InchService Fusion+ poller', () => {
   let exhaustedOrderRepository: {
     upsertByTxHash: jest.Mock;
     deleteByTxHash: jest.Mock;
+  };
+  let portfolioService: {
+    refreshPortfolio: jest.Mock;
   };
 
   beforeEach(() => {
@@ -58,6 +63,7 @@ describe('InchService Fusion+ poller', () => {
     swapOrderService = {
       updateOrderByHash: jest.fn().mockResolvedValue(updatedOrder),
       findByProviderAndStatusesSince: jest.fn(),
+      findByTxHash: jest.fn().mockResolvedValue({ ok: true, data: updatedOrder }),
     };
     redisService = {
       getKey: jest.fn().mockResolvedValue(JSON.stringify(secretState)),
@@ -71,6 +77,9 @@ describe('InchService Fusion+ poller', () => {
       upsertByTxHash: jest.fn().mockResolvedValue(undefined),
       deleteByTxHash: jest.fn().mockResolvedValue(undefined),
     };
+    portfolioService = {
+      refreshPortfolio: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new InchService(
       swapOrderService as any,
@@ -78,6 +87,7 @@ describe('InchService Fusion+ poller', () => {
       {} as any,
       firebaseNotificationService as any,
       exhaustedOrderRepository as any,
+      portfolioService as any,
     );
     (service as any).sdk = sdk;
   });
@@ -104,7 +114,28 @@ describe('InchService Fusion+ poller', () => {
       expect.stringContaining('"submittedIdx":[0]'),
     );
     expect(swapOrderService.updateOrderByHash).not.toHaveBeenCalled();
+    expect(swapOrderService.findByTxHash).toHaveBeenCalledWith(orderHash);
+    expect(portfolioService.refreshPortfolio).toHaveBeenCalledWith(
+      updatedOrder.deviceId,
+      updatedOrder.walletAddress,
+      [updatedOrder.fromChain],
+    );
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(true);
+  });
+
+  it('only triggers the source portfolio refresh once across multiple secret reveals', async () => {
+    sdk.getOrderStatus.mockResolvedValue({ status: SDKOrderStatus.Pending });
+    sdk.getReadyToAcceptSecretFills
+      .mockResolvedValueOnce({ fills: [{ idx: 0 }] })
+      .mockResolvedValueOnce({ fills: [{ idx: 1 }] });
+    sdk.submitSecret.mockResolvedValue(undefined);
+
+    (service as any).startSecretRevealPoller(orderHash);
+    await jest.advanceTimersByTimeAsync(10_000);
+    await jest.advanceTimersByTimeAsync(10_000);
+
+    expect(sdk.submitSecret).toHaveBeenCalledTimes(2);
+    expect(portfolioService.refreshPortfolio).toHaveBeenCalledTimes(1);
   });
 
   it('updates refunding orders without notification and keeps polling', async () => {

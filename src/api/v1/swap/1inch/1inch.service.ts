@@ -29,6 +29,7 @@ import { CancelFusionOrderDto } from '../dto/cancelFusionOrder';
 import { FirebaseNotificationService } from '../../notification/firebase/notification.service';
 import { NotificationDto } from '../../notification/dto/notification.dto';
 import { ExhaustedOrderRepository } from '../../swapOrders/exhaustedOrder.repository';
+import { PortfolioService } from '../../portfolio/portfolio.service';
 
 interface RedisOrderSecretState {
   secrets: string[];
@@ -60,6 +61,7 @@ export class InchService implements OnModuleInit {
   private readonly sdk: SDK;
   private readonly activeSecretPollers = new Map<string, NodeJS.Timeout>();
   private readonly secretPollReschedules = new Map<string, number>();
+  private readonly sourceRefreshTriggered = new Set<string>();
   private isRecoveringPendingOrders = false;
 
   constructor(
@@ -68,6 +70,7 @@ export class InchService implements OnModuleInit {
     private readonly inchWsPollerService: InchWsPollerService,
     private readonly firebaseNotificationService: FirebaseNotificationService,
     private readonly exhaustedOrderRepository: ExhaustedOrderRepository,
+    private readonly portfolioService: PortfolioService,
   ) {
     this.sdk = new SDK({
       url: 'https://api.1inch.com/fusion-plus',
@@ -352,6 +355,27 @@ export class InchService implements OnModuleInit {
     }
     this.activeSecretPollers.delete(orderHash);
     this.secretPollReschedules.delete(orderHash);
+    this.sourceRefreshTriggered.delete(orderHash);
+  }
+
+  private async refreshSourcePortfolio(orderHash: string): Promise<void> {
+    const result = await this.swapOrderService.findByTxHash(orderHash);
+    if (!result.ok || !result.data) {
+      this.logger.warn(
+        `[${orderHash}] Could not load order for source portfolio refresh`,
+      );
+      return;
+    }
+
+    const { deviceId, walletAddress, fromChain } = result.data;
+    try {
+      await this.portfolioService.refreshPortfolio(String(deviceId), walletAddress, [fromChain]);
+    } catch (err) {
+      this.logger.error(
+        `[${orderHash}] Failed to refresh source portfolio after secret reveal`,
+        this.getErrorMessage(err),
+      );
+    }
   }
 
   private mapFusionPlusStatus(status: SDKOrderStatus): SwapOrderStatus {
@@ -549,6 +573,11 @@ export class InchService implements OnModuleInit {
 
           if (stateUpdated) {
             await this.setSecretState(orderHash, secretState);
+
+            if (!this.sourceRefreshTriggered.has(orderHash)) {
+              this.sourceRefreshTriggered.add(orderHash);
+              void this.refreshSourcePortfolio(orderHash);
+            }
           }
 
           retryDelayMs = SECRET_POLL_INTERVAL_MS;

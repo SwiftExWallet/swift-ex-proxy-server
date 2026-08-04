@@ -21,6 +21,7 @@ import { RedisService } from '../../redis/redis.service';
 import { SwapOrderService } from '../../swapOrders/swapOrders.service';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { FirebaseNotificationService } from '../../notification/firebase/notification.service';
+import { PortfolioService } from '../../portfolio/portfolio.service';
 
 interface RedisOrderSecretState {
     secrets: string[];
@@ -36,6 +37,7 @@ export class FustionNativeService {
     private readonly providers = new Map<number, ethers.JsonRpcProvider>();
     private crossChainSdk: CrossChainSDK;
     private fusionSdkMap = new Map<number, FusionSDK>();
+    private readonly sourceRefreshTriggered = new Set<string>();
 
     private readonly CHAIN_ID_TO_ENV_NAME: Record<number, string> = {
         1: 'ETH',
@@ -51,9 +53,32 @@ export class FustionNativeService {
         private readonly configService: ConfigService,
         private readonly redisService: RedisService,
         private readonly swapOrderService: SwapOrderService,
-        private readonly firebaseNotificationService: FirebaseNotificationService
+        private readonly firebaseNotificationService: FirebaseNotificationService,
+        private readonly portfolioService: PortfolioService,
     ) {
         this.initialize1InchSdks();
+    }
+
+    private getErrorMessage(err: unknown): unknown {
+        return err instanceof Error ? err.message : err;
+    }
+
+    private async refreshSourcePortfolio(orderHash: string): Promise<void> {
+        const result = await this.swapOrderService.findByTxHash(orderHash);
+        if (!result.ok || !result.data) {
+            this.logger.warn(`[${orderHash}] Could not load order for source portfolio refresh`);
+            return;
+        }
+
+        const { deviceId, walletAddress, fromChain } = result.data;
+        try {
+            await this.portfolioService.refreshPortfolio(String(deviceId), walletAddress, [fromChain]);
+        } catch (err) {
+            this.logger.error(
+                `[${orderHash}] Failed to refresh source portfolio after secret reveal`,
+                this.getErrorMessage(err),
+            );
+        }
     }
 
     private async getSecretState(key: string): Promise<{ secrets: string[]; secretHashes: string[]; hashLock: any; submittedIdx: Set<number>; isCrossChain: boolean } | null> {
@@ -305,6 +330,7 @@ export class FustionNativeService {
                 const secretState = await this.getSecretState(hash);
                 if (!secretState) {
                     this.logger.warn(`[Loop] Stopping loop for ${hash}. State cleared from Redis.`);
+                    this.sourceRefreshTriggered.delete(hash);
                     break;
                 }
 
@@ -373,6 +399,11 @@ export class FustionNativeService {
 
                 if (stateUpdated) {
                     await this.setSecretState(hash, secretState);
+
+                    if (!this.sourceRefreshTriggered.has(hash)) {
+                        this.sourceRefreshTriggered.add(hash);
+                        void this.refreshSourcePortfolio(hash);
+                    }
                 }
 
                 const { status } = await this.crossChainSdk.getOrderStatus(hash);
@@ -400,6 +431,7 @@ export class FustionNativeService {
                         );
                     }
                     await this.delSecretState(hash);
+                    this.sourceRefreshTriggered.delete(hash);
                     break;
                 }
 
