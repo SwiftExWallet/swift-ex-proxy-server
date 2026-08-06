@@ -4,6 +4,7 @@ import { PortfolioRepository } from './portfolio.repository';
 import { PortfolioMapper } from './portfolio.mapper';
 import { Portfolio, PortfolioToken } from './schema/portfolio.schema';
 import { AlchemyPortfolioResponse } from './interfaces/portfolio-sync.interface';
+import { normalizeWalletAddress } from '../common/utils/address.util';
 
 const DEFAULT_NETWORKS = [
   'eth-mainnet',
@@ -110,7 +111,7 @@ export class PortfolioService {
   }
 
   private normalizeAddress(address: string): string {
-    return address.toLowerCase();
+    return normalizeWalletAddress(address);
   }
 
   private sumValueUsd(tokens: PortfolioToken[]): string {

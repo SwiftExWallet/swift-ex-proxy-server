@@ -10,6 +10,7 @@ import { FirebaseNotificationService } from '../../notification/firebase/notific
 import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { swapProvider } from '../../common/enums/chain.enum';
 import { ExhaustedOrderRepository } from '../../swapOrders/exhaustedOrder.repository';
+import { PortfolioService } from '../../portfolio/portfolio.service';
 
 interface NearIntentRedisState {
   memo?: string;
@@ -35,6 +36,7 @@ const STATUS_MAP: Record<string, SwapOrderStatus> = {
 export class NearIntentPollerService implements OnModuleInit {
   private readonly logger = new Logger(NearIntentPollerService.name);
   private readonly activePolls = new Set<string>();
+  private readonly sourceRefreshTriggered = new Set<string>();
 
   constructor(
     @Inject(forwardRef(() => SwapOrderService))
@@ -42,6 +44,7 @@ export class NearIntentPollerService implements OnModuleInit {
     private readonly redisService: RedisService,
     private readonly firebaseNotificationService: FirebaseNotificationService,
     private readonly exhaustedOrderRepository: ExhaustedOrderRepository,
+    private readonly portfolioService: PortfolioService,
   ) {
     if (process.env.ONECLICK_BASE_URL) {
       OpenAPI.BASE = process.env.ONECLICK_BASE_URL;
@@ -157,6 +160,11 @@ export class NearIntentPollerService implements OnModuleInit {
 
         this.logger.log(`[${orderId}] Current execution status: ${status.status}`);
 
+        if (status.status === 'PROCESSING' && !this.sourceRefreshTriggered.has(orderId)) {
+          this.sourceRefreshTriggered.add(orderId);
+          void this.refreshSourcePortfolio(orderId);
+        }
+
         if (TERMINAL_STATES.has(status.status)) {
           await this.handleTerminalStatus(orderId, status);
           return { success: true, data: status, error: null };
@@ -179,6 +187,7 @@ export class NearIntentPollerService implements OnModuleInit {
     const orderStatus = STATUS_MAP[status.status];
 
     await this.removeRedisState(orderId);
+    this.sourceRefreshTriggered.delete(orderId);
     await this.updateOrderStatusAndNotify(orderId, orderStatus);
   }
 
@@ -186,6 +195,28 @@ export class NearIntentPollerService implements OnModuleInit {
     const orderStatusUpdate = await this.updateOrderStatusAndNotify(orderId, SwapOrderStatus.EXHAUSTED, false);
     await this.saveExhaustedForReconciliation(orderId, depositAddress, memo, orderStatusUpdate);
     await this.removeRedisState(orderId);
+    this.sourceRefreshTriggered.delete(orderId);
+  }
+
+  // PROCESSING means the deposit is confirmed and NEAR intents is now
+  // executing the swap, so the sender's fromChain balance changes here —
+  // before the order reaches a terminal status.
+  private async refreshSourcePortfolio(orderId: string): Promise<void> {
+    const result = await this.swapOrderService.findById(orderId);
+    if (!result.ok || !result.data) {
+      this.logger.warn(`[${orderId}] Could not load order for source portfolio refresh`);
+      return;
+    }
+
+    const { deviceId, walletAddress, fromChain } = result.data;
+    try {
+      await this.portfolioService.refreshPortfolio(String(deviceId), walletAddress, [fromChain]);
+    } catch (err) {
+      this.logger.error(
+        `[${orderId}] Failed to refresh source portfolio after PROCESSING`,
+        this.getErrorMessage(err),
+      );
+    }
   }
 
   private async saveExhaustedForReconciliation(orderId: string, depositAddress: string, memo?: string, order?: any): Promise<void> {

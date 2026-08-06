@@ -68,6 +68,18 @@ export class SwapOrderRepository {
     }
   }
 
+  // Use for providers where txHash isn't a reliable single-row key (e.g.
+  // NEARINTENT deposit addresses, which can repeat across orders).
+  async findById(id: string): Promise<DbResult<SwapOrders | null>> {
+    try {
+      const data = await this.model.findById(id).exec();
+      return { ok: true, data };
+    } catch (err) {
+      this.logger.error('findById failed', { id, err });
+      return { ok: false, error: 'findById failed' };
+    }
+  }
+
   async findByWallet(walletAddress: string): Promise<DbResult<SwapOrders[]>> {
     try {
       const data = await this.model

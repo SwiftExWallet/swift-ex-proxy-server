@@ -92,6 +92,10 @@ export class SwapOrderService {
     return await this.swapOrderRepository.findByTxHash(txHash);
   }
 
+  async findById(id: string): Promise<DbResult<SwapOrders | null>> {
+    return await this.swapOrderRepository.findById(id);
+  }
+
   async findByWallet(walletAddress: string): Promise<DbResult<SwapOrders[]>> {
     return await this.swapOrderRepository.findByWallet(walletAddress)
   }

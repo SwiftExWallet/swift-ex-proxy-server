@@ -4,6 +4,7 @@ import { SwapNetwork, swapProvider } from '../../common/enums/chain.enum';
 import { SwapOrderStatus as OrderStatus, OrderTxType } from '../../common/enums/order.enum';
 import { ValidWalletType } from '../../common/enums/all-bridge.enum';
 import { Transform } from 'class-transformer';
+import { normalizeWalletAddress } from '../../common/utils/address.util';
 
 const RAW_TO_CANONICAL: Record<string, SwapNetwork> = {
   ETH: SwapNetwork.ETH,
@@ -31,6 +32,13 @@ export function NormalizeChain() {
   return Transform(({ value }) => {
     if (typeof value !== 'string') return value;
     return RAW_TO_CANONICAL[value.toUpperCase()] ?? value;
+  });
+}
+
+export function NormalizeWalletAddress() {
+  return Transform(({ value }) => {
+    if (typeof value !== 'string') return value;
+    return normalizeWalletAddress(value);
   });
 }
 
@@ -64,6 +72,7 @@ export class StoreSwapOrderDto {
 
   @IsString()
   @IsNotEmpty()
+  @NormalizeWalletAddress()
   walletAddress: string;
 
   @IsString()
@@ -127,6 +136,7 @@ export class UpdateSwapOrderStatusDto {
 }
 
 export class MultiChainWalletAddressDto{
+  @NormalizeWalletAddress()
   @Matches(
       /^0x[a-fA-F0-9]{40}$|^G[A-Z0-9]{55}$|^[A-Z0-9]{1,12}-G[A-Z0-9]{55}$/,
       { message: 'Invalid wallet address format' }
