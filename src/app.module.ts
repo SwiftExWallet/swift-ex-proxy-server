@@ -24,6 +24,8 @@ import { getMongoConnectionConfig } from './api/v1/common/config/datastore.confi
 import { WalletModule } from './api/v1/wallet/wallet.module';
 import { DeviceWalletMiddleware } from './api/v1/common/middleware/device-wallet.middleware';
 import { BodySizeLimitGuard } from './api/v1/common/guard/body-size-limit.guard';
+import { MarketDataModule } from './api/v1/market-data/market-data.module';
+import { OnOffRampModule } from './api/v1/on-off-ramp/on-off-ramp.module';
 
 @Module({
   imports: [
@@ -67,6 +69,8 @@ import { BodySizeLimitGuard } from './api/v1/common/guard/body-size-limit.guard'
     QuoterModule,
     SwapOrdersModule,
     WalletModule,
+    MarketDataModule,
+    OnOffRampModule,
   ],
   controllers: [AppController],
   providers: [
@@ -93,7 +97,7 @@ export class AppModule {
           method: RequestMethod.ALL,
         },
         {
-          path: 'docs/(.*)',
+          path: 'docs/{*path}',
           method: RequestMethod.ALL,
         },
         {
@@ -116,12 +120,12 @@ export class AppModule {
         },
       )
       .forRoutes(
-        'api/v1/quoter/*',
-        'api/v1/swap/1inch/*',
-        'api/v1/swapOrders/*',
-        'api/v1/eth/*',
-        'api/v1/usdt/*',
-        'api/v1/bsc/*',
+        'api/v1/quoter/{*path}',
+        'api/v1/swap/1inch/{*path}',
+        'api/v1/swapOrders/{*path}',
+        'api/v1/eth/{*path}',
+        'api/v1/usdt/{*path}',
+        'api/v1/bsc/{*path}',
         {
           path: 'api/v1/bridge/swap-transaction/prepare',
           method: RequestMethod.POST,

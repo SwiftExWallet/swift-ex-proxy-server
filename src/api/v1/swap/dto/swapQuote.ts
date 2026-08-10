@@ -7,7 +7,7 @@ import {
 } from 'class-validator';
 import { SwapNetwork } from '../../common/enums/chain.enum';
 
-export class SwapQuoteDto {
+export class InchSwapQuoteDto {
   @IsNotEmpty()
   @IsEnum(SwapNetwork)
   chain!: SwapNetwork;

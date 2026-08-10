@@ -1,2 +1,2 @@
-npm run lint:check
-npm run test:coverage:check
+yarn lint:check
+yarn test:coverage:check

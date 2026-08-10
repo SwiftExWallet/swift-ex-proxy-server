@@ -1,10 +1,14 @@
-import { HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { DeviceService } from '../../device/device.service';
 import { DeviceAuthTokenMiddleware } from './device-auth-token.middleware';
 
-const mockJwtService = { decode: jest.fn() };
+const mockJwtService = { verifyAsync: jest.fn() };
 const mockDeviceService = { findOne: jest.fn() };
 
 describe('DeviceAuthTokenMiddleware', () => {
@@ -29,18 +33,18 @@ describe('DeviceAuthTokenMiddleware', () => {
     expect(middleware).toBeDefined();
   });
 
-  it('throws NotFoundException when x-auth-device-token header is missing', async () => {
+  it('throws UnauthorizedException when x-auth-device-token header is missing', async () => {
     const req: any = { headers: {}, originalUrl: '/api/test' };
     const next = jest.fn();
 
     await expect(middleware.use(req, {} as any, next)).rejects.toThrow(
-      NotFoundException,
+      UnauthorizedException,
     );
     expect(next).not.toHaveBeenCalled();
   });
 
   it('throws HttpException FORBIDDEN when decoded token has no _id', async () => {
-    mockJwtService.decode.mockReturnValue({ sub: 'no-id' });
+    mockJwtService.verifyAsync.mockResolvedValue({ sub: 'no-id' });
     const req: any = {
       headers: { 'x-auth-device-token': 'bad.token' },
       originalUrl: '/api/test',
@@ -54,7 +58,10 @@ describe('DeviceAuthTokenMiddleware', () => {
   });
 
   it('throws HttpException FORBIDDEN when device not found in DB', async () => {
-    mockJwtService.decode.mockReturnValue({ _id: 'device-id-123' });
+    mockJwtService.verifyAsync.mockResolvedValue({
+      _id: 'device-id-123',
+      exp: Date.now(),
+    });
     mockDeviceService.findOne.mockResolvedValue(null);
     const req: any = {
       headers: { 'x-auth-device-token': 'valid.token' },
@@ -69,7 +76,10 @@ describe('DeviceAuthTokenMiddleware', () => {
 
   it('attaches device to req and calls next when token is valid', async () => {
     const device = { _id: 'device-id-123', fcmToken: 'tok' };
-    mockJwtService.decode.mockReturnValue({ _id: 'device-id-123' });
+    mockJwtService.verifyAsync.mockResolvedValue({
+      _id: 'device-id-123',
+      exp: Date.now(),
+    });
     mockDeviceService.findOne.mockResolvedValue(device);
     const req: any = {
       headers: { 'x-auth-device-token': 'valid.token' },

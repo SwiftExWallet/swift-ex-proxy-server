@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { BscService } from './bsc.service';
 import { ProviderService } from '../provider/provider.service';
 import { PancakeSwapService } from './pancake/bsc.pancake.service';
+import { TokenMetadataService } from '../common/services/tokenMetadata.service';
 
 jest.mock('../common/helpers/blockchainUtilityMethods', () => ({
   getTransactionCount: jest.fn().mockResolvedValue(7),
@@ -48,6 +49,9 @@ const mockPancakeSwapService = {
     .fn()
     .mockResolvedValue({ to: '0xPancake', data: '0xswap' }),
 };
+const mockTokenMetadataService = {
+  normalizeSwapQuote: jest.fn((dto) => Promise.resolve(dto)),
+};
 
 describe('BscService', () => {
   let service: BscService;
@@ -66,6 +70,7 @@ describe('BscService', () => {
         BscService,
         { provide: ProviderService, useValue: mockProviderService },
         { provide: PancakeSwapService, useValue: mockPancakeSwapService },
+        { provide: TokenMetadataService, useValue: mockTokenMetadataService },
       ],
     }).compile();
 

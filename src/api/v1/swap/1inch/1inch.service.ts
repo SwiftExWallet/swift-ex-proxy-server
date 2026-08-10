@@ -6,7 +6,7 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
-import { SwapQuoteDto } from '../dto/swapQuote';
+import { InchSwapQuoteDto } from '../dto/swapQuote';
 import { ChainId, swapProvider } from '../../common/enums/chain.enum';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { SwapOrderService } from '../../swapOrders/swapOrders.service';
@@ -232,7 +232,7 @@ export class InchService implements OnModuleInit {
     return response.data;
   }
 
-  async getSwapQuote(swapQuote: SwapQuoteDto) {
+  async getSwapQuote(swapQuote: InchSwapQuoteDto) {
     const { tokenIn, tokenOut, amount, walletAddress, chain } = swapQuote;
     const url = this.buildOneInchUrl(
       'QUOTER_BASE',

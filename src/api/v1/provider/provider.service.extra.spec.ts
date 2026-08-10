@@ -31,6 +31,7 @@ describe('ProviderService', () => {
     process.env.PROVIDER_RPC_BASE_1 = 'http://base-1.test';
     process.env.PROVIDER_RPC_AVAX_1 = 'http://avax-1.test';
     process.env.PROVIDER_RPC_OPT_1 = 'http://opt-1.test';
+    process.env.ENVIRONMENT = 'dev';
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [ProviderService],
@@ -53,6 +54,7 @@ describe('ProviderService', () => {
       'PROVIDER_RPC_BASE_1',
       'PROVIDER_RPC_AVAX_1',
       'PROVIDER_RPC_OPT_1',
+      'ENVIRONMENT',
     ].forEach((k) => delete process.env[k]);
   });
 

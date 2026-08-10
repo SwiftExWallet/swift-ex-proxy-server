@@ -1,13 +1,20 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { getAddress } from 'ethers';
-import mongoose, { Model } from 'mongoose';
-import { SupportedWalletChain } from '../common/enums/chain.enum';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { WalletRepository } from './wallet.repository';
+import { CreateWalletDto } from './dto/create-wallet.dto';
 import { Wallet } from './schema/wallet.schema';
+import mongoose from 'mongoose';
+import { StellarAddressDto } from './dto/stellar-address.dto';
+import { WalletAddressDto } from './dto/wallet-address.dto';
+import { Device } from '../device/schema/device.schema';
+import { WalletSyncFailedService } from './wallet-sync-failed.service';
+import { SupportedWalletChain } from '../common/enums/chain.enum';
+import { HttpService } from '../common/services/httpService';
+import { getAddress } from 'ethers';
+import {
+  EVM_ADDRESS_PATTERN,
+  STELLAR_ADDRESS_PATTERN,
+} from '../common/constants/walletAddress.constants';
 
-const EVM_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
-const STELLAR_ADDRESS_PATTERN =
-  /^G[A-Z0-9]{55}$|^[A-Z0-9]{1,12}-G[A-Z0-9]{55}$/;
 const SUPPORTED_WALLET_ADDRESS_FIELDS = Object.values(SupportedWalletChain);
 
 export interface VerifiedDeviceWallet extends Wallet {
@@ -17,39 +24,83 @@ export interface VerifiedDeviceWallet extends Wallet {
 
 @Injectable()
 export class WalletService {
+  private readonly logger = new Logger(WalletService.name);
+
   constructor(
-    @InjectModel(Wallet.name)
-    private readonly walletModel: Model<Wallet>,
+    private readonly walletRepo: WalletRepository,
+    private readonly httpService: HttpService,
+    private readonly walletSyncFailedService: WalletSyncFailedService,
   ) {}
 
-  async verifyWalletForDevice(
-    deviceId: mongoose.Schema.Types.ObjectId | string,
-    walletAddress: string,
-  ): Promise<VerifiedDeviceWallet | null> {
-    const normalizedAddress = this.normalizeWalletAddress(walletAddress);
-    const wallet = await this.walletModel
-      .findOne({
-        deviceId,
-        $or: this.buildAddressLookup(normalizedAddress),
-      })
-      .exec();
+  async create(
+    createWalletDto: CreateWalletDto,
+    device: Device,
+  ): Promise<Wallet | null> {
+    const wallet: Wallet = await this.walletRepo.create(
+      Object.assign(createWalletDto, {
+        deviceId: device._id,
+      }),
+    );
+    if (process.env.ENVIRONMENT == 'prod') this.addWalletToListener(wallet);
 
-    if (!wallet) {
-      return null;
+    return this.walletRepo.findOne({ _id: wallet._id });
+  }
+
+  async addWalletToListener(wallet: Wallet) {
+    try {
+      const headers = {
+        Authorization: `Bearer ${process.env.AUTH_TOKEN}`,
+        'Content-Type': 'application/json',
+      };
+      await this.httpService.put(
+        process.env.LISTENER_API_URL as string,
+        wallet,
+        headers,
+      );
+    } catch (error) {
+      await this.walletSyncFailedService.markWalletAsSyncFailed({
+        deviceId: wallet.deviceId,
+        addresses: {
+          xlm: wallet.addresses.get(SupportedWalletChain.xlm) || '',
+          multi: wallet.addresses.get(SupportedWalletChain.multi) || '',
+        },
+        syncError: error,
+      });
+      console.error('addWalletToListener faild', error);
     }
+  }
 
-    const rawWalletId = wallet._id as unknown;
-    const walletId =
-      rawWalletId instanceof mongoose.Types.ObjectId
-        ? rawWalletId.toHexString()
-        : (rawWalletId as string);
-    const walletObject = this.toPlainWallet(wallet);
+  async findWalletByUserId(
+    userId: mongoose.Schema.Types.ObjectId,
+    deviceId: mongoose.Schema.Types.ObjectId,
+  ): Promise<Wallet[] | null> {
+    return this.walletRepo.find({ userId, deviceId });
+  }
 
-    return {
-      ...walletObject,
-      walletId,
-      address: normalizedAddress,
-    };
+  async findByStellarAddress(
+    stellarAddressDto: StellarAddressDto,
+    deviceId: mongoose.Schema.Types.ObjectId,
+  ): Promise<Wallet[] | null> {
+    const { stellarAddress } = stellarAddressDto;
+
+    return this.walletRepo.find({ stellarAddress, deviceId });
+  }
+
+  async findByWalletAddress(
+    walletAddressDto: WalletAddressDto,
+    deviceId: mongoose.Schema.Types.ObjectId,
+  ): Promise<Wallet[] | null> {
+    const { walletAddress, chain } = walletAddressDto;
+    const key = `addresses.${SupportedWalletChain[chain]}`;
+    console.log(key);
+    return this.walletRepo.find({ [key]: walletAddress, deviceId });
+  }
+
+  async findByMultiChainAddressWithoutDevice(
+    walletAddressDto: WalletAddressDto,
+  ): Promise<Wallet | null> {
+    const { walletAddress } = walletAddressDto;
+    return this.walletRepo.findOne({ multiChainAddress: walletAddress });
   }
 
   private normalizeWalletAddress(walletAddress: string): string {
@@ -96,5 +147,33 @@ export class WalletService {
 
   private escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  async verifyWalletForDevice(
+    deviceId: mongoose.Schema.Types.ObjectId | string,
+    walletAddress: string,
+  ): Promise<VerifiedDeviceWallet | null> {
+    const normalizedAddress = this.normalizeWalletAddress(walletAddress);
+    const wallet = await this.walletRepo.findOne({
+      deviceId,
+      $or: this.buildAddressLookup(normalizedAddress),
+    });
+
+    if (!wallet) {
+      return null;
+    }
+
+    const rawWalletId = wallet._id as unknown;
+    const walletId =
+      rawWalletId instanceof mongoose.Types.ObjectId
+        ? rawWalletId.toHexString()
+        : (rawWalletId as string);
+    const walletObject = this.toPlainWallet(wallet);
+
+    return {
+      ...walletObject,
+      walletId,
+      address: normalizedAddress,
+    };
   }
 }

@@ -7,7 +7,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { SwapQuoteDto } from '../dto/swapQuote';
+import { InchSwapQuoteDto } from '../dto/swapQuote';
 import { InchService } from './1inch.service';
 import { FusionOrderDto } from '../dto/fusionOrder';
 import { SubmitOrderDto } from '../dto/submitOrder';
@@ -45,7 +45,7 @@ export class inchController {
       wallet: 30,
     }),
   )
-  async getQuote(@Body() swapQuote: SwapQuoteDto) {
+  async getQuote(@Body() swapQuote: InchSwapQuoteDto) {
     const data = await this.inchService.getSwapQuote(swapQuote);
     return data;
   }

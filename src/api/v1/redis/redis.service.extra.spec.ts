@@ -7,11 +7,12 @@ const mockRedisClient = {
   get: jest.fn(),
   del: jest.fn(),
   quit: jest.fn(),
+  on: jest.fn(),
+  config: jest.fn(),
 };
 
-jest.mock('ioredis', () => ({
-  __esModule: true,
-  default: jest.fn().mockImplementation(() => mockRedisClient),
+jest.mock('../common/config/datastore.config', () => ({
+  createRedisClient: jest.fn(() => mockRedisClient),
 }));
 
 describe('RedisService', () => {
@@ -23,6 +24,8 @@ describe('RedisService', () => {
     process.env.REDIS_TTL = '3600';
     jest.clearAllMocks();
     mockRedisClient.ping.mockResolvedValue('PONG');
+    mockRedisClient.on.mockReturnValue(mockRedisClient);
+    mockRedisClient.config.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [RedisService],
@@ -69,7 +72,7 @@ describe('RedisService', () => {
         'myKey',
         'myValue',
         'EX',
-        expect.anything(),
+        300,
       );
     });
   });

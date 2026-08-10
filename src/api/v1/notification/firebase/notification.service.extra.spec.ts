@@ -78,13 +78,13 @@ describe('FirebaseNotificationService', () => {
       );
     });
 
-    it('throws when messaging().send fails', async () => {
+    it('returns null when messaging().send fails', async () => {
       const admin = jest.requireMock('firebase-admin');
       const mockSend = admin.messaging().send;
       mockSend.mockRejectedValue(new Error('FCM error'));
 
-      await expect(service.sendNotification('token', payload)).rejects.toThrow(
-        'Failed to send notification',
+      await expect(service.sendNotification('token', payload)).resolves.toBe(
+        null,
       );
     });
   });

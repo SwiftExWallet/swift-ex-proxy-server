@@ -4,6 +4,7 @@ import { EthService } from './eth.service';
 import { ProviderService } from '../provider/provider.service';
 import { UniSwapService } from './uniSwap/eth.uniswap.service';
 import { EthTestnetSwapService } from './eth.testnet.service';
+import { TokenMetadataService } from '../common/services/tokenMetadata.service';
 
 // Mock all blockchain helper functions
 jest.mock('../common/helpers/blockchainUtilityMethods', () => ({
@@ -49,6 +50,9 @@ const mockUniSwapService = {
     .fn()
     .mockResolvedValue({ to: '0xRouter', data: '0xswap', value: 0n }),
 };
+const mockTokenMetadataService = {
+  normalizeSwapQuote: jest.fn((dto) => Promise.resolve(dto)),
+};
 
 describe('EthService', () => {
   let service: EthService;
@@ -72,6 +76,7 @@ describe('EthService', () => {
           provide: EthTestnetSwapService,
           useValue: { getQuote: jest.fn(), prepareSwapTransaction: jest.fn() },
         },
+        { provide: TokenMetadataService, useValue: mockTokenMetadataService },
       ],
     }).compile();
 

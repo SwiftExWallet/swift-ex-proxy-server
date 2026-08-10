@@ -22,7 +22,7 @@ export class Wallet {
 
   @Prop({
     type: Map,
-    of: String,
+    of: String, // each chain name → address
     default: {},
   })
   addresses: Map<SupportedWalletChain, string>;
@@ -32,6 +32,3 @@ export class Wallet {
 }
 
 export const WalletSchema = SchemaFactory.createForClass(Wallet);
-
-WalletSchema.index({ deviceId: 1 });
-WalletSchema.index({ deviceId: 1, isPrimary: 1 });

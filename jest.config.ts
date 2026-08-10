@@ -22,6 +22,7 @@ const config: Config = {
     'api/v1/users/user.repository.ts',
     'api/v1/users/users.service.ts',
     '!**/*.spec.ts',
+    '!**/*.test.ts',
     '!**/*.module.ts',
     '!main.ts',
     '!app.module.ts',

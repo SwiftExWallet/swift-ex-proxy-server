@@ -7,6 +7,9 @@ import {
   assertWalletAddressMatches,
   getVerifiedWalletAddressFromWallet,
   getVerifiedWalletAddress,
+  resolveVerifiedWalletAddress,
+  resolveWalletChain,
+  walletContainsAddress,
   walletAddressesEqual,
   withExplicitVerifiedWalletAddress,
   withVerifiedWalletAddress,
@@ -87,6 +90,22 @@ describe('requestWallet helpers', () => {
       ).toBe('0x2222222222222222222222222222222222222222');
     });
 
+    it('reads chain-specific wallet addresses from map-like addresses', () => {
+      expect(
+        getVerifiedWalletAddressFromWallet(
+          {
+            addresses: {
+              get: (chain: SupportedWalletChain) =>
+                chain === SupportedWalletChain.bnb
+                  ? '0x2222222222222222222222222222222222222222'
+                  : undefined,
+            },
+          } as any,
+          SupportedWalletChain.bnb,
+        ),
+      ).toBe('0x2222222222222222222222222222222222222222');
+    });
+
     it('rejects a missing wallet address', () => {
       expect(() => getVerifiedWalletAddress({})).toThrow(UnauthorizedException);
     });
@@ -104,6 +123,29 @@ describe('requestWallet helpers', () => {
     });
   });
 
+  describe('resolveVerifiedWalletAddress', () => {
+    it('returns undefined for missing wallet context', () => {
+      expect(resolveVerifiedWalletAddress(undefined)).toBeUndefined();
+      expect(resolveVerifiedWalletAddress(null)).toBeUndefined();
+    });
+  });
+
+  describe('resolveWalletChain', () => {
+    it('returns undefined for missing or unsupported chains', () => {
+      expect(resolveWalletChain(undefined)).toBeUndefined();
+      expect(resolveWalletChain(null)).toBeUndefined();
+      expect(resolveWalletChain('137')).toBeUndefined();
+    });
+
+    it('resolves ETH and BNB aliases', () => {
+      expect(resolveWalletChain('1')).toBe(SupportedWalletChain.eth);
+      expect(resolveWalletChain(' ETH ')).toBe(SupportedWalletChain.eth);
+      expect(resolveWalletChain(56)).toBe(SupportedWalletChain.bnb);
+      expect(resolveWalletChain('bnb')).toBe(SupportedWalletChain.bnb);
+      expect(resolveWalletChain('bsc')).toBe(SupportedWalletChain.bnb);
+    });
+  });
+
   describe('assertVerifiedWalletAddress', () => {
     it('returns a present verified wallet address', () => {
       expect(assertVerifiedWalletAddress(walletAddress)).toBe(walletAddress);
@@ -113,6 +155,48 @@ describe('requestWallet helpers', () => {
       expect(() => assertVerifiedWalletAddress(undefined)).toThrow(
         UnauthorizedException,
       );
+    });
+  });
+
+  describe('walletContainsAddress', () => {
+    it('returns false for missing wallet address input', () => {
+      expect(
+        walletContainsAddress(
+          { addresses: { multi: walletAddress } } as any,
+          undefined,
+        ),
+      ).toBe(false);
+    });
+
+    it('checks map-like wallet address values', () => {
+      expect(
+        walletContainsAddress(
+          {
+            addresses: {
+              values: () =>
+                ['0x9999999999999999999999999999999999999999', walletAddress][
+                  Symbol.iterator
+                ](),
+            },
+          } as any,
+          walletAddress.toUpperCase(),
+        ),
+      ).toBe(true);
+    });
+
+    it('checks plain wallet address objects and ignores non-string values', () => {
+      expect(
+        walletContainsAddress(
+          {
+            addresses: {
+              eth: undefined,
+              multi: walletAddress,
+              extra: 123,
+            },
+          } as any,
+          walletAddress,
+        ),
+      ).toBe(true);
     });
   });
 
