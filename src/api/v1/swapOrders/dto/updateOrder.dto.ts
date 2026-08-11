@@ -76,6 +76,16 @@ export class StoreSwapOrderDto {
   walletAddress: string;
 
   @IsString()
+  @IsOptional()
+  @NormalizeWalletAddress()
+  fromAddress?: string;
+
+  @IsString()
+  @IsOptional()
+  @NormalizeWalletAddress()
+  toAddress?: string;
+
+  @IsString()
   @IsNotEmpty()
   @NormalizeChain()
   @IsEnum(SwapNetwork)

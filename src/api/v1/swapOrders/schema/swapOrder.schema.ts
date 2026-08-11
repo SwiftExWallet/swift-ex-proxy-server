@@ -41,6 +41,12 @@ export class SwapOrders {
   @Prop({ required: true })
   walletAddress: string;
 
+  @Prop({ default: null })
+  fromAddress: string;
+
+  @Prop({ default: null })
+  toAddress: string;
+
   @Prop({ required: true })
   fromChain: string;
 
