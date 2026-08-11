@@ -16,7 +16,6 @@ import {
 describe('QuoterController', () => {
   const quoterService = {
     getQuoteResponse: jest.fn(),
-    buildSwapResponse: jest.fn(),
   };
 
   let controller: QuoterController;
@@ -63,18 +62,6 @@ describe('QuoterController', () => {
     );
   });
 
-  it('delegates swap build requests to the quoter service', async () => {
-    const result = { success: true, data: [{ to: dto.recipient }] };
-    quoterService.buildSwapResponse.mockResolvedValue(result);
-
-    await expect(controller.swapBuild(req, dto)).resolves.toBe(result);
-
-    expect(quoterService.buildSwapResponse).toHaveBeenCalledWith(
-      dto,
-      req.wallet,
-    );
-  });
-
   it('applies IP, device, and wallet rate limits to quote requests', () => {
     expect(Reflect.getMetadata(RATE_LIMIT_KEY, controller.getQuote)).toEqual([
       { points: 60, duration: 60, key: 'quoter-quote-ip', keyBy: 'ip' },
@@ -93,36 +80,12 @@ describe('QuoterController', () => {
     ]);
   });
 
-  it('applies IP, device, and wallet rate limits to swap build requests', () => {
-    expect(Reflect.getMetadata(RATE_LIMIT_KEY, controller.swapBuild)).toEqual([
-      { points: 30, duration: 60, key: 'quoter-swap-ip', keyBy: 'ip' },
-      {
-        points: 15,
-        duration: 60,
-        key: 'quoter-swap-device',
-        keyBy: 'device',
-      },
-      {
-        points: 15,
-        duration: 60,
-        key: 'quoter-swap-wallet',
-        keyBy: 'wallet',
-      },
-    ]);
-  });
-
-  it('applies route-specific body size limits to quote and swap build requests', () => {
+  it('applies route-specific body size limits to quote requests', () => {
     expect(
       Reflect.getMetadata(BODY_SIZE_LIMIT_KEY, controller.getQuote),
     ).toEqual({
       maxBytes: BODY_SIZE_LIMITS.standard,
       key: 'quoter-quote',
-    });
-    expect(
-      Reflect.getMetadata(BODY_SIZE_LIMIT_KEY, controller.swapBuild),
-    ).toEqual({
-      maxBytes: BODY_SIZE_LIMITS.standard,
-      key: 'quoter-swap',
     });
   });
 });

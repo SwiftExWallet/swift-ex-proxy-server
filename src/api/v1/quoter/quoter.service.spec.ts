@@ -1,20 +1,3 @@
-jest.mock('@uniswap/smart-order-router', () => ({
-  AlphaRouter: jest.fn(),
-  SwapType: {
-    SWAP_ROUTER_02: 'SWAP_ROUTER_02',
-  },
-}));
-
-jest.mock('axios', () => ({
-  ...jest.requireActual('axios'),
-  __esModule: true,
-  default: {
-    ...jest.requireActual('axios').default,
-    post: jest.fn(),
-  },
-}));
-
-import axios from 'axios';
 import { BadRequestException } from '@nestjs/common';
 import { QuoterService } from './quoter.service';
 import { ChainId, swapProvider } from '../common/enums/chain.enum';
@@ -22,12 +5,8 @@ import {
   ResolvedSwapQuoteDto,
   SwapQuoteDto,
 } from '../common/dto/swapQuote.dto';
-import { ProviderErrorCode } from '../common/utils/provider-error.util';
 
 describe('QuoterService', () => {
-  const providerService = {
-    getChainRpcUrl: jest.fn(),
-  };
   const inchService = {
     getSwapQuote: jest.fn(),
     getFusionPlusSwapQuote: jest.fn(),
@@ -37,6 +16,9 @@ describe('QuoterService', () => {
   };
   const tokenMetadataService = {
     normalizeSwapQuote: jest.fn(),
+  };
+  const uniswapService = {
+    getSwapQuote: jest.fn(),
   };
   let service: QuoterService;
 
@@ -75,24 +57,22 @@ describe('QuoterService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    delete process.env.UNISWAP_API_KEY;
-    delete process.env.UNISWAP_API_BASE_URL;
     service = new QuoterService(
-      providerService as any,
       inchService as any,
       swapProviderResolver as any,
       tokenMetadataService as any,
+      uniswapService as any,
     );
   });
 
-  it('normalizes and routes Uniswap quote requests through getQuote', async () => {
+  it('normalizes and routes Uniswap quote requests through the Uniswap service', async () => {
     const quote = { outputAmount: '100', fee: '3000' };
     tokenMetadataService.normalizeSwapQuote.mockResolvedValue(resolvedDto);
     swapProviderResolver.resolve.mockReturnValue({
       provider: swapProvider.UNISWAP,
       transformed: resolvedDto,
     });
-    jest.spyOn(service, 'getQuote').mockResolvedValue(quote as any);
+    uniswapService.getSwapQuote.mockResolvedValue(quote);
 
     await expect(service.getQuoteResponse(requestDto)).resolves.toEqual({
       success: true,
@@ -104,7 +84,7 @@ describe('QuoterService', () => {
       requestDto,
     );
     expect(swapProviderResolver.resolve).toHaveBeenCalledWith(resolvedDto);
-    expect(service.getQuote).toHaveBeenCalledWith(
+    expect(uniswapService.getSwapQuote).toHaveBeenCalledWith(
       expect.objectContaining({ amount: requestDto.amount }),
     );
   });
@@ -116,7 +96,7 @@ describe('QuoterService', () => {
       provider: swapProvider.UNISWAP,
       transformed: resolvedDto,
     });
-    jest.spyOn(service, 'getQuote').mockResolvedValue(quote as any);
+    uniswapService.getSwapQuote.mockResolvedValue(quote);
 
     await expect(service.getQuoteResponse(requestDto)).resolves.toEqual({
       success: true,
@@ -127,7 +107,7 @@ describe('QuoterService', () => {
     expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith(
       requestDto,
     );
-    expect(service.getQuote).toHaveBeenCalledWith(
+    expect(uniswapService.getSwapQuote).toHaveBeenCalledWith(
       expect.objectContaining({ recipient: requestDto.recipient }),
     );
   });
@@ -231,54 +211,6 @@ describe('QuoterService', () => {
     });
   });
 
-  it('posts cross-chain gas-paid Uniswap quote requests to the Trading API', async () => {
-    const crossChainDto = {
-      ...resolvedDto,
-      tokenOut: {
-        ...resolvedDto.tokenOut,
-        chainId: ChainId.BSC,
-      },
-      slippage: 1,
-    };
-    const quote = { routing: 'CHAINED', quoteId: 'uniswap-cross-chain' };
-    process.env.UNISWAP_API_KEY = 'test-uniswap-api-key';
-    process.env.UNISWAP_API_BASE_URL =
-      'https://trade-api.gateway.uniswap.org/v1';
-    tokenMetadataService.normalizeSwapQuote.mockResolvedValue(crossChainDto);
-    swapProviderResolver.resolve.mockReturnValue({
-      provider: swapProvider.UNISWAP,
-      transformed: crossChainDto,
-    });
-    (axios.post as jest.Mock).mockResolvedValue({ data: quote });
-
-    await expect(service.getQuoteResponse(requestDto)).resolves.toEqual({
-      success: true,
-      provider: swapProvider.UNISWAP,
-      data: quote,
-    });
-
-    expect(axios.post).toHaveBeenCalledWith(
-      'https://trade-api.gateway.uniswap.org/v1/quote',
-      {
-        amount: '1000000000000000000',
-        slippageTolerance: 1,
-        swapper: crossChainDto.recipient,
-        tokenIn: crossChainDto.tokenIn.address,
-        tokenInChainId: ChainId.ETH,
-        tokenOut: crossChainDto.tokenOut.address,
-        tokenOutChainId: ChainId.BSC,
-        type: 'EXACT_INPUT',
-      },
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          accept: 'application/json',
-          'content-type': 'application/json',
-          'x-api-key': 'test-uniswap-api-key',
-        }),
-      }),
-    );
-  });
-
   it('throws BadRequestException for unsupported providers', async () => {
     tokenMetadataService.normalizeSwapQuote.mockResolvedValue(resolvedDto);
     swapProviderResolver.resolve.mockReturnValue({
@@ -289,34 +221,5 @@ describe('QuoterService', () => {
     await expect(service.getQuoteResponse(requestDto)).rejects.toBeInstanceOf(
       BadRequestException,
     );
-  });
-
-  it('normalizes and wraps swap transaction builds', async () => {
-    const txs = [{ to: '0x4444444444444444444444444444444444444444' }];
-    tokenMetadataService.normalizeSwapQuote.mockResolvedValue(resolvedDto);
-    jest.spyOn(service, 'buildSwapTx').mockResolvedValue(txs as any);
-
-    await expect(service.buildSwapResponse(requestDto)).resolves.toEqual({
-      success: true,
-      data: txs,
-    });
-
-    expect(tokenMetadataService.normalizeSwapQuote).toHaveBeenCalledWith(
-      requestDto,
-    );
-    expect(service.buildSwapTx).toHaveBeenCalledWith(resolvedDto);
-  });
-
-  it('returns stable provider errors when swap transaction build fails upstream', async () => {
-    jest
-      .spyOn(service, 'getQuote')
-      .mockRejectedValue(new Error('private provider route failure'));
-
-    await expect(service.buildSwapTx(resolvedDto)).rejects.toMatchObject({
-      response: {
-        code: ProviderErrorCode.RouteNotFound,
-        message: 'No provider route was found for this request.',
-      },
-    });
   });
 });

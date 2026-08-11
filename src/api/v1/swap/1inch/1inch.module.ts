@@ -16,5 +16,6 @@ import { CustomNotificationOriginGuard } from '../../common/guard/custom-notific
     CustomNotificationOriginGuard,
   ],
   controllers: [inchController],
+  exports: [InchService],
 })
 export class InchModule {}

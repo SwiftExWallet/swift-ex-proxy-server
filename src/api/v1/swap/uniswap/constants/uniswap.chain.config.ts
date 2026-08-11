@@ -1,4 +1,4 @@
-import { SupportedChain } from '../dto/quoter.dto';
+import { SupportedChain } from '../dto/uniswap.dto';
 
 export interface ChainConfig {
   chainId: number;

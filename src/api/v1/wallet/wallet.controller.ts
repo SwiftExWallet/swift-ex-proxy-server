@@ -31,7 +31,7 @@ export class WalletController {
     return response.status(200).json({ wallets });
   }
 
-  @Get(':stellarAddress/stellar')
+  @Get(':stellarAddress/address')
   async findByStellarAddress(
     @Req() req: any,
     @Res() response,

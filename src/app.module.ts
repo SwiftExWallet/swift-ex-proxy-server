@@ -122,6 +122,7 @@ export class AppModule {
       .forRoutes(
         'api/v1/quoter/{*path}',
         'api/v1/swap/1inch/{*path}',
+        'api/v1/swap/uniswap/{*path}',
         'api/v1/swapOrders/{*path}',
         'api/v1/eth/{*path}',
         'api/v1/usdt/{*path}',

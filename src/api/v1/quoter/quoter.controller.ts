@@ -1,9 +1,9 @@
 import {
+  Body,
   Controller,
   HttpCode,
   HttpStatus,
   Post,
-  Body,
   Req,
 } from '@nestjs/common';
 import { QuoterService } from './quoter.service';
@@ -38,27 +38,5 @@ export class QuoterController {
   )
   async getQuote(@Req() req: any, @Body() body: SwapQuoteDto) {
     return await this.quoterService.getQuoteResponse(body, req.wallet);
-  }
-
-  @Post('swap')
-  @HttpCode(HttpStatus.OK)
-  @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'quoter-swap')
-  @RateLimit(
-    { points: 30, duration: 60, key: 'quoter-swap-ip', keyBy: 'ip' },
-    {
-      points: 15,
-      duration: 60,
-      key: 'quoter-swap-device',
-      keyBy: 'device',
-    },
-    {
-      points: 15,
-      duration: 60,
-      key: 'quoter-swap-wallet',
-      keyBy: 'wallet',
-    },
-  )
-  async swapBuild(@Req() req: any, @Body() dto: SwapQuoteDto) {
-    return await this.quoterService.buildSwapResponse(dto, req.wallet);
   }
 }
