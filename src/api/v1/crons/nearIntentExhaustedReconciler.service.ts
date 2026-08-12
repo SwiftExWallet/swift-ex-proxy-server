@@ -103,6 +103,13 @@ export class NearIntentExhaustedReconcilerService {
       return;
     }
 
+    if (!order.swapOrderId) {
+      this.logger.error(
+        `[${order.txHash}] Missing swapOrderId, cannot reconcile safely (txHash may not be unique)`,
+      );
+      return;
+    }
+
     let updatedOrder: SwapOrders | null;
     try {
       updatedOrder = await this.swapOrderService.updateOrderById(

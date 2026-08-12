@@ -24,6 +24,7 @@ describe('InchService Fusion+ poller', () => {
   };
   const updatedOrder = {
     txHash: orderHash,
+    deviceId: 'device-1',
     deviceFcmToken: 'fcm-token',
     amountOut: '10',
     toToken: 'USDC',
@@ -90,10 +91,7 @@ describe('InchService Fusion+ poller', () => {
       updateOrderByHash: jest.fn().mockResolvedValue(updatedOrder),
       findByTxHash: jest.fn().mockResolvedValue({
         ok: true,
-        data: {
-          ...updatedOrder,
-          deviceId: { toString: () => 'device-id' },
-        },
+        data: updatedOrder,
       }),
       findOrderByHashForVerifiedWallet: jest.fn().mockResolvedValue({
         ok: true,
@@ -161,6 +159,12 @@ describe('InchService Fusion+ poller', () => {
     });
     expect(setCall![2]).toBe(7200);
     expect(swapOrderService.updateOrderByHash).not.toHaveBeenCalled();
+    expect(swapOrderService.findByTxHash).toHaveBeenCalledWith(orderHash);
+    expect(portfolioService.refreshPortfolio).toHaveBeenCalledWith(
+      updatedOrder.deviceId,
+      updatedOrder.walletAddress,
+      [updatedOrder.fromChain],
+    );
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(true);
   });
 

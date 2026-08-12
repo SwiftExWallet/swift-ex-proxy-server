@@ -4,7 +4,7 @@ import { swapProvider } from '../../common/enums/chain.enum';
 
 @Schema({ collection: 'ExhaustedOrders', timestamps: true })
 export class ExhaustedOrder {
-  @Prop({ required: true, unique: true, index: true })
+  @Prop({ required: true, index: true })
   txHash: string;
 
   @Prop({ required: true, enum: swapProvider })
