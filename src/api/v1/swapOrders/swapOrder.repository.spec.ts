@@ -7,6 +7,7 @@ describe('SwapOrderRepository', () => {
   let repository: SwapOrderRepository;
   let model: jest.Mock & {
     findOne: jest.Mock;
+    findById: jest.Mock;
     find: jest.Mock;
     exists: jest.Mock;
     updateOne: jest.Mock;
@@ -14,9 +15,6 @@ describe('SwapOrderRepository', () => {
     findOneAndUpdate: jest.Mock;
   };
   let save: jest.Mock;
-  const portfolioService = {
-    refreshPortfolio: jest.fn(),
-  };
 
   const publicOrderSelect = '-deviceId -deviceFcmToken';
 
@@ -57,15 +55,13 @@ describe('SwapOrderRepository', () => {
       this.save = save;
     }) as any;
     model.findOne = jest.fn();
+    model.findById = jest.fn();
     model.find = jest.fn();
     model.exists = jest.fn();
     model.updateOne = jest.fn();
     model.countDocuments = jest.fn();
     model.findOneAndUpdate = jest.fn();
-    portfolioService.refreshPortfolio.mockReset();
-    portfolioService.refreshPortfolio.mockResolvedValue(undefined);
-
-    repository = new SwapOrderRepository(model as any, portfolioService as any);
+    repository = new SwapOrderRepository(model as any);
   });
 
   afterEach(() => {
@@ -136,6 +132,31 @@ describe('SwapOrderRepository', () => {
     await expect(repository.findByTxHash('0xtxhash')).resolves.toEqual({
       ok: false,
       error: 'findByTxHash failed',
+    });
+  });
+
+  it('finds an order by id', async () => {
+    const order = { _id: 'order-id' };
+    const query = createQuery(order);
+    model.findById.mockReturnValue(query);
+
+    await expect(repository.findById('order-id')).resolves.toEqual({
+      ok: true,
+      data: order,
+    });
+
+    expect(model.findById).toHaveBeenCalledWith('order-id');
+    expect(query.exec).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns an error result when id lookup fails', async () => {
+    const query = createQuery(null);
+    query.exec.mockRejectedValue(new Error('db failed'));
+    model.findById.mockReturnValue(query);
+
+    await expect(repository.findById('order-id')).resolves.toEqual({
+      ok: false,
+      error: 'findById failed',
     });
   });
 
@@ -304,11 +325,6 @@ describe('SwapOrderRepository', () => {
         },
       },
       { new: true },
-    );
-    expect(portfolioService.refreshPortfolio).toHaveBeenCalledWith(
-      'device-id',
-      updatedOrder.walletAddress,
-      ['ETH', 'BSC'],
     );
     expect(query.exec).toHaveBeenCalledTimes(1);
   });

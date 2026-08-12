@@ -4,6 +4,7 @@ import { PortfolioRepository } from './portfolio.repository';
 import { PortfolioMapper } from './portfolio.mapper';
 import { Portfolio, PortfolioToken } from './schema/portfolio.schema';
 import { AlchemyPortfolioResponse } from './interfaces/portfolio-sync.interface';
+import { normalizeWalletAddress } from '../common/utils/address.util';
 
 const DEFAULT_NETWORKS = [
   'eth-mainnet',
@@ -28,10 +29,7 @@ export class PortfolioService {
 
   async getPortfolio(deviceId: string, address: string): Promise<Portfolio> {
     address = this.normalizeAddress(address);
-    const existing = await this.repository.findByDeviceAndAddress(
-      deviceId,
-      address,
-    );
+    const existing = await this.repository.findByAddress(address);
     const isFresh = !!existing && existing.stale === false;
 
     if (isFresh) {
@@ -75,7 +73,7 @@ export class PortfolioService {
     address = this.normalizeAddress(address);
     try {
       const existing = chains?.length
-        ? await this.repository.findByDeviceAndAddress(deviceId, address)
+        ? await this.repository.findByAddress(address)
         : null;
 
       if (chains?.length && existing) {
@@ -142,7 +140,7 @@ export class PortfolioService {
   }
 
   private normalizeAddress(address: string): string {
-    return address.toLowerCase();
+    return normalizeWalletAddress(address);
   }
 
   private sumValueUsd(tokens: PortfolioToken[]): string {

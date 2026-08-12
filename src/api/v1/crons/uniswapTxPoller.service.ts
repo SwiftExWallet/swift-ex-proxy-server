@@ -1,96 +1,24 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { SwapOrderRepository } from '../swapOrders/swapOrder.repository';
-import { SwapOrderStatus } from '../common/enums/order.enum';
+import { SwapOrderService } from '../swapOrders/swapOrders.service';
 import { swapProvider } from '../common/enums/chain.enum';
 import { SwapOrders } from '../swapOrders/schema/swapOrder.schema';
 import { NotificationDto } from '../notification/dto/notification.dto';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';
-import {
-  getProviderHttpTimeoutMs,
-  withProviderControls,
-} from '../common/utils/retry.util';
-import {
-  getBlockscoutAllowedHosts,
-  validateOptionalProviderUrl,
-} from '../common/config/provider-url.config';
+import { TxReceiptStatusService } from './txReceiptStatus.service';
 
 const BATCH_SIZE = 10;
 
-interface BlockscoutReceiptResponse {
-  status: '0' | '1';
-  message: string;
-  result: {
-    status: '0' | '1';
-  } | null;
-}
-
-function mapBlockscoutStatus(
-  result: BlockscoutReceiptResponse,
-): SwapOrderStatus | null {
-  if (result.status === '0' || !result.result) {
-    return SwapOrderStatus.FAILED;
-  }
-
-  const txStatus = result.result.status;
-
-  if (txStatus === '0') {
-    return SwapOrderStatus.FAILED;
-  }
-
-  if (txStatus === '1' || txStatus === '') {
-    return SwapOrderStatus.COMPLETED;
-  }
-
-  return null;
-}
-
 @Injectable()
 export class UniswapTxPollerService {
-  private readonly BLOCKSCOUT_URLS: Partial<Record<string, string>>;
   private readonly logger = new Logger(UniswapTxPollerService.name);
   private isRunning = false;
 
   constructor(
-    private readonly repo: SwapOrderRepository,
+    private readonly swapOrderService: SwapOrderService,
     private readonly firebaseNotificationService: FirebaseNotificationService,
-  ) {
-    this.BLOCKSCOUT_URLS = this.getValidatedBlockscoutUrls();
-  }
-
-  private getValidatedBlockscoutUrls(): Partial<Record<string, string>> {
-    const allowedHosts = getBlockscoutAllowedHosts();
-    return {
-      ETH: validateOptionalProviderUrl(process.env.BLOCKSCOUT_ETH, {
-        source: 'BLOCKSCOUT_ETH',
-        allowedHosts,
-      }),
-      BSC: validateOptionalProviderUrl(process.env.BLOCKSCOUT_BSC, {
-        source: 'BLOCKSCOUT_BSC',
-        allowedHosts,
-      }),
-      POL: validateOptionalProviderUrl(process.env.BLOCKSCOUT_POL, {
-        source: 'BLOCKSCOUT_POL',
-        allowedHosts,
-      }),
-      ARB: validateOptionalProviderUrl(process.env.BLOCKSCOUT_ARB, {
-        source: 'BLOCKSCOUT_ARB',
-        allowedHosts,
-      }),
-      OPT: validateOptionalProviderUrl(process.env.BLOCKSCOUT_OPT, {
-        source: 'BLOCKSCOUT_OPT',
-        allowedHosts,
-      }),
-      BASE: validateOptionalProviderUrl(process.env.BLOCKSCOUT_BAS, {
-        source: 'BLOCKSCOUT_BAS',
-        allowedHosts,
-      }),
-      AVAX: validateOptionalProviderUrl(process.env.BLOCKSCOUT_AVA, {
-        source: 'BLOCKSCOUT_AVA',
-        allowedHosts,
-      }),
-    };
-  }
+    private readonly txReceiptStatusService: TxReceiptStatusService,
+  ) {}
 
   @Cron('*/15 * * * * *', { name: 'Uniswap-Cron' })
   async poll(): Promise<void> {
@@ -101,7 +29,7 @@ export class UniswapTxPollerService {
 
     this.isRunning = true;
     try {
-      const result = await this.repo.findPendingByProvider(
+      const result = await this.swapOrderService.findPendingByProvider(
         swapProvider.UNISWAP,
       );
       if (!result.ok) {
@@ -135,63 +63,10 @@ export class UniswapTxPollerService {
   }
 
   private async processTx(tx: SwapOrders): Promise<void> {
-    const chainKey = tx.fromChain?.toUpperCase();
-    const baseUrl = this.BLOCKSCOUT_URLS[chainKey];
-
-    if (!baseUrl) {
-      this.logger.warn(
-        `No blockscout URL for chain ${tx.fromChain} txHash ${tx.txHash}`,
-      );
-      return;
-    }
-
-    let response: BlockscoutReceiptResponse;
-    try {
-      const url =
-        `${baseUrl}/api` +
-        `?module=transaction` +
-        `&action=gettxreceiptstatus` +
-        `&txhash=${encodeURIComponent(tx.txHash)}`;
-
-      const res = await withProviderControls(
-        'blockscout:uniswap-tx-poller',
-        async () => {
-          const response = await fetch(url, {
-            headers: { 'Content-Type': 'application/json' },
-            signal: AbortSignal.timeout(getProviderHttpTimeoutMs()),
-          });
-          if (
-            !response.ok &&
-            (response.status === 408 ||
-              response.status === 429 ||
-              response.status >= 500)
-          ) {
-            const error = new Error(`blockscout HTTP ${response.status}`);
-            (error as any).response = { status: response.status };
-            throw error;
-          }
-
-          return response;
-        },
-      );
-
-      if (!res.ok) {
-        this.logger.warn(
-          `blockscout HTTP ${res.status} for txHash ${tx.txHash} chain ${tx.fromChain}`,
-        );
-        return;
-      }
-
-      response = (await res.json()) as BlockscoutReceiptResponse;
-    } catch (err) {
-      this.logger.error(
-        `blockscout fetch error txHash ${tx.txHash} chain ${tx.fromChain}`,
-        err,
-      );
-      return;
-    }
-
-    const newStatus = mapBlockscoutStatus(response);
+    const newStatus = await this.txReceiptStatusService.getStatus(
+      tx.fromChain,
+      tx.txHash,
+    );
     if (!newStatus) {
       this.logger.debug(
         `uniswap ${tx.txHash} not yet mined on ${tx.fromChain}`,
@@ -199,7 +74,10 @@ export class UniswapTxPollerService {
       return;
     }
 
-    const dbResult = await this.repo.updateOrderStatus(tx.txHash, newStatus);
+    const dbResult = await this.swapOrderService.updateOrderByHash({
+      txHash: tx.txHash,
+      orderStatus: newStatus,
+    });
     if (!dbResult) {
       this.logger.error(
         `uniswap failed to update txHash ${tx.txHash} ${dbResult}`,

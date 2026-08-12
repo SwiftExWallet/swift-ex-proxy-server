@@ -20,7 +20,7 @@ import {
 import { FusionPlusSwapQuoteDto } from '../dto/fusionPlusSwapQuote';
 import { FusionPlusOrderDto } from '../dto/fusionPlusOrder';
 import { InchOrderStatusDto } from '../dto/1inchsOrderStatus';
-import { FustionNativeService } from './1inch.fusion.native.swap.service';
+import { FusionNativeService } from './1inch.fusion.native.swap.service';
 import { ConfirmSwapOrderDto } from '../dto/prepareTxDto';
 import { NotificationDto } from '../../notification/dto/notification.dto';
 import { CustomNotificationOriginGuard } from '../../common/guard/custom-notification-origin.guard';
@@ -33,7 +33,7 @@ import {
 export class inchController {
   constructor(
     private readonly inchService: InchService,
-    private readonly fustionNativeService: FustionNativeService,
+    private readonly fusionNativeService: FusionNativeService,
   ) {}
 
   @Post('/getSwapQuote')
@@ -45,8 +45,8 @@ export class inchController {
       wallet: 30,
     }),
   )
-  async getQuote(@Body() swapQuote: InchSwapQuoteDto) {
-    const data = await this.inchService.getSwapQuote(swapQuote);
+  async getQuote(@Req() req: any, @Body() swapQuote: InchSwapQuoteDto) {
+    const data = await this.inchService.getSwapQuote(swapQuote, req.wallet);
     return data;
   }
 
@@ -59,8 +59,14 @@ export class inchController {
       wallet: 30,
     }),
   )
-  async getFusionPlusQuote(@Body() swapQuote: FusionPlusSwapQuoteDto) {
-    const data = await this.inchService.getFusionPlusSwapQuote(swapQuote);
+  async getFusionPlusQuote(
+    @Req() req: any,
+    @Body() swapQuote: FusionPlusSwapQuoteDto,
+  ) {
+    const data = await this.inchService.getFusionPlusSwapQuote(
+      swapQuote,
+      req.wallet,
+    );
     return data;
   }
 
@@ -167,7 +173,6 @@ export class inchController {
   ) {
     const data = await this.inchService.orderStatus(
       inchOrderStatusDto,
-      req.device._id,
       req.wallet,
     );
     return data;
@@ -191,7 +196,7 @@ export class inchController {
     @Req() req: any,
     @Body() body: FusionPlusSwapQuoteDto,
   ) {
-    return await this.fustionNativeService.createSwapOrder(body, req.wallet);
+    return await this.fusionNativeService.createSwapOrder(body, req.wallet);
   }
 
   @Post('/submitFusionPlusNativeOrder')
@@ -212,9 +217,8 @@ export class inchController {
     @Req() req: any,
     @Body() confirmSwapOrderDto: ConfirmSwapOrderDto,
   ) {
-    return this.fustionNativeService.confirmSwapOrder(
+    return this.fusionNativeService.confirmSwapOrder(
       confirmSwapOrderDto,
-      req.device._id,
       req.wallet,
     );
   }

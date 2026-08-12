@@ -10,14 +10,12 @@ import {
 } from '@nestjs/common';
 import { SwapOrderService } from './swapOrders.service';
 import {
-  BridgeTxStatusDto,
   MultiChainWalletAddressDto,
   OrderByWalletQueryDto,
   StoreSwapOrderDto,
 } from './dto/updateOrder.dto';
 import {
   RateLimit,
-  rateLimitByIpAndDevice,
   rateLimitByIpDeviceAndWallet,
 } from '../common/decorators/rate-limit.decorator';
 import {
@@ -60,23 +58,10 @@ export class SwapOrdersController {
     }),
   )
   async orderByWallet(@Req() req: any, @Query() query: OrderByWalletQueryDto) {
-    return await this.swapOrderService.findOrdersForDeviceWallet(
-      req.device._id,
+    return await this.swapOrderService.findOrdersForVerifiedWallet(
       query,
       req.wallet,
     );
-  }
-
-  @Post('/bridgeOrderStatus')
-  @BodySizeLimit(BODY_SIZE_LIMITS.simple, 'swap-orders-bridge-status')
-  @RateLimit(
-    ...rateLimitByIpAndDevice('swap-orders-bridge-status', {
-      ip: 60,
-      device: 30,
-    }),
-  )
-  async bridgeOrderStatus(@Body() bridgeTxStatusDto: BridgeTxStatusDto) {
-    return await this.swapOrderService.getBridgeTxStatus(bridgeTxStatusDto);
   }
 
   @Get('/:orderHash')
@@ -92,8 +77,7 @@ export class SwapOrdersController {
     @Param('orderHash') orderHash: string,
     @Query() query: MultiChainWalletAddressDto,
   ) {
-    return await this.swapOrderService.findOrderByHashForDeviceWallet(
-      req.device._id,
+    return await this.swapOrderService.findOrderByHashForVerifiedWallet(
       orderHash,
       query,
       req.wallet,

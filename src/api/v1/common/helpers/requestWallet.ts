@@ -2,7 +2,7 @@ import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import type { Wallet as WalletDocument } from '../../wallet/schema/wallet.schema';
 import { SupportedWalletChain } from '../enums/chain.enum';
 
-type WalletAddressEntries =
+export type WalletAddressEntries =
   | Map<string, string>
   | Record<string, string | undefined>
   | {
@@ -10,10 +10,21 @@ type WalletAddressEntries =
       values?: () => IterableIterator<string>;
     };
 
-export type Wallet = WalletDocument;
+export type RequestWallet = {
+  [SupportedWalletChain.multi]?: string;
+  [SupportedWalletChain.xlm]?: string;
+};
+
+type WalletWithAddressEntries = {
+  addresses?: WalletAddressEntries;
+  address?: string;
+};
+
+export type Wallet = WalletDocument | RequestWallet | WalletWithAddressEntries;
+type RequestWithWallet = { wallet?: Wallet | null };
 
 export function getVerifiedWalletAddress(
-  req: any,
+  req: RequestWithWallet | null | undefined,
   chain?: SupportedWalletChain,
 ): string {
   const walletAddress = resolveVerifiedWalletAddress(req?.wallet, chain);
@@ -38,13 +49,10 @@ export function resolveVerifiedWalletAddress(
     return undefined;
   }
 
-  if (chain) {
-    const chainAddress = getAddressForChain(wallet.addresses, chain);
-    if (chainAddress) {
-      return chainAddress;
-    }
-  }
-  return getAddressForChain(wallet.addresses, SupportedWalletChain.multi);
+  return getAddressForChain(
+    getWalletAddressEntries(wallet),
+    resolveWalletAddressChain(chain),
+  );
 }
 
 export function resolveWalletChain(
@@ -64,6 +72,14 @@ export function resolveWalletChain(
     return SupportedWalletChain.bnb;
   }
 
+  if (
+    normalized === 'xlm' ||
+    normalized === 'stellar' ||
+    normalized === 'srb'
+  ) {
+    return SupportedWalletChain.xlm;
+  }
+
   return undefined;
 }
 
@@ -81,14 +97,14 @@ export function walletContainsAddress(
 }
 
 function getWalletAddressValues(wallet: Wallet): string[] {
-  const addresses = wallet.addresses as WalletAddressEntries | undefined;
+  const addresses = getWalletAddressEntries(wallet);
   const values: string[] = [];
 
   if (addresses) {
     if (addresses instanceof Map) {
-      values.push(...Array.from(addresses.values()));
+      values.push(...filterWalletAddressValues(addresses.values()));
     } else if (typeof addresses.values === 'function') {
-      values.push(...Array.from(addresses.values()));
+      values.push(...filterWalletAddressValues(addresses.values()));
     } else {
       values.push(
         ...Object.values(addresses).filter(
@@ -99,6 +115,41 @@ function getWalletAddressValues(wallet: Wallet): string[] {
   }
 
   return values;
+}
+
+function getWalletAddressEntries(
+  wallet: Wallet,
+): WalletAddressEntries | undefined {
+  if (typeof wallet !== 'object' || wallet === null) {
+    return undefined;
+  }
+
+  if ('addresses' in wallet) {
+    return wallet.addresses as WalletAddressEntries | undefined;
+  }
+
+  const requestWallet = wallet as RequestWallet;
+
+  return {
+    [SupportedWalletChain.multi]: requestWallet[SupportedWalletChain.multi],
+    [SupportedWalletChain.xlm]: requestWallet[SupportedWalletChain.xlm],
+  };
+}
+
+function resolveWalletAddressChain(
+  chain?: SupportedWalletChain,
+): SupportedWalletChain {
+  return chain === SupportedWalletChain.xlm
+    ? SupportedWalletChain.xlm
+    : SupportedWalletChain.multi;
+}
+
+function filterWalletAddressValues(
+  values: Iterable<string | undefined>,
+): string[] {
+  return Array.from(values).filter(
+    (address): address is string => typeof address === 'string',
+  );
 }
 
 function getAddressForChain(
@@ -117,7 +168,7 @@ function getAddressForChain(
     return addresses.get(chain);
   }
 
-  return addresses[chain];
+  return (addresses as Record<string, string | undefined>)[chain];
 }
 
 export function assertVerifiedWalletAddress(
@@ -158,10 +209,16 @@ export function assertWalletAddressMatches(
 
 export function withVerifiedWalletAddress<T extends Record<string, any>>(
   dto: T,
-  req: any,
+  req: RequestWithWallet | null | undefined,
   fieldName = 'walletAddress',
 ): T {
-  return withExplicitVerifiedWalletAddress(dto, req?.wallet, fieldName);
+  const verifiedWallet = req?.wallet;
+
+  if (!verifiedWallet) {
+    throw new UnauthorizedException('Verified wallet address not found.');
+  }
+
+  return withExplicitVerifiedWalletAddress(dto, verifiedWallet, fieldName);
 }
 
 export function withExplicitVerifiedWalletAddress<
@@ -176,7 +233,9 @@ export function withExplicitVerifiedWalletAddress<
     verifiedWallet,
     chain,
   );
-  assertWalletAddressMatches(dto?.[fieldName], walletAddress, fieldName);
+  if (fieldName !== 'walletAddress') {
+    assertWalletAddressMatches(dto?.[fieldName], walletAddress, fieldName);
+  }
 
   return {
     ...dto,

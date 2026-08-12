@@ -32,7 +32,10 @@ describe('InchService Fusion+ poller', () => {
   };
   const verifiedWallet = (address = updatedOrder.walletAddress) =>
     ({
-      addresses: new Map([[SupportedWalletChain.eth, address]]),
+      addresses: new Map([
+        [SupportedWalletChain.eth, address],
+        [SupportedWalletChain.multi, address],
+      ]),
     }) as any;
 
   let service: InchService;
@@ -43,7 +46,8 @@ describe('InchService Fusion+ poller', () => {
   };
   let swapOrderService: {
     updateOrderByHash: jest.Mock;
-    findOrderByHashForDeviceWallet: jest.Mock;
+    findByTxHash: jest.Mock;
+    findOrderByHashForVerifiedWallet: jest.Mock;
     findByProviderAndStatusesSince: jest.Mock;
   };
   let redisService: {
@@ -53,6 +57,12 @@ describe('InchService Fusion+ poller', () => {
   };
   let firebaseNotificationService: {
     sendNotification: jest.Mock;
+  };
+  let exhaustedOrderService: {
+    upsertByTxHash: jest.Mock;
+  };
+  let portfolioService: {
+    refreshPortfolio: jest.Mock;
   };
 
   beforeEach(() => {
@@ -78,7 +88,14 @@ describe('InchService Fusion+ poller', () => {
     };
     swapOrderService = {
       updateOrderByHash: jest.fn().mockResolvedValue(updatedOrder),
-      findOrderByHashForDeviceWallet: jest.fn().mockResolvedValue({
+      findByTxHash: jest.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          ...updatedOrder,
+          deviceId: { toString: () => 'device-id' },
+        },
+      }),
+      findOrderByHashForVerifiedWallet: jest.fn().mockResolvedValue({
         ok: true,
         data: updatedOrder,
       }),
@@ -96,11 +113,19 @@ describe('InchService Fusion+ poller', () => {
     firebaseNotificationService = {
       sendNotification: jest.fn().mockResolvedValue(undefined),
     };
+    exhaustedOrderService = {
+      upsertByTxHash: jest.fn().mockResolvedValue(undefined),
+    };
+    portfolioService = {
+      refreshPortfolio: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new InchService(
       swapOrderService as any,
       redisService as any,
       firebaseNotificationService as any,
+      exhaustedOrderService as any,
+      portfolioService as any,
     );
     (service as any).sdk = sdk;
   });
@@ -258,7 +283,7 @@ describe('InchService Fusion+ poller', () => {
     expect(startPoller).toHaveBeenCalledWith(refundingOrder.txHash);
   });
 
-  it('verifies device and wallet ownership before refreshing order status', async () => {
+  it('verifies verified-wallet order ownership before refreshing order status', async () => {
     const providerGet = jest
       .spyOn(service as any, 'providerGet')
       .mockResolvedValue({ status: 'pending' });
@@ -270,14 +295,17 @@ describe('InchService Fusion+ poller', () => {
           chain: 'ETH',
           swapProvider: swapProvider.ONEINCH_FUSION,
         } as any,
-        'device-id',
         verifiedWallet(),
       ),
     ).resolves.toEqual({ status: 'pending' });
 
     expect(
-      swapOrderService.findOrderByHashForDeviceWallet,
-    ).toHaveBeenCalledWith('device-id', orderHash, updatedOrder.walletAddress);
+      swapOrderService.findOrderByHashForVerifiedWallet,
+    ).toHaveBeenCalledWith(
+      orderHash,
+      updatedOrder.walletAddress,
+      verifiedWallet(),
+    );
     expect(providerGet).toHaveBeenCalledTimes(1);
     expect(swapOrderService.updateOrderByHash).toHaveBeenCalledWith({
       txHash: orderHash,
@@ -287,7 +315,7 @@ describe('InchService Fusion+ poller', () => {
 
   it('rejects order status refresh before provider calls when the order is not owned', async () => {
     const providerGet = jest.spyOn(service as any, 'providerGet');
-    swapOrderService.findOrderByHashForDeviceWallet.mockResolvedValueOnce({
+    swapOrderService.findOrderByHashForVerifiedWallet.mockResolvedValueOnce({
       ok: true,
       data: null,
     });
@@ -299,7 +327,6 @@ describe('InchService Fusion+ poller', () => {
           chain: 'ETH',
           swapProvider: swapProvider.ONEINCH_FUSION,
         } as any,
-        'device-id',
         verifiedWallet(),
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
@@ -337,51 +364,65 @@ describe('InchService Fusion+ poller', () => {
     expect(JSON.stringify(error.response)).not.toContain('private 1inch route');
   });
 
-  it('does not derive the 1inch quote wallet address from the verified wallet', async () => {
+  it('uses the request wallet multi address for 1inch quotes', async () => {
     const providerGet = jest
       .spyOn(service as any, 'providerGet')
       .mockResolvedValue({ quoteId: 'quote-id' });
-    const walletAddress = '0x1111111111111111111111111111111111111111';
+    const legacyWalletAddress = '0x1111111111111111111111111111111111111111';
+    const requestWallet = {
+      multi: '0x9999999999999999999999999999999999999999',
+      xlm: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+    };
 
     await expect(
-      service.getSwapQuote({
-        tokenIn: '0x2222222222222222222222222222222222222222',
-        tokenOut: '0x3333333333333333333333333333333333333333',
-        amount: '1',
-        walletAddress,
-        chain: 'ETH',
-      } as any),
+      service.getSwapQuote(
+        {
+          tokenIn: '0x2222222222222222222222222222222222222222',
+          tokenOut: '0x3333333333333333333333333333333333333333',
+          amount: '1',
+          walletAddress: legacyWalletAddress,
+          chain: 'ETH',
+        } as any,
+        requestWallet,
+      ),
     ).resolves.toEqual({ quoteId: 'quote-id' });
 
     expect(providerGet).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        params: expect.objectContaining({ walletAddress }),
+        params: expect.objectContaining({ walletAddress: requestWallet.multi }),
       }),
     );
   });
 
-  it('does not derive the Fusion+ quote wallet address from the verified wallet', async () => {
+  it('uses the request wallet multi address for Fusion+ quotes', async () => {
     const providerGet = jest
       .spyOn(service as any, 'providerGet')
       .mockResolvedValue({ quoteId: 'fusion-plus-quote-id' });
-    const walletAddress = '0x1111111111111111111111111111111111111111';
+    const legacyWalletAddress = '0x1111111111111111111111111111111111111111';
+    const requestWallet = {
+      multi: '0x9999999999999999999999999999999999999999',
+      xlm: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+    };
 
     await expect(
-      service.getFusionPlusSwapQuote({
-        srcChain: 'ETH',
-        dstChain: 'BSC',
-        srcTokenAddress: '0x2222222222222222222222222222222222222222',
-        dstTokenAddress: '0x3333333333333333333333333333333333333333',
-        amount: '1',
-        walletAddress,
-      } as any),
+      service.getFusionPlusSwapQuote(
+        {
+          srcChain: 'ETH',
+          dstChain: 'BSC',
+          srcTokenAddress: '0x2222222222222222222222222222222222222222',
+          dstTokenAddress: '0x3333333333333333333333333333333333333333',
+          amount: '1',
+          walletAddress: legacyWalletAddress,
+        } as any,
+        requestWallet,
+      ),
     ).resolves.toEqual({ quoteId: 'fusion-plus-quote-id' });
 
     expect(providerGet).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        params: expect.objectContaining({ walletAddress }),
+        params: expect.objectContaining({ walletAddress: requestWallet.multi }),
       }),
     );
   });

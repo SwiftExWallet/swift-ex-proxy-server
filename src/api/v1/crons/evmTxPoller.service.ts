@@ -1,96 +1,42 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { SwapOrderRepository } from '../swapOrders/swapOrder.repository';
-import { SwapOrderStatus } from '../common/enums/order.enum';
+import { SwapOrderService } from '../swapOrders/swapOrders.service';
 import { swapProvider } from '../common/enums/chain.enum';
+import { SwapOrderStatus } from '../common/enums/order.enum';
 import { SwapOrders } from '../swapOrders/schema/swapOrder.schema';
 import { NotificationDto } from '../notification/dto/notification.dto';
 import { FirebaseNotificationService } from '../notification/firebase/notification.service';
-import {
-  getProviderHttpTimeoutMs,
-  withProviderControls,
-} from '../common/utils/retry.util';
-import {
-  getBlockscoutAllowedHosts,
-  validateOptionalProviderUrl,
-} from '../common/config/provider-url.config';
+import { RedisService } from '../redis/redis.service';
+import { TxReceiptStatusService } from './txReceiptStatus.service';
+import { ExhaustedOrderService } from '../swapOrders/exhaustedOrder.service';
 
 const BATCH_SIZE = 10;
 
-interface BlockscoutReceiptResponse {
-  status: '0' | '1';
-  message: string;
-  result: {
-    status: '0' | '1';
-  } | null;
-}
+// Mirrors the retry shape used by the 1inch / NEAR intent pollers: a bounded
+// number of "not yet mined" misses, each pushing the next check further out,
+// before the order is parked in ExhaustedOrders for the reconciler cron.
+const MAX_POLL_ATTEMPTS = 5;
+const POLL_BACKOFF_STEP_MS = 30_000;
+const POLL_BACKOFF_MAX_MS = 5 * 60_000;
+const POLL_STATE_TTL_SECONDS = 30 * 60;
 
-function mapBlockscoutStatus(
-  result: BlockscoutReceiptResponse,
-): SwapOrderStatus | null {
-  if (result.status === '0' || !result.result) {
-    return SwapOrderStatus.FAILED;
-  }
-
-  const txStatus = result.result.status;
-
-  if (txStatus === '0') {
-    return SwapOrderStatus.FAILED;
-  }
-
-  if (txStatus === '1' || txStatus === '') {
-    return SwapOrderStatus.COMPLETED;
-  }
-
-  return null;
+interface PollState {
+  attempts: number;
+  nextPollAt: number;
 }
 
 @Injectable()
 export class EvmTxPollerService {
-  private readonly BLOCKSCOUT_URLS: Partial<Record<string, string>>;
   private readonly logger = new Logger(EvmTxPollerService.name);
   private isRunning = false;
 
   constructor(
-    private readonly repo: SwapOrderRepository,
+    private readonly swapOrderService: SwapOrderService,
+    private readonly exhaustedOrderService: ExhaustedOrderService,
     private readonly firebaseNotificationService: FirebaseNotificationService,
-  ) {
-    this.BLOCKSCOUT_URLS = this.getValidatedBlockscoutUrls();
-  }
-
-  private getValidatedBlockscoutUrls(): Partial<Record<string, string>> {
-    const allowedHosts = getBlockscoutAllowedHosts();
-    return {
-      ETH: validateOptionalProviderUrl(process.env.BLOCKSCOUT_ETH, {
-        source: 'BLOCKSCOUT_ETH',
-        allowedHosts,
-      }),
-      BSC: validateOptionalProviderUrl(process.env.BLOCKSCOUT_BSC, {
-        source: 'BLOCKSCOUT_BSC',
-        allowedHosts,
-      }),
-      POL: validateOptionalProviderUrl(process.env.BLOCKSCOUT_POL, {
-        source: 'BLOCKSCOUT_POL',
-        allowedHosts,
-      }),
-      ARB: validateOptionalProviderUrl(process.env.BLOCKSCOUT_ARB, {
-        source: 'BLOCKSCOUT_ARB',
-        allowedHosts,
-      }),
-      OPT: validateOptionalProviderUrl(process.env.BLOCKSCOUT_OPT, {
-        source: 'BLOCKSCOUT_OPT',
-        allowedHosts,
-      }),
-      BASE: validateOptionalProviderUrl(process.env.BLOCKSCOUT_BAS, {
-        source: 'BLOCKSCOUT_BAS',
-        allowedHosts,
-      }),
-      AVAX: validateOptionalProviderUrl(process.env.BLOCKSCOUT_AVA, {
-        source: 'BLOCKSCOUT_AVA',
-        allowedHosts,
-      }),
-    };
-  }
+    private readonly redisService: RedisService,
+    private readonly txReceiptStatusService: TxReceiptStatusService,
+  ) {}
 
   @Cron('*/15 * * * * *', { name: 'EvmTx-Cron' })
   async poll(): Promise<void> {
@@ -101,7 +47,9 @@ export class EvmTxPollerService {
 
     this.isRunning = true;
     try {
-      const result = await this.repo.findPendingByProvider(swapProvider.EVMTX);
+      const result = await this.swapOrderService.findPendingByProvider(
+        swapProvider.EVMTX,
+      );
       if (!result.ok) {
         this.logger.error(`EvmTx fetch failed: ${result.error}`);
         return;
@@ -132,70 +80,54 @@ export class EvmTxPollerService {
     }
   }
 
-  private async processTx(tx: SwapOrders): Promise<void> {
-    const chainKey = tx.fromChain?.toUpperCase();
-    const baseUrl = this.BLOCKSCOUT_URLS[chainKey];
+  private redisKey(txHash: string): string {
+    return `evm_tx_poll:${txHash}`;
+  }
 
-    if (!baseUrl) {
-      this.logger.warn(
-        `No blockscout URL for chain ${tx.fromChain} txHash ${tx.txHash}`,
-      );
-      return;
-    }
-
-    let response: BlockscoutReceiptResponse;
+  private async getPollState(txHash: string): Promise<PollState> {
+    const raw = await this.redisService.getKey(this.redisKey(txHash));
+    if (!raw) return { attempts: 0, nextPollAt: 0 };
     try {
-      const url =
-        `${baseUrl}/api` +
-        `?module=transaction` +
-        `&action=gettxreceiptstatus` +
-        `&txhash=${encodeURIComponent(tx.txHash)}`;
+      return JSON.parse(raw) as PollState;
+    } catch {
+      return { attempts: 0, nextPollAt: 0 };
+    }
+  }
 
-      const res = await withProviderControls(
-        'blockscout:evm-tx-poller',
-        async () => {
-          const response = await fetch(url, {
-            headers: { 'Content-Type': 'application/json' },
-            signal: AbortSignal.timeout(getProviderHttpTimeoutMs()),
-          });
-          if (
-            !response.ok &&
-            (response.status === 408 ||
-              response.status === 429 ||
-              response.status >= 500)
-          ) {
-            const error = new Error(`blockscout HTTP ${response.status}`);
-            (error as any).response = { status: response.status };
-            throw error;
-          }
+  private async savePollState(txHash: string, state: PollState): Promise<void> {
+    await this.redisService.setKey(
+      this.redisKey(txHash),
+      JSON.stringify(state),
+      POLL_STATE_TTL_SECONDS,
+    );
+  }
 
-          return response;
-        },
-      );
+  private async clearPollState(txHash: string): Promise<void> {
+    await this.redisService.delKey(this.redisKey(txHash));
+  }
 
-      if (!res.ok) {
-        this.logger.warn(
-          `blockscout HTTP ${res.status} for txHash ${tx.txHash} chain ${tx.fromChain}`,
-        );
-        return;
-      }
-
-      response = (await res.json()) as BlockscoutReceiptResponse;
-    } catch (err) {
-      this.logger.error(
-        `blockscout fetch error txHash ${tx.txHash} chain ${tx.fromChain}`,
-        err,
+  private async processTx(tx: SwapOrders): Promise<void> {
+    const state = await this.getPollState(tx.txHash);
+    if (state.nextPollAt && Date.now() < state.nextPollAt) {
+      this.logger.debug(
+        `EvmTx ${tx.txHash} backing off, next check at ${new Date(state.nextPollAt).toISOString()}`,
       );
       return;
     }
 
-    const newStatus = mapBlockscoutStatus(response);
+    const newStatus = await this.txReceiptStatusService.getStatus(
+      tx.fromChain,
+      tx.txHash,
+    );
     if (!newStatus) {
-      this.logger.debug(`EvmTx ${tx.txHash} not yet mined on ${tx.fromChain}`);
+      await this.handleNotFound(tx, state);
       return;
     }
 
-    const dbResult = await this.repo.updateOrderStatus(tx.txHash, newStatus);
+    const dbResult = await this.swapOrderService.updateOrderByHash({
+      txHash: tx.txHash,
+      orderStatus: newStatus,
+    });
     if (!dbResult) {
       this.logger.error(
         `EvmTx failed to update txHash ${tx.txHash} ${dbResult}`,
@@ -203,8 +135,44 @@ export class EvmTxPollerService {
       return;
     }
 
+    await this.clearPollState(tx.txHash);
     this.logger.log(`EvmTx ${tx.txHash} ${tx.fromChain} to ${newStatus}`);
     this.processTxNotification(tx);
+  }
+
+  private async handleNotFound(
+    tx: SwapOrders,
+    state: PollState,
+  ): Promise<void> {
+    const attempts = state.attempts + 1;
+
+    if (attempts >= MAX_POLL_ATTEMPTS) {
+      this.logger.warn(
+        `EvmTx ${tx.txHash} not found after ${attempts} attempts, marking EXHAUSTED`,
+      );
+      await this.swapOrderService.updateOrderByHash({
+        txHash: tx.txHash,
+        orderStatus: SwapOrderStatus.EXHAUSTED,
+      });
+      await this.exhaustedOrderService.upsertByTxHash(tx.txHash, {
+        provider: swapProvider.EVMTX,
+        deviceFcmToken: tx.deviceFcmToken ?? null,
+      });
+      await this.clearPollState(tx.txHash);
+      return;
+    }
+
+    const delayMs = Math.min(
+      POLL_BACKOFF_STEP_MS * attempts,
+      POLL_BACKOFF_MAX_MS,
+    );
+    await this.savePollState(tx.txHash, {
+      attempts,
+      nextPollAt: Date.now() + delayMs,
+    });
+    this.logger.debug(
+      `EvmTx ${tx.txHash} not yet mined on ${tx.fromChain} (attempt ${attempts}/${MAX_POLL_ATTEMPTS}), next check in ${delayMs / 1000}s`,
+    );
   }
 
   private async processTxNotification(tx: SwapOrders): Promise<void> {

@@ -7,7 +7,11 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InchSwapQuoteDto } from '../dto/swapQuote';
-import { ChainId, swapProvider } from '../../common/enums/chain.enum';
+import {
+  ChainId,
+  SupportedWalletChain,
+  swapProvider,
+} from '../../common/enums/chain.enum';
 import { SwapOrderStatus } from '../../common/enums/order.enum';
 import { SwapOrderService } from '../../swapOrders/swapOrders.service';
 import axios, { AxiosRequestConfig } from 'axios';
@@ -50,6 +54,8 @@ import {
   type Wallet,
   withExplicitVerifiedWalletAddress,
 } from '../../common/helpers/requestWallet';
+import { ExhaustedOrderService } from '../../swapOrders/exhaustedOrder.service';
+import { PortfolioService } from '../../portfolio/portfolio.service';
 
 interface RedisOrderSecretState {
   secrets: string[];
@@ -88,12 +94,16 @@ export class InchService implements OnModuleInit {
   private readonly oneInchAllowedHosts = getOneInchAllowedHosts();
   private readonly activeSecretPollers = new Map<string, NodeJS.Timeout>();
   private readonly secretPollReschedules = new Map<string, number>();
+  private readonly sourceRefreshTriggered = new Set<string>();
+
   private isRecoveringPendingOrders = false;
 
   constructor(
     private readonly swapOrderService: SwapOrderService,
     private readonly redisService: RedisService,
     private readonly firebaseNotificationService: FirebaseNotificationService,
+    private readonly exhaustedOrderService: ExhaustedOrderService,
+    private readonly portfolioService: PortfolioService,
   ) {
     this.sdk = new SDK({
       url: validateProviderUrl('https://api.1inch.com/fusion-plus', {
@@ -232,8 +242,17 @@ export class InchService implements OnModuleInit {
     return response.data;
   }
 
-  async getSwapQuote(swapQuote: InchSwapQuoteDto) {
-    const { tokenIn, tokenOut, amount, walletAddress, chain } = swapQuote;
+  async getSwapQuote(swapQuote: InchSwapQuoteDto, requestedWallet?: Wallet) {
+    const verifiedSwapQuote = requestedWallet
+      ? withExplicitVerifiedWalletAddress(
+          swapQuote,
+          requestedWallet,
+          'walletAddress',
+          SupportedWalletChain.multi,
+        )
+      : swapQuote;
+    const { tokenIn, tokenOut, amount, walletAddress, chain } =
+      verifiedSwapQuote;
     const url = this.buildOneInchUrl(
       'QUOTER_BASE',
       `${ChainId[chain]}/quote/receive`,
@@ -258,7 +277,18 @@ export class InchService implements OnModuleInit {
     }
   }
 
-  async getFusionPlusSwapQuote(fusionPlusSwapQuote: FusionPlusSwapQuoteDto) {
+  async getFusionPlusSwapQuote(
+    fusionPlusSwapQuote: FusionPlusSwapQuoteDto,
+    requestedWallet?: Wallet,
+  ) {
+    const verifiedFusionPlusSwapQuote = requestedWallet
+      ? withExplicitVerifiedWalletAddress(
+          fusionPlusSwapQuote,
+          requestedWallet,
+          'walletAddress',
+          resolveWalletChain(fusionPlusSwapQuote.srcChain),
+        )
+      : fusionPlusSwapQuote;
     const {
       srcChain,
       dstChain,
@@ -266,7 +296,7 @@ export class InchService implements OnModuleInit {
       dstTokenAddress,
       amount,
       walletAddress,
-    } = fusionPlusSwapQuote;
+    } = verifiedFusionPlusSwapQuote;
     const url = this.buildOneInchUrl(
       'FUSION_PLUS_QUOTER_BASE',
       'quote/receive',
@@ -498,6 +528,35 @@ export class InchService implements OnModuleInit {
     }
     this.activeSecretPollers.delete(orderHash);
     this.secretPollReschedules.delete(orderHash);
+    this.sourceRefreshTriggered.delete(orderHash);
+  }
+
+  private getErrorMessage(err: unknown): unknown {
+    return err instanceof Error ? err.message : err;
+  }
+
+  private async refreshSourcePortfolio(orderHash: string): Promise<void> {
+    const result = await this.swapOrderService.findByTxHash(orderHash);
+    if (!result.ok || !result.data) {
+      this.logger.warn(
+        `[${orderHash}] Could not load order for source portfolio refresh`,
+      );
+      return;
+    }
+
+    const { deviceId, walletAddress, fromChain } = result.data;
+    try {
+      await this.portfolioService.refreshPortfolio(
+        String(deviceId),
+        walletAddress,
+        [fromChain],
+      );
+    } catch (err) {
+      this.logger.error(
+        `[${orderHash}] Failed to refresh source portfolio after secret reveal`,
+        this.getErrorMessage(err),
+      );
+    }
   }
 
   private mapFusionPlusStatus(status: SDKOrderStatus): SwapOrderStatus {
@@ -564,15 +623,62 @@ export class InchService implements OnModuleInit {
 
   private async exhaustSecretRevealPoller(orderHash: string): Promise<boolean> {
     try {
-      await this.updateOrderStatusAndNotify(
+      const orderStatusUpdate = await this.updateOrderStatusAndNotify(
         orderHash,
         SwapOrderStatus.EXHAUSTED,
       );
+      this.stopSecretRevealPoller(orderHash);
+      await this.saveExhaustedForReconciliation(orderHash, orderStatusUpdate);
       this.stopSecretRevealPoller(orderHash);
       return true;
     } catch {
       return false;
     }
+  }
+
+  private async saveExhaustedForReconciliation(
+    orderHash: string,
+    order?: any,
+  ): Promise<void> {
+    try {
+      await this.exhaustedOrderService.upsertByTxHash(orderHash, {
+        provider: swapProvider.ONEINCH_FUSION_PLUS,
+        swapOrderId: order?._id ?? null,
+        deviceFcmToken: order?.deviceFcmToken ?? null,
+      });
+      this.logger.log(
+        `[${orderHash}] Saved to ExhaustedOrders for reconciliation`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `[${orderHash}] Failed to save exhausted order for reconciliation`,
+        this.getErrorMessage(err),
+      );
+    }
+  }
+
+  async resumeSecretRevealPolling(orderHash: string): Promise<boolean> {
+    if (this.activeSecretPollers.has(orderHash)) {
+      this.logger.log(
+        `[${orderHash}] fusion+ poller already active, skipping reconciliation resume`,
+      );
+      return true;
+    }
+
+    const secretState = await this.getSecretState(orderHash);
+    if (!secretState) {
+      this.logger.warn(
+        `[${orderHash}] fusion+ reconciliation found no secret state in redis, cannot resume`,
+      );
+      return false;
+    }
+
+    this.logger.log(
+      `[${orderHash}] fusion+ reconciliation resuming secret reveal polling`,
+    );
+    this.secretPollReschedules.delete(orderHash);
+    this.startSecretRevealPoller(orderHash);
+    return true;
   }
 
   private startSecretRevealPoller(orderHash: string): void {
@@ -643,6 +749,10 @@ export class InchService implements OnModuleInit {
 
           if (stateUpdated) {
             await this.setSecretState(orderHash, secretState);
+            if (!this.sourceRefreshTriggered.has(orderHash)) {
+              this.sourceRefreshTriggered.add(orderHash);
+              void this.refreshSourcePortfolio(orderHash);
+            }
           }
 
           retryDelayMs = SECRET_POLL_INTERVAL_MS;
@@ -714,6 +824,7 @@ export class InchService implements OnModuleInit {
         if (!secretState) {
           continue;
         }
+        this.logger.log(`[${order.txHash}] resuming secret reveal polling`);
 
         this.startSecretRevealPoller(order.txHash);
       }
@@ -775,16 +886,15 @@ export class InchService implements OnModuleInit {
 
   async orderStatus(
     inchOrderStatusDto: InchOrderStatusDto,
-    deviceId: string,
     walletAddress: Wallet,
   ) {
-    await this.assertOrderBelongsToDeviceWallet(
-      deviceId,
+    await this.assertOrderBelongsToVerifiedWallet(
       getVerifiedWalletAddressFromWallet(
         walletAddress,
         resolveWalletChain(inchOrderStatusDto.chain),
       ),
       inchOrderStatusDto.orderHash,
+      walletAddress,
     );
 
     if (
@@ -857,15 +967,15 @@ export class InchService implements OnModuleInit {
     }
   }
 
-  private async assertOrderBelongsToDeviceWallet(
-    deviceId: string,
+  private async assertOrderBelongsToVerifiedWallet(
     walletAddress: string,
     orderHash: string,
+    verifiedWallet: Wallet,
   ): Promise<void> {
-    const result = await this.swapOrderService.findOrderByHashForDeviceWallet(
-      deviceId,
+    const result = await this.swapOrderService.findOrderByHashForVerifiedWallet(
       orderHash,
       walletAddress,
+      verifiedWallet,
     );
 
     if (!result.ok) {

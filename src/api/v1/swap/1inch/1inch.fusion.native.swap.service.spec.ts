@@ -1,5 +1,5 @@
 import { Logger, NotFoundException } from '@nestjs/common';
-import { FustionNativeService } from './1inch.fusion.native.swap.service';
+import { FusionNativeService } from './1inch.fusion.native.swap.service';
 import {
   decryptFusionSecretState,
   encryptFusionSecretState,
@@ -39,20 +39,24 @@ jest.mock('@1inch/fusion-sdk', () => ({
   },
 }));
 
-describe('FustionNativeService secret state TTL', () => {
+describe('FusionNativeService secret state TTL', () => {
   const originalEnv = process.env;
   const encryptionKey = '12345678901234567890123456789012';
-  let service: FustionNativeService;
+  let service: FusionNativeService;
   let redisService: { setKey: jest.Mock; getKey: jest.Mock; delKey: jest.Mock };
   let swapOrderService: {
     updateOrderByHash: jest.Mock;
-    findOrderByHashForDeviceWallet: jest.Mock;
+    findOrderByHashForVerifiedWallet: jest.Mock;
   };
   const verifiedWallet = (address: string) =>
     ({
-      addresses: new Map([[SupportedWalletChain.eth, address]]),
+      addresses: new Map([
+        [SupportedWalletChain.eth, address],
+        [SupportedWalletChain.multi, address],
+      ]),
     }) as any;
   let firebaseNotificationService: { sendNotification: jest.Mock };
+  let portfolioService: { refreshPortfolio: jest.Mock };
 
   beforeEach(() => {
     process.env = {
@@ -71,7 +75,7 @@ describe('FustionNativeService secret state TTL', () => {
     };
     swapOrderService = {
       updateOrderByHash: jest.fn().mockResolvedValue({}),
-      findOrderByHashForDeviceWallet: jest.fn().mockResolvedValue({
+      findOrderByHashForVerifiedWallet: jest.fn().mockResolvedValue({
         ok: true,
         data: { txHash: 'order-hash' },
       }),
@@ -79,12 +83,16 @@ describe('FustionNativeService secret state TTL', () => {
     firebaseNotificationService = {
       sendNotification: jest.fn().mockResolvedValue(undefined),
     };
+    portfolioService = {
+      refreshPortfolio: jest.fn().mockResolvedValue(undefined),
+    };
 
-    service = new FustionNativeService(
+    service = new FusionNativeService(
       { get: jest.fn() } as any,
       redisService as any,
       swapOrderService as any,
       firebaseNotificationService as any,
+      portfolioService as any,
     );
   });
 
@@ -190,7 +198,7 @@ describe('FustionNativeService secret state TTL', () => {
     expect(redisService.setKey).not.toHaveBeenCalled();
   });
 
-  it('verifies device and wallet ownership before confirming native Fusion orders', async () => {
+  it('verifies verified-wallet order ownership before confirming native Fusion orders', async () => {
     const walletAddress = '0x1234567890123456789012345678901234567890';
     const waitForTransaction = jest
       .fn()
@@ -215,7 +223,6 @@ describe('FustionNativeService secret state TTL', () => {
           txHash: '0xtxhash',
           srcChain: 'ETH',
         } as any,
-        'device-id',
         verifiedWallet(walletAddress),
       ),
     ).resolves.toMatchObject({
@@ -224,8 +231,12 @@ describe('FustionNativeService secret state TTL', () => {
     });
 
     expect(
-      swapOrderService.findOrderByHashForDeviceWallet,
-    ).toHaveBeenCalledWith('device-id', 'order-hash', walletAddress);
+      swapOrderService.findOrderByHashForVerifiedWallet,
+    ).toHaveBeenCalledWith(
+      'order-hash',
+      walletAddress,
+      verifiedWallet(walletAddress),
+    );
     expect(redisService.getKey).toHaveBeenCalledWith(
       'fusion_secrets:order-hash',
     );
@@ -235,7 +246,7 @@ describe('FustionNativeService secret state TTL', () => {
   it('rejects native Fusion confirmation before Redis/provider work when the order is not owned', async () => {
     const walletAddress = '0x1234567890123456789012345678901234567890';
     const getProvider = jest.spyOn(service, 'getProvider');
-    swapOrderService.findOrderByHashForDeviceWallet.mockResolvedValueOnce({
+    swapOrderService.findOrderByHashForVerifiedWallet.mockResolvedValueOnce({
       ok: true,
       data: null,
     });
@@ -247,7 +258,6 @@ describe('FustionNativeService secret state TTL', () => {
           txHash: '0xtxhash',
           srcChain: 'ETH',
         } as any,
-        'device-id',
         verifiedWallet(walletAddress),
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
@@ -390,7 +400,7 @@ describe('FustionNativeService secret state TTL', () => {
   });
 
   it('rejects unallowlisted native Fusion RPC URLs', () => {
-    const rejectedService = new FustionNativeService(
+    const rejectedService = new FusionNativeService(
       {
         get: jest.fn((key: string) =>
           key === 'PROVIDER_RPC_ETH_1' ? 'https://evil.example/rpc' : undefined,
@@ -399,6 +409,7 @@ describe('FustionNativeService secret state TTL', () => {
       redisService as any,
       swapOrderService as any,
       firebaseNotificationService as any,
+      portfolioService as any,
     );
 
     expect(() => rejectedService.getProvider(1)).toThrow(

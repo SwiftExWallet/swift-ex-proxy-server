@@ -36,7 +36,23 @@ describe('requestWallet helpers', () => {
       ).toBe(walletAddress);
     });
 
-    it('returns the chain-specific wallet address from the request wallet addresses object', () => {
+    it('uses the multi wallet address even when an EVM chain address exists', () => {
+      expect(
+        getVerifiedWalletAddress(
+          {
+            wallet: {
+              addresses: {
+                eth: '0x1111111111111111111111111111111111111111',
+                multi: walletAddress,
+              },
+            },
+          },
+          SupportedWalletChain.eth,
+        ),
+      ).toBe(walletAddress);
+    });
+
+    it('uses the multi wallet address from the request wallet addresses object', () => {
       expect(
         getVerifiedWalletAddress(
           {
@@ -50,7 +66,35 @@ describe('requestWallet helpers', () => {
           },
           SupportedWalletChain.eth,
         ),
-      ).toBe('0x1111111111111111111111111111111111111111');
+      ).toBe('0x3333333333333333333333333333333333333333');
+    });
+
+    it('uses multi from the request wallet context for EVM chains', () => {
+      expect(
+        getVerifiedWalletAddress(
+          {
+            wallet: {
+              multi: '0x3333333333333333333333333333333333333333',
+              xlm: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+            },
+          },
+          SupportedWalletChain.eth,
+        ),
+      ).toBe('0x3333333333333333333333333333333333333333');
+    });
+
+    it('uses xlm from the request wallet context for Stellar chains', () => {
+      expect(
+        getVerifiedWalletAddress(
+          {
+            wallet: {
+              multi: '0x3333333333333333333333333333333333333333',
+              xlm: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+            },
+          },
+          SupportedWalletChain.xlm,
+        ),
+      ).toBe('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF');
     });
 
     it('falls back to the multi wallet address when the chain-specific address is missing', () => {
@@ -68,7 +112,7 @@ describe('requestWallet helpers', () => {
       ).toBe('0x3333333333333333333333333333333333333333');
     });
 
-    it('reads chain-specific wallet addresses from mongoose map-style addresses', () => {
+    it('reads the multi wallet address from mongoose map-style addresses', () => {
       expect(
         getVerifiedWalletAddress(
           {
@@ -82,28 +126,32 @@ describe('requestWallet helpers', () => {
                   SupportedWalletChain.bnb,
                   '0x2222222222222222222222222222222222222222',
                 ],
+                [
+                  SupportedWalletChain.multi,
+                  '0x3333333333333333333333333333333333333333',
+                ],
               ]),
             },
           },
           SupportedWalletChain.bnb,
         ),
-      ).toBe('0x2222222222222222222222222222222222222222');
+      ).toBe('0x3333333333333333333333333333333333333333');
     });
 
-    it('reads chain-specific wallet addresses from map-like addresses', () => {
+    it('reads the multi wallet address from map-like addresses', () => {
       expect(
         getVerifiedWalletAddressFromWallet(
           {
             addresses: {
               get: (chain: SupportedWalletChain) =>
-                chain === SupportedWalletChain.bnb
-                  ? '0x2222222222222222222222222222222222222222'
+                chain === SupportedWalletChain.multi
+                  ? '0x3333333333333333333333333333333333333333'
                   : undefined,
             },
           } as any,
           SupportedWalletChain.bnb,
         ),
-      ).toBe('0x2222222222222222222222222222222222222222');
+      ).toBe('0x3333333333333333333333333333333333333333');
     });
 
     it('rejects a missing wallet address', () => {
@@ -143,6 +191,12 @@ describe('requestWallet helpers', () => {
       expect(resolveWalletChain(56)).toBe(SupportedWalletChain.bnb);
       expect(resolveWalletChain('bnb')).toBe(SupportedWalletChain.bnb);
       expect(resolveWalletChain('bsc')).toBe(SupportedWalletChain.bnb);
+    });
+
+    it('resolves Stellar aliases', () => {
+      expect(resolveWalletChain('xlm')).toBe(SupportedWalletChain.xlm);
+      expect(resolveWalletChain('stellar')).toBe(SupportedWalletChain.xlm);
+      expect(resolveWalletChain('SRB')).toBe(SupportedWalletChain.xlm);
     });
   });
 
@@ -195,6 +249,18 @@ describe('requestWallet helpers', () => {
             },
           } as any,
           walletAddress,
+        ),
+      ).toBe(true);
+    });
+
+    it('checks request wallet context values', () => {
+      expect(
+        walletContainsAddress(
+          {
+            multi: '0x3333333333333333333333333333333333333333',
+            xlm: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+          } as any,
+          'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
         ),
       ).toBe(true);
     });
@@ -307,6 +373,31 @@ describe('requestWallet helpers', () => {
       ).toEqual({
         amount: '1',
         recipient: walletAddress,
+      });
+    });
+
+    it('overwrites a legacy walletAddress DTO value with the multi wallet address', () => {
+      expect(
+        withExplicitVerifiedWalletAddress(
+          {
+            amount: '1',
+            walletAddress: '0x1111111111111111111111111111111111111111',
+          },
+          walletWithAddresses(
+            new Map([
+              [
+                SupportedWalletChain.eth,
+                '0x1111111111111111111111111111111111111111',
+              ],
+              [SupportedWalletChain.multi, walletAddress],
+            ]),
+          ),
+          'walletAddress',
+          SupportedWalletChain.eth,
+        ),
+      ).toEqual({
+        amount: '1',
+        walletAddress,
       });
     });
 

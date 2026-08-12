@@ -4,16 +4,24 @@ import { SwapOrderStatus } from '../common/enums/order.enum';
 import { EvmTxPollerService } from './evmTxPoller.service';
 
 describe('EvmTxPollerService', () => {
-  const originalEnv = process.env;
-  const originalFetch = global.fetch;
-
   let service: EvmTxPollerService;
-  let repo: {
+  let swapOrderService: {
     findPendingByProvider: jest.Mock;
-    updateOrderStatus: jest.Mock;
+    updateOrderByHash: jest.Mock;
+  };
+  let exhaustedOrderService: {
+    upsertByTxHash: jest.Mock;
   };
   let firebaseNotificationService: {
     sendNotification: jest.Mock;
+  };
+  let redisService: {
+    getKey: jest.Mock;
+    setKey: jest.Mock;
+    delKey: jest.Mock;
+  };
+  let txReceiptStatusService: {
+    getStatus: jest.Mock;
   };
 
   const createTx = (overrides: Record<string, any> = {}) =>
@@ -28,109 +36,105 @@ describe('EvmTxPollerService', () => {
       ...overrides,
     }) as any;
 
-  const mockFetchReceipt = (receipt: Record<string, any>) => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: jest.fn().mockResolvedValue(receipt),
-    });
-  };
-
   beforeEach(() => {
-    process.env = {
-      ...originalEnv,
-      BLOCKSCOUT_ETH: 'https://blockscout.eth',
-      BLOCKSCOUT_ALLOWED_HOSTS: 'blockscout.eth',
-    };
-    (global as any).fetch = jest.fn();
-
     jest.spyOn(Logger.prototype, 'debug').mockImplementation();
     jest.spyOn(Logger.prototype, 'error').mockImplementation();
     jest.spyOn(Logger.prototype, 'log').mockImplementation();
     jest.spyOn(Logger.prototype, 'warn').mockImplementation();
 
-    repo = {
+    swapOrderService = {
       findPendingByProvider: jest.fn(),
-      updateOrderStatus: jest.fn(),
+      updateOrderByHash: jest.fn(),
+    };
+    exhaustedOrderService = {
+      upsertByTxHash: jest.fn().mockResolvedValue(undefined),
     };
     firebaseNotificationService = {
       sendNotification: jest.fn().mockResolvedValue(undefined),
     };
+    redisService = {
+      getKey: jest.fn().mockResolvedValue(null),
+      setKey: jest.fn().mockResolvedValue(undefined),
+      delKey: jest.fn().mockResolvedValue(undefined),
+    };
+    txReceiptStatusService = {
+      getStatus: jest.fn(),
+    };
     service = new EvmTxPollerService(
-      repo as any,
+      swapOrderService as any,
+      exhaustedOrderService as any,
       firebaseNotificationService as any,
+      redisService as any,
+      txReceiptStatusService as any,
     );
   });
 
   afterEach(() => {
-    process.env = originalEnv;
-    (global as any).fetch = originalFetch;
     jest.restoreAllMocks();
   });
 
   it('queries pending EVM transaction swap orders', async () => {
-    repo.findPendingByProvider.mockResolvedValue({ ok: true, data: [] });
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
 
     await service.poll();
 
-    expect(repo.findPendingByProvider).toHaveBeenCalledWith(swapProvider.EVMTX);
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(swapOrderService.findPendingByProvider).toHaveBeenCalledWith(
+      swapProvider.EVMTX,
+    );
+    expect(txReceiptStatusService.getStatus).not.toHaveBeenCalled();
   });
 
-  it('rejects unallowlisted Blockscout URLs during construction', () => {
-    process.env.BLOCKSCOUT_ALLOWED_HOSTS = 'blockscout.eth';
-    process.env.BLOCKSCOUT_ETH = 'https://evil.example';
-
-    expect(
-      () =>
-        new EvmTxPollerService(repo as any, firebaseNotificationService as any),
-    ).toThrow('BLOCKSCOUT_ETH host is not allowlisted');
-  });
-
-  it('returns without polling when repository fetch fails', async () => {
-    repo.findPendingByProvider.mockResolvedValue({
+  it('returns without polling when service fetch fails', async () => {
+    swapOrderService.findPendingByProvider.mockResolvedValue({
       ok: false,
       error: 'db failed',
     });
 
     await service.poll();
 
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(repo.updateOrderStatus).not.toHaveBeenCalled();
+    expect(txReceiptStatusService.getStatus).not.toHaveBeenCalled();
+    expect(swapOrderService.updateOrderByHash).not.toHaveBeenCalled();
   });
 
   it('returns without polling when there are no pending orders', async () => {
-    repo.findPendingByProvider.mockResolvedValue({ ok: true, data: [] });
-
-    await service.poll();
-
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(repo.updateOrderStatus).not.toHaveBeenCalled();
-  });
-
-  it('maps a successful Blockscout receipt to completed and sends a notification', async () => {
-    const tx = createTx();
-    repo.findPendingByProvider.mockResolvedValue({ ok: true, data: [tx] });
-    repo.updateOrderStatus.mockResolvedValue({ ...tx, txType: 'Swap' });
-    mockFetchReceipt({
-      status: '1',
-      message: 'OK',
-      result: { status: '1' },
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [],
     });
 
     await service.poll();
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      'https://blockscout.eth/api?module=transaction&action=gettxreceiptstatus&txhash=0xhash',
-      expect.objectContaining({
-        headers: { 'Content-Type': 'application/json' },
-        signal: expect.any(Object),
-      }),
-    );
-    expect(repo.updateOrderStatus).toHaveBeenCalledWith(
-      tx.txHash,
+    expect(txReceiptStatusService.getStatus).not.toHaveBeenCalled();
+    expect(swapOrderService.updateOrderByHash).not.toHaveBeenCalled();
+  });
+
+  it('maps a successful Blockscout receipt to completed and sends a notification', async () => {
+    const tx = createTx();
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [tx],
+    });
+    txReceiptStatusService.getStatus.mockResolvedValue(
       SwapOrderStatus.COMPLETED,
     );
+    swapOrderService.updateOrderByHash.mockResolvedValue({
+      ...tx,
+      txType: 'Swap',
+    });
+
+    await service.poll();
+
+    expect(txReceiptStatusService.getStatus).toHaveBeenCalledWith(
+      tx.fromChain,
+      tx.txHash,
+    );
+    expect(swapOrderService.updateOrderByHash).toHaveBeenCalledWith({
+      txHash: tx.txHash,
+      orderStatus: SwapOrderStatus.COMPLETED,
+    });
     expect(firebaseNotificationService.sendNotification).toHaveBeenCalledWith(
       tx.deviceFcmToken,
       {
@@ -143,50 +147,84 @@ describe('EvmTxPollerService', () => {
 
   it('maps a failed Blockscout receipt to failed status', async () => {
     const tx = createTx();
-    repo.findPendingByProvider.mockResolvedValue({ ok: true, data: [tx] });
-    repo.updateOrderStatus.mockResolvedValue({ ...tx, txType: 'Swap' });
-    mockFetchReceipt({
-      status: '1',
-      message: 'OK',
-      result: { status: '0' },
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [tx],
+    });
+    txReceiptStatusService.getStatus.mockResolvedValue(SwapOrderStatus.FAILED);
+    swapOrderService.updateOrderByHash.mockResolvedValue({
+      ...tx,
+      txType: 'Swap',
     });
 
     await service.poll();
 
-    expect(repo.updateOrderStatus).toHaveBeenCalledWith(
-      tx.txHash,
-      SwapOrderStatus.FAILED,
-    );
+    expect(swapOrderService.updateOrderByHash).toHaveBeenCalledWith({
+      txHash: tx.txHash,
+      orderStatus: SwapOrderStatus.FAILED,
+    });
   });
 
-  it('retries retryable Blockscout HTTP failures before processing a receipt', async () => {
-    process.env.PROVIDER_RETRY_MAX_ATTEMPTS = '2';
-    process.env.PROVIDER_RETRY_BASE_DELAY_MS = '1';
-    process.env.PROVIDER_RETRY_MAX_DELAY_MS = '1';
+  it('backs off unresolved transactions before exhausting them', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
     const tx = createTx();
-    repo.findPendingByProvider.mockResolvedValue({ ok: true, data: [tx] });
-    repo.updateOrderStatus.mockResolvedValue({ ...tx, txType: 'Swap' });
-    (global.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: jest.fn().mockResolvedValue({
-          status: '1',
-          message: 'OK',
-          result: { status: '1' },
-        }),
-      });
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [tx],
+    });
+    txReceiptStatusService.getStatus.mockResolvedValue(null);
 
     await service.poll();
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
-    expect(repo.updateOrderStatus).toHaveBeenCalledWith(
-      tx.txHash,
-      SwapOrderStatus.COMPLETED,
+    expect(redisService.setKey).toHaveBeenCalledWith(
+      'evm_tx_poll:0xhash',
+      JSON.stringify({ attempts: 1, nextPollAt: 1_030_000 }),
+      1800,
     );
+    expect(swapOrderService.updateOrderByHash).not.toHaveBeenCalled();
+    expect(exhaustedOrderService.upsertByTxHash).not.toHaveBeenCalled();
+  });
+
+  it('skips a transaction while its backoff window is still active', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    redisService.getKey.mockResolvedValue(
+      JSON.stringify({ attempts: 2, nextPollAt: 1_010_000 }),
+    );
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [createTx()],
+    });
+
+    await service.poll();
+
+    expect(txReceiptStatusService.getStatus).not.toHaveBeenCalled();
+    expect(redisService.setKey).not.toHaveBeenCalled();
+  });
+
+  it('marks unresolved transactions exhausted after max attempts', async () => {
+    const tx = createTx();
+    redisService.getKey.mockResolvedValue(
+      JSON.stringify({ attempts: 4, nextPollAt: 0 }),
+    );
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [tx],
+    });
+    txReceiptStatusService.getStatus.mockResolvedValue(null);
+
+    await service.poll();
+
+    expect(swapOrderService.updateOrderByHash).toHaveBeenCalledWith({
+      txHash: tx.txHash,
+      orderStatus: SwapOrderStatus.EXHAUSTED,
+    });
+    expect(exhaustedOrderService.upsertByTxHash).toHaveBeenCalledWith(
+      tx.txHash,
+      {
+        provider: swapProvider.EVMTX,
+        deviceFcmToken: tx.deviceFcmToken,
+      },
+    );
+    expect(redisService.delKey).toHaveBeenCalledWith('evm_tx_poll:0xhash');
   });
 });

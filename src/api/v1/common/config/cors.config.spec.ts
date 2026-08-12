@@ -77,4 +77,12 @@ describe('CORS configuration', () => {
       invokeOriginCallback(options, 'capacitor://localhost'),
     ).resolves.toBe(true);
   });
+
+  it('allows wallet auth token headers', () => {
+    const options = createCorsOptions();
+
+    expect(options.allowedHeaders).toEqual(
+      expect.arrayContaining(['x-auth-wallet-token']),
+    );
+  });
 });

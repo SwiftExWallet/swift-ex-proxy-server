@@ -15,7 +15,15 @@ export class MarketDataService {
 
   async getCryptoData() {
     try {
-      const response = await fetch(process.env.COIN_GECKO_API_URL as string, {
+      const coinGeckoApiUrl = process.env.COIN_GECKO_API_URL;
+      if (!coinGeckoApiUrl) {
+        this.logger.warn(
+          'Skipping crypto data fetch: COIN_GECKO_API_URL is not configured',
+        );
+        return;
+      }
+
+      const response = await fetch(coinGeckoApiUrl, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

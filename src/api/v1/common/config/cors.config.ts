@@ -65,6 +65,7 @@ export function createCorsOptions(
       'Content-Type',
       'Authorization',
       'x-auth-device-token',
+      'x-auth-wallet-token',
       'x-wallet-address',
     ],
     credentials: false,

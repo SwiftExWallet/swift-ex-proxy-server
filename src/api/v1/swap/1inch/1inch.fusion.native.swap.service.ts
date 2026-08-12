@@ -52,6 +52,7 @@ import {
   type Wallet,
   withExplicitVerifiedWalletAddress,
 } from '../../common/helpers/requestWallet';
+import { PortfolioService } from '../../portfolio/portfolio.service';
 
 interface RedisOrderSecretState {
   secrets: string[];
@@ -72,13 +73,14 @@ const DEFAULT_FUSION_NATIVE_SECRET_POLL_MAX_SCHEDULES = 1_440;
 const DEFAULT_FUSION_NATIVE_SECRET_POLL_MAX_PROVIDER_FAILURES = 5;
 
 @Injectable()
-export class FustionNativeService {
-  private readonly logger = new Logger(FustionNativeService.name);
+export class FusionNativeService {
+  private readonly logger = new Logger(FusionNativeService.name);
   private readonly oneInchAllowedHosts = getOneInchAllowedHosts();
   private readonly rpcAllowedHosts = getProviderRpcAllowedHosts();
   private readonly providers = new Map<number, ethers.JsonRpcProvider>();
   private crossChainSdk: CrossChainSDK;
   private fusionSdkMap = new Map<number, FusionSDK>();
+  private readonly sourceRefreshTriggered = new Set<string>();
 
   private readonly CHAIN_ID_TO_ENV_NAME: Record<number, string> = {
     1: 'ETH',
@@ -95,8 +97,37 @@ export class FustionNativeService {
     private readonly redisService: RedisService,
     private readonly swapOrderService: SwapOrderService,
     private readonly firebaseNotificationService: FirebaseNotificationService,
+    private readonly portfolioService: PortfolioService,
   ) {
     this.initialize1InchSdks();
+  }
+
+  private getErrorMessage(err: unknown): unknown {
+    return err instanceof Error ? err.message : err;
+  }
+
+  private async refreshSourcePortfolio(orderHash: string): Promise<void> {
+    const result = await this.swapOrderService.findByTxHash(orderHash);
+    if (!result.ok || !result.data) {
+      this.logger.warn(
+        `[${orderHash}] Could not load order for source portfolio refresh`,
+      );
+      return;
+    }
+
+    const { deviceId, walletAddress, fromChain } = result.data;
+    try {
+      await this.portfolioService.refreshPortfolio(
+        String(deviceId),
+        walletAddress,
+        [fromChain],
+      );
+    } catch (err) {
+      this.logger.error(
+        `[${orderHash}] Failed to refresh source portfolio after secret reveal`,
+        this.getErrorMessage(err),
+      );
+    }
   }
 
   private async getSecretState(key: string): Promise<{
@@ -444,21 +475,17 @@ export class FustionNativeService {
     }
   }
 
-  async confirmSwapOrder(
-    dto: ConfirmSwapOrderDto,
-    deviceId: string,
-    walletAddress: Wallet,
-  ) {
+  async confirmSwapOrder(dto: ConfirmSwapOrderDto, walletAddress: Wallet) {
     try {
       const { orderHash, txHash, srcChain } = dto;
 
-      await this.assertOrderBelongsToDeviceWallet(
-        deviceId,
+      await this.assertOrderBelongsToVerifiedWallet(
         getVerifiedWalletAddressFromWallet(
           walletAddress,
           resolveWalletChain(srcChain),
         ),
         orderHash,
+        walletAddress,
       );
 
       const secretState = await this.getSecretState(orderHash);
@@ -499,15 +526,15 @@ export class FustionNativeService {
     }
   }
 
-  private async assertOrderBelongsToDeviceWallet(
-    deviceId: string,
+  private async assertOrderBelongsToVerifiedWallet(
     walletAddress: string,
     orderHash: string,
+    verifiedWallet: Wallet,
   ): Promise<void> {
-    const result = await this.swapOrderService.findOrderByHashForDeviceWallet(
-      deviceId,
+    const result = await this.swapOrderService.findOrderByHashForVerifiedWallet(
       orderHash,
       walletAddress,
+      verifiedWallet,
     );
 
     if (!result.ok) {
@@ -570,6 +597,7 @@ export class FustionNativeService {
           this.logger.warn(
             `[Loop] Stopping loop for ${hash}. State cleared from Redis.`,
           );
+          this.sourceRefreshTriggered.delete(hash);
           return;
         }
 
@@ -666,6 +694,10 @@ export class FustionNativeService {
 
           if (stateUpdated) {
             await this.setSecretState(hash, secretState);
+            if (!this.sourceRefreshTriggered.has(hash)) {
+              this.sourceRefreshTriggered.add(hash);
+              void this.refreshSourcePortfolio(hash);
+            }
           }
 
           const { status } = await withProviderControls(
@@ -707,6 +739,7 @@ export class FustionNativeService {
               );
             }
             await this.delSecretState(hash);
+            this.sourceRefreshTriggered.delete(hash);
             return;
           }
 

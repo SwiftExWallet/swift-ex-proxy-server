@@ -27,6 +27,15 @@ export function createSwaggerConfig() {
       },
       'walletAddress',
     )
+    .addApiKey(
+      {
+        type: 'apiKey',
+        in: 'header',
+        name: 'x-auth-wallet-token',
+        description: 'Wallet JWT token containing multi and xlm addresses.',
+      },
+      'walletToken',
+    )
     .build();
 }
 

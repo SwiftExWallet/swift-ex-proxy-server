@@ -35,11 +35,8 @@ describe('inchController', () => {
   const reqWithWallet = {
     device: { _id: 'device-id' },
     wallet: {
-      addresses: {
-        eth: '0x3333333333333333333333333333333333333333',
-        bnb: '0x4444444444444444444444444444444444444444',
-        multi: '0x5555555555555555555555555555555555555555',
-      },
+      multi: '0x5555555555555555555555555555555555555555',
+      xlm: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
     },
   };
 
@@ -94,7 +91,7 @@ describe('inchController', () => {
     );
   });
 
-  it('delegates 1inch quote requests without wallet context', async () => {
+  it('delegates 1inch quote requests with request wallet context', async () => {
     const dto = {
       chain: SwapNetwork.ETH,
       tokenIn: '0x1111111111111111111111111111111111111111',
@@ -105,12 +102,17 @@ describe('inchController', () => {
     const result = { quoteId: 'quote-id' };
     inchService.getSwapQuote.mockResolvedValue(result);
 
-    await expect(controller.getQuote(dto as any)).resolves.toBe(result);
+    await expect(controller.getQuote(reqWithWallet, dto as any)).resolves.toBe(
+      result,
+    );
 
-    expect(inchService.getSwapQuote).toHaveBeenCalledWith(dto);
+    expect(inchService.getSwapQuote).toHaveBeenCalledWith(
+      dto,
+      reqWithWallet.wallet,
+    );
   });
 
-  it('delegates Fusion+ quote requests to the Inch service', async () => {
+  it('delegates Fusion+ quote requests with request wallet context', async () => {
     const dto = {
       srcChain: SwapNetwork.ETH,
       dstChain: SwapNetwork.BSC,
@@ -122,12 +124,17 @@ describe('inchController', () => {
     const result = { quoteId: 'quote-id' };
     inchService.getFusionPlusSwapQuote.mockResolvedValue(result);
 
-    await expect(controller.getFusionPlusQuote(dto)).resolves.toBe(result);
+    await expect(
+      controller.getFusionPlusQuote(reqWithWallet, dto),
+    ).resolves.toBe(result);
 
-    expect(inchService.getFusionPlusSwapQuote).toHaveBeenCalledWith(dto);
+    expect(inchService.getFusionPlusSwapQuote).toHaveBeenCalledWith(
+      dto,
+      reqWithWallet.wallet,
+    );
   });
 
-  it('passes device and wallet context when refreshing order status', async () => {
+  it('passes the verified wallet when refreshing order status', async () => {
     const dto = {
       orderHash: '0xorderhash',
       chain: SwapNetwork.ETH,
@@ -142,7 +149,6 @@ describe('inchController', () => {
 
     expect(inchService.orderStatus).toHaveBeenCalledWith(
       dto,
-      reqWithWallet.device._id,
       reqWithWallet.wallet,
     );
   });
@@ -185,7 +191,6 @@ describe('inchController', () => {
     );
     expect(fustionNativeService.confirmSwapOrder).toHaveBeenCalledWith(
       confirmDto,
-      reqWithWallet.device._id,
       reqWithWallet.wallet,
     );
   });

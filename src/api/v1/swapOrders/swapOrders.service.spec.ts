@@ -1,24 +1,36 @@
-import {
-  ForbiddenException,
-  InternalServerErrorException,
-} from '@nestjs/common';
-import { SupportedWalletChain } from '../common/enums/chain.enum';
+import { ForbiddenException } from '@nestjs/common';
+import { SupportedWalletChain, swapProvider } from '../common/enums/chain.enum';
+import { SwapOrderStatus } from '../common/enums/order.enum';
 import { SwapOrderService } from './swapOrders.service';
 
 describe('SwapOrderService wallet ownership', () => {
   const repository = {
+    create: jest.fn(),
+    findById: jest.fn(),
+    findByTxHash: jest.fn(),
     findByWalletWithPagination: jest.fn(),
     findByTxHashForWallet: jest.fn(),
+    updateStatus: jest.fn(),
+    updateOrderStatusById: jest.fn(),
   };
   const walletService = {
     verifyWalletForDevice: jest.fn(),
   };
+  const redisService = {
+    setKey: jest.fn(),
+  };
   const nearIntentPollerService = {
     startPolling: jest.fn(),
   };
+  const portfolioService = {
+    refreshPortfolio: jest.fn(),
+  };
   const verifiedWallet = (address: string) =>
     ({
-      addresses: new Map([[SupportedWalletChain.eth, address]]),
+      addresses: new Map([
+        [SupportedWalletChain.eth, address],
+        [SupportedWalletChain.multi, address],
+      ]),
     }) as any;
 
   let service: SwapOrderService;
@@ -26,34 +38,122 @@ describe('SwapOrderService wallet ownership', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new SwapOrderService(
-      {} as any,
       repository as any,
-      walletService as any,
+      redisService as any,
       nearIntentPollerService as any,
+      portfolioService as any,
     );
   });
 
-  it('returns wallet orders across devices after the wallet is associated with the device', async () => {
+  it('stores swap orders through the repository', async () => {
+    const device = { _id: 'device-id', fcmToken: 'fcm-token' };
+    const dto = {
+      txHash: '0xtxhash',
+      provider: 'UNISWAP',
+      walletAddress: '0x1234567890123456789012345678901234567890',
+      fromChain: 'ETH',
+      toChain: 'BSC',
+      fromToken: 'ETH',
+      toToken: 'BNB',
+      amountIn: '1',
+      amountOut: '2',
+      usdValue: 12,
+    } as any;
+    const created = { _id: 'order-id', ...dto };
+    repository.create.mockResolvedValue(created);
+
+    await expect(service.store(device, dto)).resolves.toBe(created);
+
+    expect(repository.create).toHaveBeenCalledWith({
+      ...dto,
+      usdValue: 12,
+      deviceId: 'device-id',
+      deviceFcmToken: 'fcm-token',
+    });
+  });
+
+  it('starts NEAR intent polling with the persisted order id and memo', async () => {
+    const device = { _id: 'device-id', fcmToken: 'fcm-token' };
+    const dto = {
+      txHash: 'near-deposit-address',
+      provider: swapProvider.NEARINTENT,
+      memo: 'near-memo',
+      walletAddress: '0x1234567890123456789012345678901234567890',
+      fromChain: 'ETH',
+      toChain: 'NEAR',
+      fromToken: 'USDC',
+      toToken: 'NEAR',
+      amountIn: '1',
+      amountOut: '2',
+      usdValue: 1,
+    } as any;
+    const created = { _id: { toHexString: () => 'order-id' }, ...dto };
+    repository.create.mockResolvedValue(created);
+    nearIntentPollerService.startPolling.mockResolvedValue(undefined);
+
+    await expect(service.store(device, dto)).resolves.toBe(created);
+
+    expect(repository.create).toHaveBeenCalledWith({
+      ...dto,
+      usdValue: 1,
+      deviceId: 'device-id',
+      deviceFcmToken: 'fcm-token',
+    });
+    expect(nearIntentPollerService.startPolling).toHaveBeenCalledWith(
+      dto.txHash,
+      'order-id',
+      dto.memo,
+    );
+  });
+
+  it('finds an order by id through the repository', async () => {
+    const result = { ok: true, data: { _id: 'order-id' } };
+    repository.findById.mockResolvedValue(result);
+
+    await expect(service.findById('order-id')).resolves.toBe(result);
+
+    expect(repository.findById).toHaveBeenCalledWith('order-id');
+  });
+
+  it('refreshes the portfolio after a successful completed status update', async () => {
+    const order = {
+      txHash: '0xtxhash',
+      deviceId: { toString: () => 'device-id' },
+      walletAddress: '0x1234567890123456789012345678901234567890',
+      fromChain: 'ETH',
+      toChain: 'BSC',
+    };
+    repository.findByTxHash.mockResolvedValue({ ok: true, data: order });
+    repository.updateStatus.mockResolvedValue({ ok: true, data: undefined });
+    portfolioService.refreshPortfolio.mockResolvedValue(undefined);
+
+    await service.updateOrderStatus('0xtxhash', SwapOrderStatus.COMPLETED);
+
+    expect(repository.updateStatus).toHaveBeenCalledWith(
+      '0xtxhash',
+      SwapOrderStatus.COMPLETED,
+    );
+    expect(portfolioService.refreshPortfolio).toHaveBeenCalledWith(
+      'device-id',
+      order.walletAddress,
+      ['ETH', 'BSC'],
+    );
+  });
+
+  it('returns wallet orders for the verified wallet without rechecking device ownership', async () => {
     const query = {
       address: '0x1234567890123456789012345678901234567890',
       page: 1,
       limit: 10,
     };
     const result = { ok: true, data: { data: [], total: 0 } };
-    walletService.verifyWalletForDevice.mockResolvedValue({
-      walletId: 'wallet-id',
-      address: query.address,
-    });
     repository.findByWalletWithPagination.mockResolvedValue(result);
 
     await expect(
-      service.findOrdersForDeviceWallet('device-id', query),
+      service.findOrdersForVerifiedWallet(query, verifiedWallet(query.address)),
     ).resolves.toBe(result);
 
-    expect(walletService.verifyWalletForDevice).toHaveBeenCalledWith(
-      'device-id',
-      query.address,
-    );
+    expect(walletService.verifyWalletForDevice).not.toHaveBeenCalled();
     expect(repository.findByWalletWithPagination).toHaveBeenCalledWith(
       query.address,
       query,
@@ -68,77 +168,57 @@ describe('SwapOrderService wallet ownership', () => {
     };
     const walletAddress = '0x1234567890123456789012345678901234567890';
     const result = { ok: true, data: { data: [], total: 0 } };
-    walletService.verifyWalletForDevice.mockResolvedValue({
-      walletId: 'wallet-id',
-      address: walletAddress,
-    });
     repository.findByWalletWithPagination.mockResolvedValue(result);
 
     await expect(
-      service.findOrdersForDeviceWallet(
-        'device-id',
+      service.findOrdersForVerifiedWallet(
         { ...query, address: walletAddress },
         verifiedWallet(walletAddress),
       ),
     ).resolves.toBe(result);
 
+    expect(walletService.verifyWalletForDevice).not.toHaveBeenCalled();
     expect(repository.findByWalletWithPagination).toHaveBeenCalledWith(
       walletAddress,
       { ...query, address: walletAddress },
     );
   });
 
-  it('rejects wallet order history when the wallet is not associated with the device', async () => {
+  it('rejects wallet order history when the query address is not in the verified wallet', async () => {
     const query = {
       address: '0x1234567890123456789012345678901234567890',
       page: 1,
       limit: 10,
     };
-    walletService.verifyWalletForDevice.mockResolvedValue(null);
 
     await expect(
-      service.findOrdersForDeviceWallet('device-id', query),
+      service.findOrdersForVerifiedWallet(
+        query,
+        verifiedWallet('0x9999999999999999999999999999999999999999'),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
 
+    expect(walletService.verifyWalletForDevice).not.toHaveBeenCalled();
     expect(repository.findByWalletWithPagination).not.toHaveBeenCalled();
   });
 
-  it('returns an order by hash after the wallet is associated with the device', async () => {
+  it('returns an order by hash for the verified wallet without rechecking device ownership', async () => {
     const result = { ok: true, data: null };
-    walletService.verifyWalletForDevice.mockResolvedValue({
-      walletId: 'wallet-id',
-      address: '0x1234567890123456789012345678901234567890',
-    });
     repository.findByTxHashForWallet.mockResolvedValue(result);
+    const walletAddress = '0x1234567890123456789012345678901234567890';
 
     await expect(
-      service.findOrderByHashForDeviceWallet(
-        'device-id',
+      service.findOrderByHashForVerifiedWallet(
         '0xorderhash',
-        '0x1234567890123456789012345678901234567890',
+        walletAddress,
+        verifiedWallet(walletAddress),
       ),
     ).resolves.toBe(result);
 
+    expect(walletService.verifyWalletForDevice).not.toHaveBeenCalled();
     expect(repository.findByTxHashForWallet).toHaveBeenCalledWith(
       '0xorderhash',
-      '0x1234567890123456789012345678901234567890',
+      walletAddress,
     );
-  });
-
-  it('fails closed when wallet ownership cannot be verified', async () => {
-    const query = {
-      address: '0x1234567890123456789012345678901234567890',
-      page: 1,
-      limit: 10,
-    };
-    walletService.verifyWalletForDevice.mockRejectedValue(
-      new Error('lookup failed'),
-    );
-
-    await expect(
-      service.findOrdersForDeviceWallet('device-id', query),
-    ).rejects.toBeInstanceOf(InternalServerErrorException);
-
-    expect(repository.findByWalletWithPagination).not.toHaveBeenCalled();
   });
 });

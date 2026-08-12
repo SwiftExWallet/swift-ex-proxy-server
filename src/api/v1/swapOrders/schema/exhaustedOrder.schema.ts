@@ -18,7 +18,7 @@ export class ExhaustedOrder {
     ref: 'SwapOrders',
     default: null,
   })
-  swapOrderId: mongoose.Schema.Types.ObjectId;
+  swapOrderId: mongoose.Types.ObjectId;
 
   @Prop({ default: null })
   deviceFcmToken: string;

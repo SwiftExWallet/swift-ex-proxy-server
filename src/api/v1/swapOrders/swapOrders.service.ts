@@ -3,11 +3,10 @@ import {
   Logger,
   ConflictException,
   InternalServerErrorException,
-  BadRequestException,
   ForbiddenException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import { SwapOrders } from './schema/swapOrder.schema';
 import { SwapOrderStatus } from '../common/enums/order.enum';
 import {
@@ -17,13 +16,7 @@ import {
   UpdateTxStatusDto,
 } from './dto/updateOrder.dto';
 import { DbResult, SwapOrderRepository } from './swapOrder.repository';
-import {
-  AllbridgeCoreSdk,
-  ChainSymbol,
-  nodeRpcUrlsDefault,
-} from '@allbridge/bridge-core-sdk';
-import { PaginatedResult, PaginationDto } from './dto/pagination.dto';
-import { WalletService } from '../wallet/wallet.service';
+import { PaginatedResult } from './dto/pagination.dto';
 import {
   getVerifiedWalletAddressFromWallet,
   resolveWalletChain,
@@ -33,17 +26,20 @@ import {
 } from '../common/helpers/requestWallet';
 import { swapProvider } from '../common/enums/chain.enum';
 import { NearIntentPollerService } from '../swap/nearIntent/nearIntentPoller.service';
+import { PortfolioService } from '../portfolio/portfolio.service';
+import { RedisService } from '../redis/redis.service';
+
+const SUCCESS_STATUSES = [SwapOrderStatus.COMPLETED, SwapOrderStatus.EXECUTED];
 
 @Injectable()
 export class SwapOrderService {
   private readonly logger = new Logger(SwapOrderService.name);
-  private readonly sdk = new AllbridgeCoreSdk(nodeRpcUrlsDefault);
   constructor(
-    @InjectModel(SwapOrders.name)
-    private readonly swapOrders: Model<SwapOrders>,
     private readonly swapOrderRepository: SwapOrderRepository,
-    private readonly walletService: WalletService,
+    private readonly redisService: RedisService,
+    @Inject(forwardRef(() => NearIntentPollerService))
     private readonly nearIntentPollerService: NearIntentPollerService,
+    private readonly portfolioService: PortfolioService,
   ) {}
 
   async store(
@@ -51,7 +47,7 @@ export class SwapOrderService {
     dto: StoreSwapOrderDto,
     verifiedWallet?: Wallet,
   ): Promise<SwapOrders> {
-    const { txHash, provider, memo } = dto;
+    const { txHash, quoteId, provider, memo } = dto;
     try {
       const verifiedDto = verifiedWallet
         ? withExplicitVerifiedWalletAddress(
@@ -67,21 +63,37 @@ export class SwapOrderService {
         usdValue = Number(verifiedDto.amountIn);
       }
 
-      const doc = new this.swapOrders({
+      const order = {
         ...verifiedDto,
         usdValue,
         deviceId: device._id,
-        status: verifiedDto.status ?? SwapOrderStatus.PENDING,
-        blockNumber: null,
-        confirmedAt: null,
         deviceFcmToken: device.fcmToken,
-      });
+      };
 
-      if (provider === swapProvider.NEARINTENT) {
-        this.nearIntentPollerService.startPolling(txHash, memo);
+      if (provider === swapProvider.ONEINCH_FUSION_PLUS) {
+        await this.redisService.setKey(
+          `active_subscription:fusion_plus:${txHash}`,
+          JSON.stringify({ orderHash: txHash, quoteId }),
+        );
       }
-      return await doc.save();
+      const createdOrder = await this.swapOrderRepository.create(order);
+      if (provider === swapProvider.NEARINTENT) {
+        const orderId = createdOrder._id.toHexString();
+        void this.nearIntentPollerService
+          .startPolling(txHash, orderId, memo)
+          .catch((err) =>
+            this.logger.error('Failed to start NEARINTENT poller', {
+              txHash,
+              orderId,
+              err,
+            }),
+          );
+      }
+      return createdOrder;
     } catch (err: any) {
+      if (err instanceof ConflictException) {
+        throw err;
+      }
       if (err.code === 11000) {
         throw new ConflictException(
           `Transaction with txHash "${dto.txHash}" already exists.`,
@@ -92,59 +104,49 @@ export class SwapOrderService {
     }
   }
 
-  async updateOrderStatus(orderHash: string, status: SwapOrderStatus) {
+  async updateOrderStatus(
+    orderHash: string,
+    status: SwapOrderStatus,
+  ): Promise<DbResult<void>> {
     const swapOrder = await this.swapOrderRepository.findByTxHash(orderHash);
-    if (!swapOrder) {
+    if (!swapOrder.ok || !swapOrder.data) {
       this.logger.error(`Swap order not found for orderHash ${orderHash}`);
-      return;
+      return { ok: false, error: 'updateStatus no data found' };
     }
-    return this.swapOrderRepository.updateStatus(orderHash, status);
+    const result = await this.swapOrderRepository.updateStatus(
+      orderHash,
+      status,
+    );
+    if (result.ok) {
+      this.triggerPortfolioRefresh(swapOrder.data, status);
+    }
+    return result;
   }
 
   async findByTxHash(txHash: string): Promise<DbResult<SwapOrders | null>> {
     return await this.swapOrderRepository.findByTxHash(txHash);
   }
 
-  async findByTxHashForWallet(
-    deviceId: string,
-    txHash: string,
-    walletAddress: string,
-  ): Promise<DbResult<SwapOrders | null>> {
-    await this.assertWalletBelongsToDevice(deviceId, walletAddress);
-    return await this.swapOrderRepository.findByTxHashForWallet(
-      txHash,
-      walletAddress,
-    );
+  async findById(id: string): Promise<DbResult<SwapOrders | null>> {
+    return await this.swapOrderRepository.findById(id);
   }
 
-  async findOrderByHashForDeviceWallet(
-    deviceId: string,
+  async findOrderByHashForVerifiedWallet(
     txHash: string,
     walletAddressOrQuery: string | MultiChainWalletAddressDto,
-    verifiedWallet?: Wallet,
+    verifiedWallet: Wallet,
   ): Promise<DbResult<SwapOrders | null>> {
     const walletAddress =
       typeof walletAddressOrQuery === 'string'
-        ? walletAddressOrQuery
-        : verifiedWallet
-          ? this.resolveVerifiedQueryAddress(
-              walletAddressOrQuery.address,
-              verifiedWallet,
-            )
-          : walletAddressOrQuery.address;
-    await this.assertWalletBelongsToDevice(deviceId, walletAddress);
+        ? this.resolveVerifiedQueryAddress(walletAddressOrQuery, verifiedWallet)
+        : this.resolveVerifiedQueryAddress(
+            walletAddressOrQuery.address,
+            verifiedWallet,
+          );
     return await this.swapOrderRepository.findByTxHashForWallet(
       txHash,
       walletAddress,
     );
-  }
-
-  async findByWallet(
-    deviceId: string,
-    walletAddress: string,
-  ): Promise<DbResult<SwapOrders[]>> {
-    await this.assertWalletBelongsToDevice(deviceId, walletAddress);
-    return await this.swapOrderRepository.findByWallet(walletAddress);
   }
 
   async findPendingByProvider(
@@ -175,50 +177,14 @@ export class SwapOrderService {
     );
   }
 
-  async getBridgeTxStatus(bridgeTxStatusDto: any) {
-    const { provider, walletType, txHash } = bridgeTxStatusDto;
-    try {
-      switch (provider) {
-        case swapProvider.ALLBRIDGE:
-          return await this.sdk.getTransferStatus(
-            ChainSymbol[walletType],
-            txHash,
-          );
-        default:
-          return `${provider} service not active yet.`;
-      }
-    } catch {
-      throw new BadRequestException(`Transaction not found.`);
-    }
-  }
-
-  async findByWalletWithPagination(
-    deviceId: string,
-    multiChainWalletAddressDto: MultiChainWalletAddressDto,
-    pagination: PaginationDto,
-  ): Promise<DbResult<PaginatedResult<SwapOrders>>> {
-    await this.assertWalletBelongsToDevice(
-      deviceId,
-      multiChainWalletAddressDto.address,
-    );
-    return await this.swapOrderRepository.findByWalletWithPagination(
-      multiChainWalletAddressDto.address,
-      pagination,
-    );
-  }
-
-  async findOrdersForDeviceWallet(
-    deviceId: string,
+  async findOrdersForVerifiedWallet(
     query: OrderByWalletQueryDto,
-    verifiedWallet?: Wallet,
+    verifiedWallet: Wallet,
   ): Promise<DbResult<PaginatedResult<SwapOrders>>> {
     const verifiedQuery = {
       ...query,
-      address: verifiedWallet
-        ? this.resolveVerifiedQueryAddress(query.address, verifiedWallet)
-        : query.address,
+      address: this.resolveVerifiedQueryAddress(query.address, verifiedWallet),
     };
-    await this.assertWalletBelongsToDevice(deviceId, verifiedQuery.address);
     return await this.swapOrderRepository.findByWalletWithPagination(
       verifiedQuery.address,
       verifiedQuery,
@@ -242,36 +208,48 @@ export class SwapOrderService {
     return getVerifiedWalletAddressFromWallet(verifiedWallet);
   }
 
-  private async assertWalletBelongsToDevice(
-    deviceId: string,
-    walletAddress: string,
-  ): Promise<void> {
-    let verifiedWallet: { walletId: string; address: string } | null;
-
-    try {
-      verifiedWallet = await this.walletService.verifyWalletForDevice(
-        deviceId,
-        walletAddress,
-      );
-    } catch {
-      throw new InternalServerErrorException(
-        'Could not verify wallet ownership.',
-      );
-    }
-
-    if (!verifiedWallet) {
-      throw new ForbiddenException(
-        'Wallet address is not associated with this device.',
-      );
-    }
-  }
-
   async updateOrderByHash(
     updateTxStatusDto: UpdateTxStatusDto,
   ): Promise<SwapOrders | null> {
-    return await this.swapOrderRepository.updateOrderStatus(
+    const order = await this.swapOrderRepository.updateOrderStatus(
       updateTxStatusDto.txHash,
       updateTxStatusDto.orderStatus,
     );
+    this.triggerPortfolioRefresh(order, updateTxStatusDto.orderStatus);
+    return order;
+  }
+
+  async updateOrderById(
+    id: string,
+    orderStatus: SwapOrderStatus,
+  ): Promise<SwapOrders | null> {
+    const order = await this.swapOrderRepository.updateOrderStatusById(
+      id,
+      orderStatus,
+    );
+    this.triggerPortfolioRefresh(order, orderStatus);
+    return order;
+  }
+
+  private triggerPortfolioRefresh(
+    order: SwapOrders | null,
+    status: SwapOrderStatus,
+  ): void {
+    if (!order || !SUCCESS_STATUSES.includes(status)) {
+      return;
+    }
+
+    const chains = [
+      ...new Set([order.fromChain, order.toChain].filter(Boolean)),
+    ];
+
+    this.portfolioService
+      .refreshPortfolio(order.deviceId.toString(), order.walletAddress, chains)
+      .catch((err) =>
+        this.logger.error('portfolio refresh trigger failed', {
+          txHash: order.txHash,
+          err,
+        }),
+      );
   }
 }

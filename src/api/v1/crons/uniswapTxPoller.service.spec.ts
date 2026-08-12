@@ -4,16 +4,16 @@ import { SwapOrderStatus } from '../common/enums/order.enum';
 import { UniswapTxPollerService } from './uniswapTxPoller.service';
 
 describe('UniswapTxPollerService', () => {
-  const originalEnv = process.env;
-  const originalFetch = global.fetch;
-
   let service: UniswapTxPollerService;
-  let repo: {
+  let swapOrderService: {
     findPendingByProvider: jest.Mock;
-    updateOrderStatus: jest.Mock;
+    updateOrderByHash: jest.Mock;
   };
   let firebaseNotificationService: {
     sendNotification: jest.Mock;
+  };
+  let txReceiptStatusService: {
+    getStatus: jest.Mock;
   };
 
   const createTx = (overrides: Record<string, any> = {}) =>
@@ -28,113 +28,107 @@ describe('UniswapTxPollerService', () => {
       ...overrides,
     }) as any;
 
-  const mockFetchReceipt = (receipt: Record<string, any>) => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: jest.fn().mockResolvedValue(receipt),
-    });
-  };
-
   beforeEach(() => {
-    process.env = {
-      ...originalEnv,
-      BLOCKSCOUT_ETH: 'https://blockscout.eth',
-      BLOCKSCOUT_ALLOWED_HOSTS: 'blockscout.eth',
-    };
-    (global as any).fetch = jest.fn();
-
     jest.spyOn(Logger.prototype, 'debug').mockImplementation();
     jest.spyOn(Logger.prototype, 'error').mockImplementation();
     jest.spyOn(Logger.prototype, 'log').mockImplementation();
     jest.spyOn(Logger.prototype, 'warn').mockImplementation();
 
-    repo = {
+    swapOrderService = {
       findPendingByProvider: jest.fn(),
-      updateOrderStatus: jest.fn(),
+      updateOrderByHash: jest.fn(),
     };
     firebaseNotificationService = {
       sendNotification: jest.fn().mockResolvedValue(undefined),
     };
+    txReceiptStatusService = {
+      getStatus: jest.fn(),
+    };
     service = new UniswapTxPollerService(
-      repo as any,
+      swapOrderService as any,
       firebaseNotificationService as any,
+      txReceiptStatusService as any,
     );
   });
 
   afterEach(() => {
-    process.env = originalEnv;
-    (global as any).fetch = originalFetch;
     jest.restoreAllMocks();
   });
 
   it('queries pending Uniswap swap orders', async () => {
-    repo.findPendingByProvider.mockResolvedValue({ ok: true, data: [] });
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [],
+    });
 
     await service.poll();
 
-    expect(repo.findPendingByProvider).toHaveBeenCalledWith(
+    expect(swapOrderService.findPendingByProvider).toHaveBeenCalledWith(
       swapProvider.UNISWAP,
     );
-    expect(global.fetch).not.toHaveBeenCalled();
+    expect(txReceiptStatusService.getStatus).not.toHaveBeenCalled();
   });
 
-  it('returns without polling when repository fetch fails', async () => {
-    repo.findPendingByProvider.mockResolvedValue({
+  it('returns without polling when service fetch fails', async () => {
+    swapOrderService.findPendingByProvider.mockResolvedValue({
       ok: false,
       error: 'db failed',
     });
 
     await service.poll();
 
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(repo.updateOrderStatus).not.toHaveBeenCalled();
+    expect(txReceiptStatusService.getStatus).not.toHaveBeenCalled();
+    expect(swapOrderService.updateOrderByHash).not.toHaveBeenCalled();
   });
 
   it('returns without polling when there are no pending orders', async () => {
-    repo.findPendingByProvider.mockResolvedValue({ ok: true, data: [] });
-
-    await service.poll();
-
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(repo.updateOrderStatus).not.toHaveBeenCalled();
-  });
-
-  it('skips orders when no Blockscout URL is configured for the chain', async () => {
-    repo.findPendingByProvider.mockResolvedValue({
+    swapOrderService.findPendingByProvider.mockResolvedValue({
       ok: true,
-      data: [createTx({ fromChain: 'SRB' })],
+      data: [],
     });
 
     await service.poll();
 
-    expect(global.fetch).not.toHaveBeenCalled();
-    expect(repo.updateOrderStatus).not.toHaveBeenCalled();
+    expect(txReceiptStatusService.getStatus).not.toHaveBeenCalled();
+    expect(swapOrderService.updateOrderByHash).not.toHaveBeenCalled();
+  });
+
+  it('skips orders while receipt status is still unknown', async () => {
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [createTx({ fromChain: 'SRB' })],
+    });
+    txReceiptStatusService.getStatus.mockResolvedValue(null);
+
+    await service.poll();
+
+    expect(swapOrderService.updateOrderByHash).not.toHaveBeenCalled();
   });
 
   it('maps a successful Blockscout receipt to completed and sends a notification', async () => {
     const tx = createTx();
-    repo.findPendingByProvider.mockResolvedValue({ ok: true, data: [tx] });
-    repo.updateOrderStatus.mockResolvedValue({ ...tx, txType: 'Swap' });
-    mockFetchReceipt({
-      status: '1',
-      message: 'OK',
-      result: { status: '1' },
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [tx],
+    });
+    txReceiptStatusService.getStatus.mockResolvedValue(
+      SwapOrderStatus.COMPLETED,
+    );
+    swapOrderService.updateOrderByHash.mockResolvedValue({
+      ...tx,
+      txType: 'Swap',
     });
 
     await service.poll();
 
-    expect(global.fetch).toHaveBeenCalledWith(
-      'https://blockscout.eth/api?module=transaction&action=gettxreceiptstatus&txhash=0xhash',
-      expect.objectContaining({
-        headers: { 'Content-Type': 'application/json' },
-        signal: expect.any(Object),
-      }),
-    );
-    expect(repo.updateOrderStatus).toHaveBeenCalledWith(
+    expect(txReceiptStatusService.getStatus).toHaveBeenCalledWith(
+      tx.fromChain,
       tx.txHash,
-      SwapOrderStatus.COMPLETED,
     );
+    expect(swapOrderService.updateOrderByHash).toHaveBeenCalledWith({
+      txHash: tx.txHash,
+      orderStatus: SwapOrderStatus.COMPLETED,
+    });
     expect(firebaseNotificationService.sendNotification).toHaveBeenCalledWith(
       tx.deviceFcmToken,
       {
@@ -147,19 +141,37 @@ describe('UniswapTxPollerService', () => {
 
   it('maps a failed Blockscout receipt to failed status', async () => {
     const tx = createTx();
-    repo.findPendingByProvider.mockResolvedValue({ ok: true, data: [tx] });
-    repo.updateOrderStatus.mockResolvedValue({ ...tx, txType: 'Swap' });
-    mockFetchReceipt({
-      status: '1',
-      message: 'OK',
-      result: { status: '0' },
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [tx],
+    });
+    txReceiptStatusService.getStatus.mockResolvedValue(SwapOrderStatus.FAILED);
+    swapOrderService.updateOrderByHash.mockResolvedValue({
+      ...tx,
+      txType: 'Swap',
     });
 
     await service.poll();
 
-    expect(repo.updateOrderStatus).toHaveBeenCalledWith(
-      tx.txHash,
-      SwapOrderStatus.FAILED,
+    expect(swapOrderService.updateOrderByHash).toHaveBeenCalledWith({
+      txHash: tx.txHash,
+      orderStatus: SwapOrderStatus.FAILED,
+    });
+  });
+
+  it('does not notify when the order update fails', async () => {
+    const tx = createTx();
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [tx],
+    });
+    txReceiptStatusService.getStatus.mockResolvedValue(
+      SwapOrderStatus.COMPLETED,
     );
+    swapOrderService.updateOrderByHash.mockResolvedValue(null);
+
+    await service.poll();
+
+    expect(firebaseNotificationService.sendNotification).not.toHaveBeenCalled();
   });
 });

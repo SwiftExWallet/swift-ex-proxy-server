@@ -8,8 +8,8 @@ import {
 describe('SwapOrdersController', () => {
   const swapOrderService = {
     store: jest.fn(),
-    findOrdersForDeviceWallet: jest.fn(),
-    findOrderByHashForDeviceWallet: jest.fn(),
+    findOrdersForVerifiedWallet: jest.fn(),
+    findOrderByHashForVerifiedWallet: jest.fn(),
   };
 
   let controller: SwapOrdersController;
@@ -35,12 +35,11 @@ describe('SwapOrdersController', () => {
       limit: 10,
     };
     const result = { ok: true, data: { data: [], total: 0 } };
-    swapOrderService.findOrdersForDeviceWallet.mockResolvedValue(result);
+    swapOrderService.findOrdersForVerifiedWallet.mockResolvedValue(result);
 
     await expect(controller.orderByWallet(req, query)).resolves.toBe(result);
 
-    expect(swapOrderService.findOrdersForDeviceWallet).toHaveBeenCalledWith(
-      'device-id',
+    expect(swapOrderService.findOrdersForVerifiedWallet).toHaveBeenCalledWith(
       query,
       req.wallet,
     );
@@ -57,7 +56,7 @@ describe('SwapOrdersController', () => {
       },
     };
     const result = { ok: true, data: null };
-    swapOrderService.findOrderByHashForDeviceWallet.mockResolvedValue(result);
+    swapOrderService.findOrderByHashForVerifiedWallet.mockResolvedValue(result);
 
     await expect(
       controller.getOrderByOrderhash(req, '0xorderhash', {
@@ -66,9 +65,8 @@ describe('SwapOrdersController', () => {
     ).resolves.toBe(result);
 
     expect(
-      swapOrderService.findOrderByHashForDeviceWallet,
+      swapOrderService.findOrderByHashForVerifiedWallet,
     ).toHaveBeenCalledWith(
-      'device-id',
       '0xorderhash',
       {
         address: '0x1234567890123456789012345678901234567890',
@@ -77,7 +75,7 @@ describe('SwapOrdersController', () => {
     );
   });
 
-  it('applies wallet-scoped limits to order reads and device limits to bridge status', () => {
+  it('applies wallet-scoped limits to order reads', () => {
     expect(
       Reflect.getMetadata(RATE_LIMIT_KEY, controller.orderByWallet),
     ).toEqual([
@@ -100,34 +98,12 @@ describe('SwapOrdersController', () => {
         keyBy: 'wallet',
       },
     ]);
-    expect(
-      Reflect.getMetadata(RATE_LIMIT_KEY, controller.bridgeOrderStatus),
-    ).toEqual([
-      {
-        points: 60,
-        duration: 60,
-        key: 'swap-orders-bridge-status-ip',
-        keyBy: 'ip',
-      },
-      {
-        points: 30,
-        duration: 60,
-        key: 'swap-orders-bridge-status-device',
-        keyBy: 'device',
-      },
-    ]);
   });
 
   it('applies route-specific body size limits to write routes', () => {
     expect(Reflect.getMetadata(BODY_SIZE_LIMIT_KEY, controller.store)).toEqual({
       maxBytes: BODY_SIZE_LIMITS.swapOrder,
       key: 'swap-orders-store',
-    });
-    expect(
-      Reflect.getMetadata(BODY_SIZE_LIMIT_KEY, controller.bridgeOrderStatus),
-    ).toEqual({
-      maxBytes: BODY_SIZE_LIMITS.simple,
-      key: 'swap-orders-bridge-status',
     });
   });
 });

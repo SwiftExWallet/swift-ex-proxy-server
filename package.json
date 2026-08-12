@@ -42,6 +42,7 @@
     "@uniswap/sdk-core": "^7.7.2",
     "@uniswap/smart-order-router": "^4.31.10",
     "@uniswap/v3-sdk": "^3.25.2",
+    "alchemy-sdk": "^3.6.5",
     "axios": "^1.13.6",
     "bottleneck": "^2.19.5",
     "class-transformer": "^0.5.1",

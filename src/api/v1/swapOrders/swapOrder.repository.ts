@@ -15,13 +15,10 @@ import {
   PaginatedResult,
   PAGE_SIZE,
 } from './dto/pagination.dto';
-import { PortfolioService } from '../portfolio/portfolio.service';
 
 export type DbResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 const PUBLIC_ORDER_SELECT = '-deviceId -deviceFcmToken';
-
-const SUCCESS_STATUSES = [SwapOrderStatus.COMPLETED, SwapOrderStatus.EXECUTED];
 
 @Injectable()
 export class SwapOrderRepository {
@@ -30,30 +27,7 @@ export class SwapOrderRepository {
   constructor(
     @InjectModel(SwapOrders.name)
     private readonly model: Model<SwapOrders>,
-    private readonly portfolioService: PortfolioService,
   ) {}
-
-  private triggerPortfolioRefresh(
-    order: SwapOrders | null,
-    status: SwapOrderStatus,
-  ): void {
-    if (!order || !SUCCESS_STATUSES.includes(status)) {
-      return;
-    }
-
-    const chains = [
-      ...new Set([order.fromChain, order.toChain].filter(Boolean)),
-    ];
-
-    this.portfolioService
-      .refreshPortfolio(order.deviceId.toString(), order.walletAddress, chains)
-      .catch((err) =>
-        this.logger.error('portfolio refresh trigger failed', {
-          txHash: order.txHash,
-          err,
-        }),
-      );
-  }
 
   async create(dto: StoreSwapOrderDto): Promise<SwapOrders> {
     try {
@@ -82,6 +56,16 @@ export class SwapOrderRepository {
     } catch (err) {
       this.logger.error('findByTxHash failed', { txHash, err });
       return { ok: false, error: 'findByTxHash failed' };
+    }
+  }
+
+  async findById(id: string): Promise<DbResult<SwapOrders | null>> {
+    try {
+      const data = await this.model.findById(id).exec();
+      return { ok: true, data };
+    } catch (err) {
+      this.logger.error('findById failed', { id, err });
+      return { ok: false, error: 'findById failed' };
     }
   }
 
@@ -229,8 +213,6 @@ export class SwapOrderRepository {
         return { ok: false, error: 'updateStatus no data found' };
       }
 
-      this.triggerPortfolioRefresh(result, status);
-
       return { ok: true, data: undefined };
     } catch (err) {
       this.logger.error('updateStatus failed', { txHash, status, err });
@@ -306,11 +288,39 @@ export class SwapOrderRepository {
         throw new BadRequestException('order data not found');
       }
 
-      this.triggerPortfolioRefresh(result, status);
-
       return result;
     } catch (err) {
       this.logger.error('order data not found', { txHash, status, err });
+      throw new BadRequestException('order data not found');
+    }
+  }
+
+  async updateOrderStatusById(
+    id: string,
+    status: SwapOrderStatus,
+    blockNumber: number | null = null,
+  ): Promise<SwapOrders | null> {
+    try {
+      const result = await this.model.findByIdAndUpdate(
+        id,
+        {
+          $set: {
+            status,
+            confirmedAt: new Date(),
+            blockNumber,
+          },
+        },
+        { new: true },
+      );
+
+      if (!result) {
+        this.logger.warn(`order data not found for id=${id}`);
+        throw new BadRequestException('order data not found');
+      }
+
+      return result;
+    } catch (err) {
+      this.logger.error('order data not found', { id, status, err });
       throw new BadRequestException('order data not found');
     }
   }

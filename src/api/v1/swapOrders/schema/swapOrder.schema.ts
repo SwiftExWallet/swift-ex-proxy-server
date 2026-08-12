@@ -8,18 +8,18 @@ import { swapProvider } from '../../common/enums/chain.enum';
 
 @Schema({ collection: 'SwapOrders', timestamps: true })
 export class SwapOrders {
-  _id: mongoose.Schema.Types.ObjectId;
+  _id: mongoose.Types.ObjectId;
 
   @Prop({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'DeviceSchema',
-    required: true,
+    required: false,
   })
   deviceId: mongoose.Types.ObjectId;
 
   @Prop({
     required: true,
-    unique: true,
+    unique: false,
     index: true,
   })
   txHash: string;
@@ -32,6 +32,12 @@ export class SwapOrders {
 
   @Prop({ required: true })
   walletAddress: string;
+
+  @Prop({ default: null })
+  fromAddress: string;
+
+  @Prop({ default: null })
+  toAddress: string;
 
   @Prop({ required: true })
   fromChain: string;

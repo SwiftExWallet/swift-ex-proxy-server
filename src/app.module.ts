@@ -22,7 +22,6 @@ import { SwapOrdersModule } from './api/v1/swapOrders/swapOrders.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { getMongoConnectionConfig } from './api/v1/common/config/datastore.config';
 import { WalletModule } from './api/v1/wallet/wallet.module';
-import { DeviceWalletMiddleware } from './api/v1/common/middleware/device-wallet.middleware';
 import { BodySizeLimitGuard } from './api/v1/common/guard/body-size-limit.guard';
 import { MarketDataModule } from './api/v1/market-data/market-data.module';
 import { OnOffRampModule } from './api/v1/on-off-ramp/on-off-ramp.module';
@@ -106,31 +105,5 @@ export class AppModule {
         },
       )
       .forRoutes('*');
-
-    consumer
-      .apply(DeviceWalletMiddleware)
-      .exclude(
-        {
-          path: 'api/v1/swap/1inch/customNotification',
-          method: RequestMethod.POST,
-        },
-        {
-          path: 'api/v1/swapOrders/bridgeOrderStatus',
-          method: RequestMethod.POST,
-        },
-      )
-      .forRoutes(
-        'api/v1/quoter/{*path}',
-        'api/v1/swap/1inch/{*path}',
-        'api/v1/swap/uniswap/{*path}',
-        'api/v1/swapOrders/{*path}',
-        'api/v1/eth/{*path}',
-        'api/v1/usdt/{*path}',
-        'api/v1/bsc/{*path}',
-        {
-          path: 'api/v1/bridge/swap-transaction/prepare',
-          method: RequestMethod.POST,
-        },
-      );
   }
 }

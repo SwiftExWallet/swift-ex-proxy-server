@@ -25,6 +25,11 @@ describe('swagger config', () => {
         in: 'header',
         name: 'x-wallet-address',
       },
+      walletToken: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'x-auth-wallet-token',
+      },
     });
   });
 
