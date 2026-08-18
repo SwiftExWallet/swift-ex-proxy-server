@@ -6,6 +6,8 @@ import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateFcmTokenDto } from './dto/update-fcm-token.dto';
 import { User } from '../users/schema/user.schema';
 import { JwtService } from '@nestjs/jwt';
+import { DeviceAttestationService } from './device-attestation.service';
+import { DeviceAttestationDto } from './dto/device-attestation.dto';
 
 @Injectable()
 export class DeviceService {
@@ -14,17 +16,22 @@ export class DeviceService {
   constructor(
     private readonly deviceRepo: DeviceRepository,
     private readonly jwtService: JwtService,
+    private readonly deviceAttestationService: DeviceAttestationService,
   ) {}
 
   async create(createDeviceDto: CreateDeviceDto): Promise<string> {
     const { uniqueId, fcmToken } = createDeviceDto;
+    const attestation = await this.deviceAttestationService.verify(
+      createDeviceDto.attestation,
+      createDeviceDto.type,
+    );
     let device: Device | null = await this.deviceRepo.findOne({ uniqueId });
     if (device) {
       this.logger.log('==== updating fcm token ===');
-      await this.deviceRepo.updateFcmToken(device._id, fcmToken);
+      await this.deviceRepo.updateFcmToken(device._id, fcmToken, attestation);
     } else {
       this.logger.log('==== device creating ===');
-      device = await this.deviceRepo.create(createDeviceDto);
+      device = await this.deviceRepo.create(createDeviceDto, attestation);
     }
     this.logger.log('==== returning device token ===');
     return this.jwtService.sign(
@@ -48,13 +55,22 @@ export class DeviceService {
     if (!device) {
       throw new NotFoundException('Device not found');
     }
+    const attestation = await this.deviceAttestationService.verify(
+      updateFcmToken.attestation,
+    );
     this.logger.log('==== updating user fcm end===');
-    return this.deviceRepo.updateFcmToken(device._id, fcmToken);
+    return this.deviceRepo.updateFcmToken(device._id, fcmToken, attestation);
   }
 
-  async updateUser(device: Device, user: User): Promise<Device | null> {
+  async updateUser(
+    device: Device,
+    user: User,
+    attestationPayload?: DeviceAttestationDto,
+  ): Promise<Device | null> {
     this.logger.log('==== updating user ===');
-    return this.deviceRepo.updateUser(device._id, user._id);
+    const attestation =
+      await this.deviceAttestationService.verify(attestationPayload);
+    return this.deviceRepo.updateUser(device._id, user._id, attestation);
   }
 
   findOne(_id: mongoose.Schema.Types.ObjectId): Promise<Device | null> {

@@ -1,4 +1,6 @@
-import { IsNotEmpty, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsNotEmpty, IsOptional, ValidateNested } from 'class-validator';
+import { DeviceAttestationDto } from './device-attestation.dto';
 
 export class CreateDeviceDto {
   @IsOptional()
@@ -18,4 +20,9 @@ export class CreateDeviceDto {
 
   @IsNotEmpty()
   fcmToken: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DeviceAttestationDto)
+  attestation?: DeviceAttestationDto;
 }

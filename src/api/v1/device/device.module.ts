@@ -4,12 +4,13 @@ import { DeviceRepository } from './device.repository';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Device, DeviceSchema } from './schema/device.schema';
 import { DeviceController } from './device.controller';
+import { DeviceAttestationService } from './device-attestation.service';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Device.name, schema: DeviceSchema }]),
   ],
-  providers: [DeviceService, DeviceRepository],
+  providers: [DeviceService, DeviceRepository, DeviceAttestationService],
   exports: [DeviceService],
   controllers: [DeviceController],
 })

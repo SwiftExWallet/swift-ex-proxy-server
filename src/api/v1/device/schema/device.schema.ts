@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
+import { DeviceAttestationProvider } from '../dto/device-attestation.dto';
 
 @Schema({ timestamps: true })
 export class Device {
@@ -29,6 +30,24 @@ export class Device {
 
   @Prop()
   fcmToken: string;
+
+  @Prop({ type: String, enum: DeviceAttestationProvider, default: null })
+  attestationProvider?: DeviceAttestationProvider | null;
+
+  @Prop({ type: String, default: null })
+  attestationStatus?: string | null;
+
+  @Prop({ type: Date, default: null })
+  attestationVerifiedAt?: Date | null;
+
+  @Prop({ type: String, default: null })
+  attestationPackageName?: string | null;
+
+  @Prop({ type: String, default: null })
+  attestationAppVerdict?: string | null;
+
+  @Prop({ type: [String], default: undefined })
+  attestationDeviceVerdict?: string[];
 }
 
 export const DeviceSchema = SchemaFactory.createForClass(Device);
