@@ -72,6 +72,30 @@ describe('SwapOrderService wallet ownership', () => {
     });
   });
 
+  it('stores swap orders without device metadata when device is unavailable', async () => {
+    const dto = {
+      txHash: '0xwebtxhash',
+      provider: 'UNISWAP',
+      walletAddress: '0x1234567890123456789012345678901234567890',
+      fromChain: 'ETH',
+      toChain: 'BSC',
+      fromToken: 'ETH',
+      toToken: 'BNB',
+      amountIn: '1',
+      amountOut: '2',
+      usdValue: 12,
+    } as any;
+    const created = { _id: 'order-id', ...dto };
+    repository.create.mockResolvedValue(created);
+
+    await expect(service.store(undefined, dto)).resolves.toBe(created);
+
+    expect(repository.create).toHaveBeenCalledWith({
+      ...dto,
+      usdValue: 12,
+    });
+  });
+
   it('starts NEAR intent polling with the persisted order id and memo', async () => {
     const device = { _id: 'device-id', fcmToken: 'fcm-token' };
     const dto = {
@@ -138,6 +162,24 @@ describe('SwapOrderService wallet ownership', () => {
       order.walletAddress,
       ['ETH', 'BSC'],
     );
+  });
+
+  it('skips portfolio refresh after completed status update without device id', async () => {
+    const order = {
+      txHash: '0xwebtxhash',
+      deviceId: null,
+      walletAddress: '0x1234567890123456789012345678901234567890',
+      fromChain: 'ETH',
+      toChain: 'BSC',
+    };
+    repository.findByTxHash.mockResolvedValue({ ok: true, data: order });
+    repository.updateStatus.mockResolvedValue({ ok: true, data: undefined });
+
+    await expect(
+      service.updateOrderStatus('0xwebtxhash', SwapOrderStatus.COMPLETED),
+    ).resolves.toEqual({ ok: true, data: undefined });
+
+    expect(portfolioService.refreshPortfolio).not.toHaveBeenCalled();
   });
 
   it('returns wallet orders for the verified wallet without rechecking device ownership', async () => {

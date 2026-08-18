@@ -545,6 +545,10 @@ export class InchService implements OnModuleInit {
     }
 
     const { deviceId, walletAddress, fromChain } = result.data;
+    if (!deviceId) {
+      return;
+    }
+
     try {
       await this.portfolioService.refreshPortfolio(
         String(deviceId),
@@ -990,9 +994,13 @@ export class InchService implements OnModuleInit {
   }
 
   async fireCustomNotification(device: any, notificationDto: NotificationDto) {
+    if (!device?.fcmToken) {
+      return false;
+    }
+
     try {
       await this.firebaseNotificationService.sendNotification(
-        device?.fcmToken as string,
+        device.fcmToken as string,
         {
           title: notificationDto.title,
           body: notificationDto.body,

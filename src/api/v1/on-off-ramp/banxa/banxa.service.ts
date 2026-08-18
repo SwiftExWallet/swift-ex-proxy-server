@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { AssetsDto, BanxaQuotesDto, OrderType } from './dto/banxa-quotes.dto';
 import { CreateOrderDto } from './dto/banxa-create-order.dto';
 import { HttpRequestMethod } from '../../common/enums/httpRequest.enum';
@@ -40,7 +41,7 @@ export class BanxaService {
 
   async buyOrderCreate(
     createOrder: CreateOrderDto,
-    currentDevice: Device,
+    currentDevice?: Device,
   ): Promise<HttpServiceResponse | void> {
     try {
       this.logger.log('====banxa buy order create started===');
@@ -68,7 +69,7 @@ export class BanxaService {
 
   async sellOrderCreate(
     createOrder: CreateOrderDto,
-    currentDevice: Device,
+    currentDevice?: Device,
   ): Promise<HttpServiceResponse | void> {
     try {
       this.logger.log('====banxa sell order create started===');
@@ -195,9 +196,22 @@ export class BanxaService {
     };
   }
 
-  private getDeviceId(currentDevice: Device): string {
-    return (
-      currentDevice._id as unknown as { toHexString: () => string }
-    ).toHexString();
+  private getDeviceId(currentDevice?: Device): string {
+    const deviceId = currentDevice?._id as unknown;
+
+    if (typeof deviceId === 'string') {
+      return deviceId;
+    }
+
+    if (
+      deviceId &&
+      typeof deviceId === 'object' &&
+      'toHexString' in deviceId &&
+      typeof deviceId.toHexString === 'function'
+    ) {
+      return deviceId.toHexString();
+    }
+
+    return randomUUID();
   }
 }

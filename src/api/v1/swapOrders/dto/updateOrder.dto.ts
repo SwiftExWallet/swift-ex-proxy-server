@@ -13,7 +13,7 @@ import {
   SwapOrderStatus as OrderStatus,
   OrderTxType,
 } from '../../common/enums/order.enum';
-import { ValidWalletType } from '../../common/enums/all-bridge.enum';
+import { ValidWalletType } from '../../common/enums/wallet-type.enum';
 import { PaginationDto } from './pagination.dto';
 
 export class StoreSwapOrderDto {

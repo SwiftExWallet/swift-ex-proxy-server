@@ -6,7 +6,7 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
-import { ValidWalletType } from '../../common/enums/all-bridge.enum';
+import { ValidWalletType } from '../../common/enums/wallet-type.enum';
 
 const MAX_SWAP_EXECUTE_TXS = 5;
 const MAX_SIGNED_TRANSACTION_LENGTH = 20_000;

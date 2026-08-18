@@ -15,7 +15,7 @@ export class SwapOrders {
     ref: 'DeviceSchema',
     required: false,
   })
-  deviceId: mongoose.Types.ObjectId;
+  deviceId?: mongoose.Types.ObjectId | null;
 
   @Prop({
     required: true,
@@ -77,8 +77,8 @@ export class SwapOrders {
   @Prop({ default: null })
   confirmedAt: Date;
 
-  @Prop({ required: true })
-  deviceFcmToken: string;
+  @Prop({ type: String, default: null })
+  deviceFcmToken?: string | null;
 
   @Prop({ default: null })
   encryptedFusionSecrets: string;

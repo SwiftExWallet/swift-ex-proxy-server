@@ -114,4 +114,21 @@ describe('NearIntentPollerService', () => {
       ['ETH'],
     );
   });
+
+  it('skips source portfolio refresh when the order has no device id', async () => {
+    swapOrderService.findById.mockResolvedValue({
+      ok: true,
+      data: {
+        deviceId: null,
+        walletAddress: '0xwallet',
+        fromChain: 'ETH',
+      },
+    });
+
+    const service = createService();
+
+    await (service as any).refreshSourcePortfolio('order-id');
+
+    expect(portfolioService.refreshPortfolio).not.toHaveBeenCalled();
+  });
 });

@@ -5,7 +5,7 @@ import {
   ValidatorConstraintInterface,
   registerDecorator,
 } from 'class-validator';
-import { ValidWalletType } from '../enums/all-bridge.enum';
+import { ValidWalletType } from '../enums/wallet-type.enum';
 
 @ValidatorConstraint({ async: false })
 export class validations_token implements ValidatorConstraintInterface {

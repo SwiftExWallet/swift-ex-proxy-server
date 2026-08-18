@@ -173,6 +173,9 @@ export class RateLimitGuard implements CanActivate {
     for (const config of configs) {
       const label = config.key ?? `${config.points}_${config.duration}`;
       const keyBy = config.keyBy ?? 'ip';
+      if (keyBy === 'device' && !request.device?._id) {
+        continue;
+      }
       const limiter = this.getRouteLimiter(
         config.points,
         config.duration,

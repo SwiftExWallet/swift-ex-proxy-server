@@ -1,5 +1,5 @@
 import { validate } from 'class-validator';
-import { ValidWalletType } from '../enums/all-bridge.enum';
+import { ValidWalletType } from '../enums/wallet-type.enum';
 import { IsTokenValid, validations_token } from './valid-token.decorator';
 
 describe('valid-token decorator', () => {

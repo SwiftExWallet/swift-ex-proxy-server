@@ -168,6 +168,17 @@ describe('InchService Fusion+ poller', () => {
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(true);
   });
 
+  it('skips source portfolio refresh when the order has no device id', async () => {
+    swapOrderService.findByTxHash.mockResolvedValueOnce({
+      ok: true,
+      data: { ...updatedOrder, deviceId: null },
+    });
+
+    await (service as any).refreshSourcePortfolio(orderHash);
+
+    expect(portfolioService.refreshPortfolio).not.toHaveBeenCalled();
+  });
+
   it('rewrites legacy plaintext secret states as encrypted Redis envelopes', async () => {
     redisService.getKey.mockResolvedValueOnce(JSON.stringify(secretState));
 
@@ -220,6 +231,17 @@ describe('InchService Fusion+ poller', () => {
       `fusion_secrets:${orderHash}`,
     );
     expect((service as any).activeSecretPollers.has(orderHash)).toBe(false);
+  });
+
+  it('skips custom notifications when there is no device token', async () => {
+    await expect(
+      service.fireCustomNotification(undefined, {
+        title: 'Swap',
+        body: 'Updated',
+      } as any),
+    ).resolves.toBe(false);
+
+    expect(firebaseNotificationService.sendNotification).not.toHaveBeenCalled();
   });
 
   it('marks the order exhausted after five reschedules on poll failures', async () => {

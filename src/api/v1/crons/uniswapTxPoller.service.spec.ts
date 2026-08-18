@@ -159,6 +159,26 @@ describe('UniswapTxPollerService', () => {
     });
   });
 
+  it('skips notification when completed web orders have no device token', async () => {
+    const tx = createTx({ deviceFcmToken: null });
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [tx],
+    });
+    txReceiptStatusService.getStatus.mockResolvedValue(
+      SwapOrderStatus.COMPLETED,
+    );
+    swapOrderService.updateOrderByHash.mockResolvedValue(tx);
+
+    await service.poll();
+
+    expect(swapOrderService.updateOrderByHash).toHaveBeenCalledWith({
+      txHash: tx.txHash,
+      orderStatus: SwapOrderStatus.COMPLETED,
+    });
+    expect(firebaseNotificationService.sendNotification).not.toHaveBeenCalled();
+  });
+
   it('does not notify when the order update fails', async () => {
     const tx = createTx();
     swapOrderService.findPendingByProvider.mockResolvedValue({

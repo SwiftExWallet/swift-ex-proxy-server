@@ -66,8 +66,8 @@ export class SwapOrderService {
       const order = {
         ...verifiedDto,
         usdValue,
-        deviceId: device._id,
-        deviceFcmToken: device.fcmToken,
+        ...(device?._id ? { deviceId: device._id } : {}),
+        ...(device?.fcmToken ? { deviceFcmToken: device.fcmToken } : {}),
       };
 
       if (provider === swapProvider.ONEINCH_FUSION_PLUS) {
@@ -235,7 +235,7 @@ export class SwapOrderService {
     order: SwapOrders | null,
     status: SwapOrderStatus,
   ): void {
-    if (!order || !SUCCESS_STATUSES.includes(status)) {
+    if (!order || !SUCCESS_STATUSES.includes(status) || !order.deviceId) {
       return;
     }
 

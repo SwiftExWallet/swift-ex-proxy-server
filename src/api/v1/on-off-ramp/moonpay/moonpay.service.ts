@@ -3,7 +3,7 @@ import {
   BadRequestException,
   Injectable,
 } from '@nestjs/common';
-import type { Types } from 'mongoose';
+import { randomUUID } from 'crypto';
 import {
   buildSignedWidgetUrl,
   getCurrencies,
@@ -46,15 +46,13 @@ export class MoonPayService {
     }
   }
 
-  async buildLink(opts: LinkDto, device: Device) {
+  async buildLink(opts: LinkDto, device?: Device) {
     if (!(await isSupported(opts.code, opts.side))) {
       throw new BadRequestException(
         `${opts.code} is not supported for ${opts.side}`,
       );
     }
-    const externalTransactionId = (
-      device._id as unknown as Types.ObjectId
-    ).toHexString();
+    const externalTransactionId = this.getExternalTransactionId(device);
     try {
       const url = buildSignedWidgetUrl({
         side: opts.side,
@@ -68,5 +66,24 @@ export class MoonPayService {
     } catch (err: any) {
       throw new BadRequestException(err?.message ?? 'link build failed');
     }
+  }
+
+  private getExternalTransactionId(device?: Device): string {
+    const deviceId = device?._id as unknown;
+
+    if (typeof deviceId === 'string') {
+      return deviceId;
+    }
+
+    if (
+      deviceId &&
+      typeof deviceId === 'object' &&
+      'toHexString' in deviceId &&
+      typeof deviceId.toHexString === 'function'
+    ) {
+      return deviceId.toHexString();
+    }
+
+    return randomUUID();
   }
 }

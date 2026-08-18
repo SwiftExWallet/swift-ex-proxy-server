@@ -90,6 +90,8 @@ export class UniswapTxPollerService {
   }
 
   private async processTxNotification(tx: SwapOrders): Promise<void> {
+    if (!tx.deviceFcmToken) return;
+
     const notificationPayload: NotificationDto = {
       title: `Order Completed: ${tx.amountOut} ${tx.toToken}`,
       body: `From ${tx.walletAddress?.slice(0, 4)}.....${tx.walletAddress?.slice(-4)}`,

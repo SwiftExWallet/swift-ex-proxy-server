@@ -24,16 +24,20 @@ interface DeviceTokenPayload {
 export const DEVICE_AUTH_TOKEN_HEADER = 'x-auth-device-token';
 export const WALLET_AUTH_TOKEN_HEADER = 'x-auth-wallet-token';
 export const WALLET_ADDRESS_HEADER = 'x-wallet-address';
-const WALLET_TOKEN_ROUTE_PREFIXES = [
+const WALLET_REQUIRED_ROUTE_PREFIXES = [
   'api/v1/quoter',
   'api/v1/swap/1inch',
-  'api/v1/swap/uniswap',
   'api/v1/swapOrders',
   'api/v1/eth',
   'api/v1/usdt',
   'api/v1/bsc',
 ];
-const WALLET_TOKEN_ROUTE_PATHS = ['api/v1/bridge/swap-transaction/prepare'];
+const WALLET_REQUIRED_ROUTE_PATHS = ['api/v1/swap'];
+const DEVICE_REQUIRED_ROUTE_PREFIXES = ['api/v1/wallet'];
+const DEVICE_REQUIRED_ROUTE_PATHS = [
+  'PATCH api/v1/device/update-fcm-token',
+  'PATCH api/v1/device/update-user',
+];
 
 @Injectable()
 export class DeviceAuthTokenMiddleware implements NestMiddleware {
@@ -47,19 +51,27 @@ export class DeviceAuthTokenMiddleware implements NestMiddleware {
     const deviceToken = this.getHeaderToken(req, DEVICE_AUTH_TOKEN_HEADER);
     if (deviceToken) {
       await this.attachDevice(req, deviceToken);
-      await this.attachDeviceWalletIfNeeded(req);
-      next();
-      return;
     }
 
     const walletToken = this.getHeaderToken(req, WALLET_AUTH_TOKEN_HEADER);
-    if (walletToken && this.isWalletTokenRoute(req)) {
+    const walletAddress = this.getWalletAddress(req);
+    if (req.device && walletAddress) {
+      await this.attachDeviceWallet(req, walletAddress);
+    } else if (walletToken) {
       await this.attachWallet(req, walletToken);
-      next();
-      return;
     }
 
-    throw new UnauthorizedException('Device token not found');
+    if (this.isDeviceRequiredRoute(req) && !req.device) {
+      throw new UnauthorizedException('Device token not found');
+    }
+
+    if (this.isWalletRequiredRoute(req) && !req.wallet) {
+      throw new UnauthorizedException(
+        req.device ? 'Wallet address not found.' : 'Wallet token not found',
+      );
+    }
+
+    next();
   }
 
   private async attachDevice(req: any, token: string): Promise<void> {
@@ -85,17 +97,10 @@ export class DeviceAuthTokenMiddleware implements NestMiddleware {
     req.device = device;
   }
 
-  private async attachDeviceWalletIfNeeded(req: any): Promise<void> {
-    if (!this.isWalletTokenRoute(req)) {
-      return;
-    }
-
-    const walletAddress = this.getWalletAddress(req);
-
-    if (!walletAddress) {
-      throw new UnauthorizedException('Wallet address not found.');
-    }
-
+  private async attachDeviceWallet(
+    req: any,
+    walletAddress: string,
+  ): Promise<void> {
     const verifiedWallet = await this.walletService.verifyWalletForDevice(
       req.device._id,
       walletAddress,
@@ -189,26 +194,42 @@ export class DeviceAuthTokenMiddleware implements NestMiddleware {
     };
   }
 
-  private isWalletTokenRoute(req: any): boolean {
-    const method = String(req.method ?? '').toUpperCase();
-    const path = String(req.originalUrl ?? req.url ?? '')
-      .split('?')[0]
-      .replace(/^\/+/, '');
+  private isWalletRequiredRoute(req: any): boolean {
+    const method = this.getMethod(req);
+    const path = this.getPath(req);
 
-    if (
-      method === 'POST' &&
-      (path === 'api/v1/swap/1inch/customNotification' ||
-        path === 'api/v1/swapOrders/bridgeOrderStatus')
-    ) {
+    if (method === 'POST' && path === 'api/v1/swap/1inch/customNotification') {
       return false;
     }
 
     return (
-      WALLET_TOKEN_ROUTE_PATHS.includes(path) ||
-      WALLET_TOKEN_ROUTE_PREFIXES.some(
+      WALLET_REQUIRED_ROUTE_PATHS.includes(path) ||
+      WALLET_REQUIRED_ROUTE_PREFIXES.some(
         (prefix) => path === prefix || path.startsWith(`${prefix}/`),
       )
     );
+  }
+
+  private isDeviceRequiredRoute(req: any): boolean {
+    const methodPath = `${this.getMethod(req)} ${this.getPath(req)}`;
+    const path = this.getPath(req);
+
+    return (
+      DEVICE_REQUIRED_ROUTE_PATHS.includes(methodPath) ||
+      DEVICE_REQUIRED_ROUTE_PREFIXES.some(
+        (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+      )
+    );
+  }
+
+  private getMethod(req: any): string {
+    return String(req.method ?? '').toUpperCase();
+  }
+
+  private getPath(req: any): string {
+    return String(req.originalUrl ?? req.url ?? '')
+      .split('?')[0]
+      .replace(/^\/+|\/+$/g, '');
   }
 
   private getVerifyOptions(): Record<string, string> {

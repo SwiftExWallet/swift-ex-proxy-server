@@ -165,6 +165,26 @@ describe('EvmTxPollerService', () => {
     });
   });
 
+  it('skips notification when completed web orders have no device token', async () => {
+    const tx = createTx({ deviceFcmToken: null });
+    swapOrderService.findPendingByProvider.mockResolvedValue({
+      ok: true,
+      data: [tx],
+    });
+    txReceiptStatusService.getStatus.mockResolvedValue(
+      SwapOrderStatus.COMPLETED,
+    );
+    swapOrderService.updateOrderByHash.mockResolvedValue(tx);
+
+    await service.poll();
+
+    expect(swapOrderService.updateOrderByHash).toHaveBeenCalledWith({
+      txHash: tx.txHash,
+      orderStatus: SwapOrderStatus.COMPLETED,
+    });
+    expect(firebaseNotificationService.sendNotification).not.toHaveBeenCalled();
+  });
+
   it('backs off unresolved transactions before exhausting them', async () => {
     jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
     const tx = createTx();

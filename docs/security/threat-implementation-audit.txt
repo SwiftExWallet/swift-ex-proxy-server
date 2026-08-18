@@ -103,20 +103,19 @@ No current Alchemy/Banxa webhook payload processing is present in src/.
 Evidence: src/
 
 T12 - Open
-Pollers still trust Blockscout, Allbridge, and 1inch statuses without
+Pollers still trust Blockscout and 1inch statuses without
 independent reconciliation against expected chain, tx hash, amount, recipient,
 or contract.
 Evidence:
 - src/api/v1/crons/evmTxPoller.service.ts
 - src/api/v1/crons/uniswapTxPoller.service.ts
-- src/api/v1/crons/allbridgePoller.service.ts
 - src/api/v1/swap/1inch/1inch.service.ts
 
 T13 - Mostly implemented
 Transaction arrays now have max size and string length limits, the global API
 body size limit is configured, and expensive/public-facing write routes have
 route-specific body-size caps. Broadcast, execute, quote, prepare, submit,
-notification, bridge, quoter, swap-order store, and status request bodies are
+notification, quoter, swap-order store, and status request bodies are
 capped below the global parser limit according to route risk. Durable
 idempotency/audit for replay or duplicate submit/broadcast remains tracked
 under T19.
@@ -128,7 +127,6 @@ Evidence:
 - src/api/v1/eth/eth.controller.ts
 - src/api/v1/bsc/bsc.controller.ts
 - src/api/v1/swap/1inch/1inch.controller.ts
-- src/api/v1/bridge/bridge.controller.ts
 - src/api/v1/uniswap/quoter/quoter.controller.ts
 - src/api/v1/swapOrders/swapOrders.controller.ts
 - src/api/v1/eth/usdt.controller.ts
@@ -143,7 +141,7 @@ and bulkhead behavior are configurable with
 PROVIDER_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
 PROVIDER_CIRCUIT_BREAKER_OPEN_MS, PROVIDER_BULKHEAD_MAX_CONCURRENT, and
 PROVIDER_BULKHEAD_QUEUE_LIMIT. 1inch HTTP/SDK calls, native Fusion SDK calls,
-Blockscout pollers, Allbridge poller, common blockchain/contract helpers,
+Blockscout pollers, common blockchain/contract helpers,
 token metadata resolution, ETH Uniswap, generic Uniswap quoter/swap, BSC
 service calls, and Pancake provider/contract calls now use the shared controls
 for short provider operations. Long-running confirmation waits remain
@@ -154,7 +152,6 @@ Evidence:
 - .env.example
 - src/api/v1/crons/evmTxPoller.service.ts
 - src/api/v1/crons/uniswapTxPoller.service.ts
-- src/api/v1/crons/allbridgePoller.service.ts
 - src/api/v1/swap/1inch/1inch.service.ts
 - src/api/v1/swap/1inch/1inch.fusion.native.swap.service.ts
 - src/api/v1/common/helpers/blockchainUtilityMethods.ts
@@ -181,7 +178,6 @@ Evidence:
 - src/api/v1/eth/eth.controller.ts
 - src/api/v1/bsc/bsc.controller.ts
 - src/api/v1/swap/1inch/1inch.controller.ts
-- src/api/v1/bridge/bridge.controller.ts
 - src/api/v1/swapOrders/swapOrders.controller.ts
 
 T16 - Open
@@ -211,7 +207,6 @@ Evidence:
 - src/api/v1/eth/uniSwap/eth.uniswap.service.ts
 - src/api/v1/bsc/bsc.service.ts
 - src/api/v1/bsc/pancake/bsc.pancake.service.ts
-- src/api/v1/bridge/all-bridge/all-bridge.service.ts
 - src/api/v1/uniswap/quoter/quoter.service.ts
 - src/api/v1/uniswap/quoter/swaping/swap.service.ts
 
@@ -342,9 +337,7 @@ fields. The global whitelist/forbidNonWhitelisted validation policy rejects
 client-supplied token metadata, TokenMetadataService returns an internal
 resolved quote shape, and ETH/BSC/quoter swap services consume the resolved
 shape below the controller boundary. Pancake provider responses now use
-server-fetched token metadata instead of request token metadata. AllBridge
-symbol fields are provider token identifiers validated separately, not
-client-supplied ERC-20 metadata.
+server-fetched token metadata instead of request token metadata.
 Evidence:
 - src/api/v1/common/dto/swapQuote.dto.ts
 - src/api/v1/common/services/tokenMetadata.service.ts
@@ -401,7 +394,6 @@ Evidence:
 - src/api/v1/eth/eth.controller.ts
 - src/api/v1/bsc/bsc.controller.ts
 - src/api/v1/swap/1inch/1inch.controller.ts
-- src/api/v1/bridge/bridge.controller.ts
 - src/api/v1/uniswap/quoter/quoter.controller.ts
 - src/api/v1/swapOrders/swapOrders.controller.ts
 - src/api/v1/eth/usdt.controller.ts

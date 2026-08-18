@@ -9,8 +9,3 @@ export enum ValidWalletType {
   AVA = 'AVA',
   BSC = 'BSC',
 }
-
-export enum ValidPayFeeType {
-  WITH_NATIVE_CURRENCY = 'native',
-  WITH_STABLECOIN = 'stablecoin',
-}

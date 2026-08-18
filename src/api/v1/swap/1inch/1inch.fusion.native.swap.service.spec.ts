@@ -46,6 +46,7 @@ describe('FusionNativeService secret state TTL', () => {
   let redisService: { setKey: jest.Mock; getKey: jest.Mock; delKey: jest.Mock };
   let swapOrderService: {
     updateOrderByHash: jest.Mock;
+    findByTxHash: jest.Mock;
     findOrderByHashForVerifiedWallet: jest.Mock;
   };
   const verifiedWallet = (address: string) =>
@@ -75,6 +76,14 @@ describe('FusionNativeService secret state TTL', () => {
     };
     swapOrderService = {
       updateOrderByHash: jest.fn().mockResolvedValue({}),
+      findByTxHash: jest.fn().mockResolvedValue({
+        ok: true,
+        data: {
+          deviceId: { toString: () => 'device-id' },
+          walletAddress: '0xwallet',
+          fromChain: 'ETH',
+        },
+      }),
       findOrderByHashForVerifiedWallet: jest.fn().mockResolvedValue({
         ok: true,
         data: { txHash: 'order-hash' },
@@ -124,6 +133,21 @@ describe('FusionNativeService secret state TTL', () => {
       submittedIdx: [0],
       isCrossChain: true,
     });
+  });
+
+  it('skips source portfolio refresh when the order has no device id', async () => {
+    swapOrderService.findByTxHash.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        deviceId: null,
+        walletAddress: '0xwallet',
+        fromChain: 'ETH',
+      },
+    });
+
+    await (service as any).refreshSourcePortfolio('order-hash');
+
+    expect(portfolioService.refreshPortfolio).not.toHaveBeenCalled();
   });
 
   it('sets native Fusion secret state with the configured TTL', async () => {

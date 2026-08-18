@@ -141,7 +141,7 @@ describe('RateLimitGuard', () => {
     ).rejects.toBeInstanceOf(HttpException);
   });
 
-  it('requires device context for device keyed limits', async () => {
+  it('skips device keyed limits when device context is unavailable', async () => {
     useLimits([
       {
         points: 1,
@@ -153,7 +153,10 @@ describe('RateLimitGuard', () => {
 
     await expect(
       guard.canActivate(createContext({ ip: '127.0.0.1' })),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
+    ).resolves.toBe(true);
+    await expect(
+      guard.canActivate(createContext({ ip: '127.0.0.1' })),
+    ).resolves.toBe(true);
   });
 
   it('requires wallet context for wallet keyed limits', async () => {

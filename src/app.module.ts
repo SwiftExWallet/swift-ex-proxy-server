@@ -11,8 +11,6 @@ import { BscModule } from './api/v1/bsc/bsc.module';
 import { ProviderModule } from './api/v1/provider/provider.module';
 import { NotificationModule } from './api/v1/notification/notification.module';
 import { DeviceModule } from './api/v1/device/device.module';
-import { AllBridgeModule } from './api/v1/bridge/all-bridge/all-bridge.module';
-import { BridgeModule } from './api/v1/bridge/bridge.module';
 import { RedisModule } from './api/v1/redis/redis.module';
 import { SwapModule } from './api/v1/swap/swap.module';
 import { APP_GUARD } from '@nestjs/core';
@@ -61,8 +59,6 @@ import { OnOffRampModule } from './api/v1/on-off-ramp/on-off-ramp.module';
     ProviderModule,
     NotificationModule,
     DeviceModule,
-    AllBridgeModule,
-    BridgeModule,
     RedisModule,
     SwapModule,
     QuoterModule,

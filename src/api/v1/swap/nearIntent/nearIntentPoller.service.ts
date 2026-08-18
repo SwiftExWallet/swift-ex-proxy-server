@@ -279,6 +279,10 @@ export class NearIntentPollerService implements OnModuleInit {
     }
 
     const { deviceId, walletAddress, fromChain } = result.data;
+    if (!deviceId) {
+      return;
+    }
+
     try {
       await this.portfolioService.refreshPortfolio(
         String(deviceId),

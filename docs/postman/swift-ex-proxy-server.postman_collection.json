@@ -966,29 +966,6 @@
           }
         },
         {
-          "name": "Bridge Order Status",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\"txHash\":\"{{txHash}}\",\"walletType\":\"ETH\",\"provider\":\"ALLBRIDGE\"}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": "{{baseUrl}}/api/v1/swapOrders/bridgeOrderStatus"
-          }
-        },
-        {
           "name": "Order By Hash",
           "request": {
             "method": "GET",
@@ -1000,62 +977,6 @@
               }
             ],
             "url": "{{baseUrl}}/api/v1/swapOrders/{{orderHash}}?address={{walletAddress}}"
-          }
-        }
-      ]
-    },
-    {
-      "name": "Bridge",
-      "item": [
-        {
-          "name": "Prepare Bridge Transaction",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              },
-              {
-                "key": "x-wallet-address",
-                "value": "{{walletAddress}}",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\"toAddress\":\"{{recipientAddress}}\",\"amount\":\"100\",\"sourceToken\":\"USDT\",\"destinationToken\":\"USDT\",\"walletType\":\"ETH\",\"destinationWalletType\":\"BSC\",\"feePayType\":\"native\"}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": "{{baseUrl}}/api/v1/bridge/swap-transaction/prepare"
-          }
-        },
-        {
-          "name": "Bridge Swap Quotes",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json",
-                "type": "text"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\"amount\":\"100\",\"sourceChain\":\"ETH\",\"sourceToken\":\"USDT\",\"destinationChain\":\"BSC\",\"destinationToken\":\"USDT\"}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "url": "{{baseUrl}}/api/v1/bridge/swap-quotes"
           }
         }
       ]

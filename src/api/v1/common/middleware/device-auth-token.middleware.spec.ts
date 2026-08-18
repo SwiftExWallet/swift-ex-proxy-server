@@ -75,6 +75,14 @@ describe('DeviceAuthTokenMiddleware', () => {
     };
   }
 
+  function publicRequest(headers: Record<string, unknown> = {}): any {
+    return {
+      method: 'GET',
+      originalUrl: '/api/v1/market-data/prices',
+      headers,
+    };
+  }
+
   it('sets req.device from a verified token payload', async () => {
     const req = requestWithToken();
     const next = jest.fn();
@@ -171,26 +179,34 @@ describe('DeviceAuthTokenMiddleware', () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 
-  it('uses the device token path when both auth tokens are present', async () => {
+  it('attaches wallet token context alongside optional device context', async () => {
     const req = {
+      originalUrl: '/api/v1/quoter/quote',
       headers: {
         'x-auth-device-token': token,
         'x-auth-wallet-token': walletToken,
       },
     } as any;
     const next = jest.fn();
-    jwtService.verifyAsync.mockResolvedValue({
-      _id: device._id,
-      exp: Math.floor(Date.now() / 1000) + 60,
+    jwtService.verifyAsync.mockImplementation((receivedToken) => {
+      if (receivedToken === token) {
+        return Promise.resolve({
+          _id: device._id,
+          exp: Math.floor(Date.now() / 1000) + 60,
+        });
+      }
+
+      return Promise.resolve(requestWallet);
     });
     deviceService.findOne.mockResolvedValue(device);
 
     await middleware.use(req, {} as any, next);
 
     expect(jwtService.verifyAsync).toHaveBeenCalledWith(token, {});
-    expect(jwtService.verifyAsync).toHaveBeenCalledTimes(1);
+    expect(jwtService.verifyAsync).toHaveBeenCalledWith(walletToken, {});
+    expect(jwtService.verifyAsync).toHaveBeenCalledTimes(2);
     expect(req.device).toBe(device);
-    expect(req.wallet).toBeUndefined();
+    expect(req.wallet).toEqual(requestWallet);
     expect(next).toHaveBeenCalledTimes(1);
   });
 
@@ -203,19 +219,17 @@ describe('DeviceAuthTokenMiddleware', () => {
     expect(deviceService.findOne).not.toHaveBeenCalled();
   });
 
-  it('does not allow wallet tokens outside wallet-scoped routes', async () => {
-    const req = {
-      originalUrl: '/api/v1/device/fcm-token',
-      headers: {
-        'x-auth-wallet-token': walletToken,
-      },
-    };
+  it('attaches wallet tokens outside wallet-required routes when supplied', async () => {
+    const req = publicRequest({ 'x-auth-wallet-token': walletToken });
+    const next = jest.fn();
+    jwtService.verifyAsync.mockResolvedValue(requestWallet);
 
-    await expect(
-      middleware.use(req, {} as any, jest.fn()),
-    ).rejects.toBeInstanceOf(UnauthorizedException);
-    expect(jwtService.verifyAsync).not.toHaveBeenCalled();
+    await middleware.use(req, {} as any, next);
+
+    expect(jwtService.verifyAsync).toHaveBeenCalledWith(walletToken, {});
     expect(deviceService.findOne).not.toHaveBeenCalled();
+    expect(req.wallet).toEqual(requestWallet);
+    expect(next).toHaveBeenCalledTimes(1);
   });
 
   it('passes configured issuer and audience to JWT verification', async () => {
@@ -236,8 +250,35 @@ describe('DeviceAuthTokenMiddleware', () => {
     });
   });
 
-  it('rejects missing tokens before verification', async () => {
-    const req = { headers: {} };
+  it('passes public requests without auth context', async () => {
+    const req = publicRequest();
+    const next = jest.fn();
+
+    await middleware.use(req, {} as any, next);
+
+    expect(jwtService.verifyAsync).not.toHaveBeenCalled();
+    expect(deviceService.findOne).not.toHaveBeenCalled();
+    expect(req.device).toBeUndefined();
+    expect(req.wallet).toBeUndefined();
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires wallet context on wallet-scoped routes', async () => {
+    const req = { originalUrl: '/api/v1/quoter/quote', headers: {} };
+
+    await expect(
+      middleware.use(req, {} as any, jest.fn()),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(jwtService.verifyAsync).not.toHaveBeenCalled();
+    expect(deviceService.findOne).not.toHaveBeenCalled();
+  });
+
+  it('requires device context on device-owned update routes', async () => {
+    const req = {
+      method: 'PATCH',
+      originalUrl: '/api/v1/device/update-fcm-token',
+      headers: {},
+    };
 
     await expect(
       middleware.use(req, {} as any, jest.fn()),

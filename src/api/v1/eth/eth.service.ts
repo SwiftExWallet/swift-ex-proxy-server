@@ -217,8 +217,6 @@ export class EthService {
     }
   }
 
-  // eth.service.ts or allbridge.service.ts
-
   async broadcastTransaction(
     broadcastTransactionDto: BroadcastTransactionDto,
   ): Promise<any> {
