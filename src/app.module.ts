@@ -23,6 +23,7 @@ import { WalletModule } from './api/v1/wallet/wallet.module';
 import { BodySizeLimitGuard } from './api/v1/common/guard/body-size-limit.guard';
 import { MarketDataModule } from './api/v1/market-data/market-data.module';
 import { OnOffRampModule } from './api/v1/on-off-ramp/on-off-ramp.module';
+import { SigningModule } from './api/v1/signing/signing.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { OnOffRampModule } from './api/v1/on-off-ramp/on-off-ramp.module';
     WalletModule,
     MarketDataModule,
     OnOffRampModule,
+    SigningModule,
   ],
   controllers: [AppController],
   providers: [
@@ -98,6 +100,14 @@ export class AppModule {
         {
           path: 'docs-json',
           method: RequestMethod.GET,
+        },
+        {
+          path: '/api/v1/signing/request',
+          method: RequestMethod.GET,
+        },
+        {
+          path: '/api/v1/signing/verify',
+          method: RequestMethod.POST,
         },
       )
       .forRoutes('*');
