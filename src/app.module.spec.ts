@@ -3,6 +3,21 @@ import { AppModule } from './app.module';
 import * as packageJson from '../package.json';
 
 describe('AppModule bridge removal', () => {
+  it('registers the generic EVM module', () => {
+    const imports = Reflect.getMetadata(
+      MODULE_METADATA.IMPORTS,
+      AppModule,
+    ) as unknown[];
+    const moduleNames = imports.map((moduleRef) => {
+      if (typeof moduleRef === 'function') {
+        return moduleRef.name;
+      }
+      return undefined;
+    });
+
+    expect(moduleNames).toContain('EvmModule');
+  });
+
   it('does not register bridge modules', () => {
     const imports = Reflect.getMetadata(
       MODULE_METADATA.IMPORTS,

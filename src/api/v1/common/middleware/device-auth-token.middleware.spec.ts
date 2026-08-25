@@ -273,6 +273,18 @@ describe('DeviceAuthTokenMiddleware', () => {
     expect(deviceService.findOne).not.toHaveBeenCalled();
   });
 
+  it('rejects unauthenticated EVM requests', async () => {
+    const req = {
+      originalUrl: '/api/v1/evm/base/transaction/prepare',
+      headers: {},
+    };
+
+    await expect(
+      middleware.use(req, {} as any, jest.fn()),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(jwtService.verifyAsync).not.toHaveBeenCalled();
+  });
+
   it('requires device context on device-owned update routes', async () => {
     const req = {
       method: 'PATCH',

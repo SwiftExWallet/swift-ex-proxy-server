@@ -8,6 +8,7 @@ import { DeviceAuthTokenMiddleware } from './api/v1/common/middleware/device-aut
 import { MongooseModule } from '@nestjs/mongoose';
 import { JwtModule } from '@nestjs/jwt';
 import { BscModule } from './api/v1/bsc/bsc.module';
+import { EvmModule } from './api/v1/evm/evm.module';
 import { ProviderModule } from './api/v1/provider/provider.module';
 import { NotificationModule } from './api/v1/notification/notification.module';
 import { DeviceModule } from './api/v1/device/device.module';
@@ -57,6 +58,7 @@ import { SigningModule } from './api/v1/signing/signing.module';
     EthModule,
     UsersModule,
     BscModule,
+    EvmModule,
     ProviderModule,
     NotificationModule,
     DeviceModule,

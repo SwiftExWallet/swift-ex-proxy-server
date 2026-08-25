@@ -31,6 +31,7 @@ const WALLET_REQUIRED_ROUTE_PREFIXES = [
   'api/v1/eth',
   'api/v1/usdt',
   'api/v1/bsc',
+  'api/v1/evm',
 ];
 const WALLET_REQUIRED_ROUTE_PATHS = ['api/v1/swap'];
 const DEVICE_REQUIRED_ROUTE_PREFIXES = ['api/v1/wallet'];
