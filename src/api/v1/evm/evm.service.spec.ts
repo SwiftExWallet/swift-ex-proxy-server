@@ -1,4 +1,3 @@
-import { BadRequestException } from '@nestjs/common';
 import { ETH_ERC20_ABI } from '../common/abi/eth';
 import { ChainEnum, SupportedWalletChain } from '../common/enums/chain.enum';
 import {
@@ -81,7 +80,9 @@ describe('EvmService', () => {
   it('rejects non-EVM chains', async () => {
     await expect(
       service.getBalance('solana', { walletAddress }),
-    ).rejects.toThrow(BadRequestException);
+    ).rejects.toMatchObject({
+      message: 'Unsupported EVM chain',
+    });
     expect(providerService.getProvider).not.toHaveBeenCalled();
   });
 

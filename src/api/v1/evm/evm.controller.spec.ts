@@ -45,6 +45,64 @@ describe('EvmController', () => {
     expect(res.json).toHaveBeenCalledWith(123n);
   });
 
+  it.each([
+    [
+      'wallet info',
+      'getAddressInfo',
+      'getWalletAddressInfo',
+      'base',
+      { walletAddress: '0x1111111111111111111111111111111111111111' },
+    ],
+    [
+      'token balance',
+      'getTokenBalance',
+      'getTokenBalance',
+      'arb',
+      {
+        walletAddress: '0x1111111111111111111111111111111111111111',
+        tokenAddress: '0x2222222222222222222222222222222222222222',
+      },
+    ],
+    [
+      'token info',
+      'fetchTokenInfo',
+      'getTokenInfo',
+      'pol',
+      {
+        addresses: ['0x2222222222222222222222222222222222222222'],
+        walletAddress: '0x1111111111111111111111111111111111111111',
+      },
+    ],
+    [
+      'transaction prepare',
+      'prepareTransaction',
+      'prepareTransaction',
+      'base',
+      {
+        unsignedTx: { to: '0x2222222222222222222222222222222222222222' },
+        walletAddress: '0x1111111111111111111111111111111111111111',
+      },
+    ],
+  ])(
+    'delegates %s requests with chain and verified wallet',
+    async (_name, controllerMethod, serviceMethod, chain, dto) => {
+      const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+      const req = { wallet: { addresses: new Map() } };
+      const result = { success: true };
+      evmService[serviceMethod].mockResolvedValue(result);
+
+      await controller[controllerMethod](req, res, chain, dto);
+
+      expect(evmService[serviceMethod]).toHaveBeenCalledWith(
+        chain,
+        dto,
+        req.wallet,
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(result);
+    },
+  );
+
   it('delegates transaction broadcast with chain', async () => {
     const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
     const body = { signedTx: '0xsigned' };
