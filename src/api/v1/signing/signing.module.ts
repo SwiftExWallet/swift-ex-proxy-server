@@ -8,4 +8,4 @@ import { DeviceModule } from '../device/device.module';
   providers: [SigningService],
   controllers: [SigningController],
 })
-export class SigningModule { }
+export class SigningModule {}

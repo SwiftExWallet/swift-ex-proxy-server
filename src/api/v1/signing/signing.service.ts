@@ -1,4 +1,3 @@
-
 import {
   BadRequestException,
   Injectable,
@@ -21,7 +20,7 @@ export class SigningService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly deviceService: DeviceService,
-  ) { }
+  ) {}
 
   createRequest(): { payload: string } {
     const nonce = randomBytes(16).toString('hex');
@@ -40,7 +39,11 @@ export class SigningService {
     this.logger.log(`Expires At: ${expiresAtRaw}`);
 
     const expiresAt = expiresAtRaw ? new Date(expiresAtRaw) : null;
-    if (!expiresAt || isNaN(expiresAt.getTime()) || Date.now() > expiresAt.getTime()) {
+    if (
+      !expiresAt ||
+      isNaN(expiresAt.getTime()) ||
+      Date.now() > expiresAt.getTime()
+    ) {
       throw new BadRequestException('Signing request expired');
     }
 
@@ -55,18 +58,14 @@ export class SigningService {
 
     const signingDeviceUniqueId = process.env.SIGNING_DEVICE_UNIQUE_ID;
     if (!signingDeviceUniqueId) {
-      throw new BadRequestException(
-        'web user is not configured',
-      );
+      throw new BadRequestException('web user is not configured');
     }
 
     const device = await this.deviceService.findOneByUniqueId(
       signingDeviceUniqueId,
     );
     if (!device) {
-      throw new NotFoundException(
-        `Device web user not found`,
-      );
+      throw new NotFoundException(`Device web user not found`);
     }
 
     const jwt = this.jwtService.sign({
