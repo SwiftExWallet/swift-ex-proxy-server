@@ -130,6 +130,23 @@ describe('EvmController', () => {
     expect(res.json).toHaveBeenCalledWith(result);
   });
 
+  it('delegates swap preparation with the verified wallet', async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const req = { wallet: { addresses: new Map() } };
+    const dto = { amount: '1' };
+    const result = { success: true };
+    evmService.prepareSwapTransaction.mockResolvedValue(result);
+
+    await controller.prepareSwap(req, res, dto as any);
+
+    expect(evmService.prepareSwapTransaction).toHaveBeenCalledWith(
+      dto,
+      req.wallet,
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(result);
+  });
+
   it('applies route-specific body size limits to expensive write routes', () => {
     expect(
       Reflect.getMetadata(BODY_SIZE_LIMIT_KEY, controller.broadcastTransaction),
