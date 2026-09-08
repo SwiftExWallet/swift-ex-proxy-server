@@ -242,4 +242,4 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+Licensed under the Apache License 2.0. See [LICENSE](https://github.com/SwiftExWallet/swift-ex-proxy-server/blob/main/LICENSE) for the full text.
