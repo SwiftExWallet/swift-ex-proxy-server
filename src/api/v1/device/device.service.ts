@@ -6,7 +6,10 @@ import { CreateDeviceDto } from './dto/create-device.dto';
 import { UpdateFcmTokenDto } from './dto/update-fcm-token.dto';
 import { User } from '../users/schema/user.schema';
 import { JwtService } from '@nestjs/jwt';
-import { DeviceAttestationService } from './device-attestation.service';
+import {
+  DeviceAttestationMetadata,
+  DeviceAttestationService,
+} from './device-attestation.service';
 import { DeviceAttestationDto } from './dto/device-attestation.dto';
 
 @Injectable()
@@ -19,7 +22,9 @@ export class DeviceService {
     private readonly deviceAttestationService: DeviceAttestationService,
   ) {}
 
-  async create(createDeviceDto: CreateDeviceDto): Promise<string> {
+  async create(
+    createDeviceDto: CreateDeviceDto,
+  ): Promise<{ deviceToken: string; attestation?: DeviceAttestationMetadata }> {
     const { uniqueId, fcmToken } = createDeviceDto;
     const attestation = await this.deviceAttestationService.verify(
       createDeviceDto.attestation,
@@ -34,7 +39,7 @@ export class DeviceService {
       device = await this.deviceRepo.create(createDeviceDto, attestation);
     }
     this.logger.log('==== returning device token ===');
-    return this.jwtService.sign(
+    const deviceToken = this.jwtService.sign(
       { _id: device?._id },
       {
         ...(process.env.JWT_ISSUER ? { issuer: process.env.JWT_ISSUER } : {}),
@@ -43,6 +48,10 @@ export class DeviceService {
           : {}),
       },
     );
+    return {
+      deviceToken,
+      ...(attestation ? { attestation } : {}),
+    };
   }
 
   async updateFcmToken(

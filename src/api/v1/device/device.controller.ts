@@ -10,8 +10,8 @@ export class DeviceController {
 
   @Post()
   async create(@Res() response, @Body() createDeviceDto: CreateDeviceDto) {
-    const deviceToken = await this.deviceService.create(createDeviceDto);
-    response.status(201).json({ deviceToken });
+    const result = await this.deviceService.create(createDeviceDto);
+    response.status(201).json(result);
   }
 
   @Patch('update-fcm-token')

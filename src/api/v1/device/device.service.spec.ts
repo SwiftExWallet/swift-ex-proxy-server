@@ -82,7 +82,9 @@ describe('DeviceService', () => {
     deviceRepo.findOne.mockResolvedValue(null);
     deviceRepo.create.mockResolvedValue(device as any);
 
-    await expect(service.create(createDeviceDto)).resolves.toBe('device-token');
+    await expect(service.create(createDeviceDto)).resolves.toEqual({
+      deviceToken: 'device-token',
+    });
 
     expect(jwtService.sign).toHaveBeenCalledWith(
       { _id: device._id },
@@ -112,7 +114,10 @@ describe('DeviceService', () => {
     deviceRepo.findOne.mockResolvedValue(null);
     deviceRepo.create.mockResolvedValue(device as any);
 
-    await expect(service.create(createDeviceDto)).resolves.toBe('device-token');
+    await expect(service.create(createDeviceDto)).resolves.toEqual({
+      deviceToken: 'device-token',
+      attestation: attestationMetadata,
+    });
 
     expect(attestationService.verify).toHaveBeenCalledWith(
       createDeviceDto.attestation,
@@ -141,7 +146,10 @@ describe('DeviceService', () => {
     attestationService.verify.mockResolvedValue(attestationMetadata);
     deviceRepo.findOne.mockResolvedValue(device as any);
 
-    await expect(service.create(createDeviceDto)).resolves.toBe('device-token');
+    await expect(service.create(createDeviceDto)).resolves.toEqual({
+      deviceToken: 'device-token',
+      attestation: attestationMetadata,
+    });
 
     expect(deviceRepo.updateFcmToken).toHaveBeenCalledWith(
       device._id,

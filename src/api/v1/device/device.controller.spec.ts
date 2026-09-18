@@ -45,13 +45,20 @@ describe('DeviceController', () => {
       fcmToken: 'fcm-token',
       attestation: { provider: 'play_integrity', token: 'token' },
     };
-    deviceService.create.mockResolvedValue('device-token');
+    const result = {
+      deviceToken: 'device-token',
+      attestation: {
+        attestationProvider: 'play_integrity',
+        attestationStatus: 'verified',
+      },
+    };
+    deviceService.create.mockResolvedValue(result);
 
     await controller.create(response as any, payload as any);
 
     expect(deviceService.create).toHaveBeenCalledWith(payload);
     expect(response.status).toHaveBeenCalledWith(201);
-    expect(response.json).toHaveBeenCalledWith({ deviceToken: 'device-token' });
+    expect(response.json).toHaveBeenCalledWith(result);
   });
 
   it('passes fcm update attestation payload to device service', async () => {
