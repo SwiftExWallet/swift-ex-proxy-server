@@ -98,7 +98,7 @@ export class BscService {
         () => this.routerContract.getAmountsOut(amountIn, path),
       )) as bigint[];
 
-      return formatUnits(amountsOut[1], tokenIn.decimals);
+      return formatUnits(amountsOut[1], Number(tokenOut.decimals));
     } catch (error: any) {
       throwIfHttpException(error);
       throw createProviderBadRequestException(error);
@@ -135,9 +135,10 @@ export class BscService {
         () => this.routerContract.getAmountsOut(amountIn, path),
       )) as bigint[];
 
-      const slippagePercent = Number(process.env.BSC_SLIPPAGE ?? '5'); // fallback to 5 if undefined
+      const slippagePercent = this.getSlippagePercent();
+      const slippageBps = BigInt(Math.round(slippagePercent * 100));
       const minOut: bigint =
-        (amountsOut[1] * BigInt(100 - slippagePercent)) / 100n;
+        (amountsOut[1] * (10_000n - slippageBps)) / 10_000n;
       const deadline: number =
         Math.floor(Date.now() / 1000) +
         Number(process.env.BSC_TRANSACTION_WAIT_TIME_IN_SECONDS);
@@ -414,5 +415,15 @@ export class BscService {
         SupportedWalletChain.bnb,
       ),
     );
+  }
+
+  private getSlippagePercent(): number {
+    const configured = Number(process.env.BSC_SLIPPAGE);
+
+    if (!Number.isFinite(configured) || configured < 0 || configured > 100) {
+      return 5;
+    }
+
+    return configured;
   }
 }

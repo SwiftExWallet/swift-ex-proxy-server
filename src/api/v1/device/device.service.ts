@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Device } from './schema/device.schema';
 import { DeviceRepository } from './device.repository';
 import mongoose from 'mongoose';
@@ -73,13 +78,19 @@ export class DeviceService {
 
   async updateUser(
     device: Device,
-    user: User,
+    user?: User,
     attestationPayload?: DeviceAttestationDto,
   ): Promise<Device | null> {
     this.logger.log('==== updating user ===');
     const attestation =
       await this.deviceAttestationService.verify(attestationPayload);
-    return this.deviceRepo.updateUser(device._id, user._id, attestation);
+    const userId = user?._id ?? device.userId;
+
+    if (!userId) {
+      throw new BadRequestException('User not found for device');
+    }
+
+    return this.deviceRepo.updateUser(device._id, userId, attestation);
   }
 
   findOne(_id: mongoose.Schema.Types.ObjectId): Promise<Device | null> {

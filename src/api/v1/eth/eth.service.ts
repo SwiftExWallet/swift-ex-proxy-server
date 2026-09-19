@@ -13,6 +13,7 @@ import {
   ETH_FACTORY_ABI,
   ETH_POOL_ABI,
   ETH_QUOTER_ABI,
+  ETH_SWAP_ROUTER_ABI,
 } from '../common/abi/eth';
 import {
   ResolvedSwapQuoteDto,
@@ -95,6 +96,12 @@ export class EthService {
       ETH_QUOTER_ABI,
       ChainEnum.ETH,
     );
+
+    this.swapRouterContract = this.providerService.getContract(
+      swapRouterAddress,
+      ETH_SWAP_ROUTER_ABI,
+      ChainEnum.ETH,
+    );
   }
 
   private async withProviderControl<T>(
@@ -171,7 +178,7 @@ export class EthService {
           fee,
           recipient: fromAddress,
           deadline: Math.floor(Date.now() / 1000) + 600,
-          amount,
+          amountIn: formattedAmountIn,
           amountOutMinimum: quotedOutput.amountOut,
           sqrtPriceLimitX96: 0,
         },
