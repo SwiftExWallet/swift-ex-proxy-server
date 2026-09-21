@@ -7,6 +7,59 @@ process.env.DEVICE_ATTESTATION_MODE =
   process.env.DEVICE_ATTESTATION_MODE || 'off';
 process.env.CUSTOM_NOTIFICATION_ALLOWED_ORIGINS =
   process.env.CUSTOM_NOTIFICATION_ALLOWED_ORIGINS || 'http://localhost';
+process.env.BANXA_API_KEY = process.env.BANXA_API_KEY || 'test-banxa-key';
+process.env.BANXA_QUOTE_REQUEST_URL =
+  process.env.BANXA_QUOTE_REQUEST_URL || 'https://banxa.example/quote/';
+process.env.BANXA_BASE_URL =
+  process.env.BANXA_BASE_URL || 'https://banxa.example/';
+process.env.BANXA_REDIRECT_URL =
+  process.env.BANXA_REDIRECT_URL || 'https://app.example/banxa/redirect';
+process.env.ALCHEMY_PAY_APPID =
+  process.env.ALCHEMY_PAY_APPID || 'test-alchemy-app';
+process.env.ALCHEMY_PAY_SECRET =
+  process.env.ALCHEMY_PAY_SECRET || 'test-alchemy-secret';
+process.env.ALCHEMY_PAY_QUOTE_REQUEST_URL =
+  process.env.ALCHEMY_PAY_QUOTE_REQUEST_URL || 'https://alchemy.example/quote';
+process.env.ALCHEMY_PAY_USER_SELL_ORDER_URL =
+  process.env.ALCHEMY_PAY_USER_SELL_ORDER_URL ||
+  'https://alchemy.example/order?';
+process.env.ALCHEMY_PAY_USER_SELL_ORDER_REQUEST_URL =
+  process.env.ALCHEMY_PAY_USER_SELL_ORDER_REQUEST_URL || '/order';
+process.env.ALCHEMY_PAY_REDIRECT_URL =
+  process.env.ALCHEMY_PAY_REDIRECT_URL || 'https://app.example/alchemy';
+process.env.ALCHEMY_PAY_WEBHOOK_URL =
+  process.env.ALCHEMY_PAY_WEBHOOK_URL || 'https://app.example/webhook';
+process.env.MOON_PAY_BASE =
+  process.env.MOON_PAY_BASE || 'https://moonpay.example';
+process.env.MOON_PAY_BUY_WIDGET =
+  process.env.MOON_PAY_BUY_WIDGET || 'https://moonpay.example/buy';
+process.env.MOON_PAY_SELL_WIDGET =
+  process.env.MOON_PAY_SELL_WIDGET || 'https://moonpay.example/sell';
+process.env.MOON_PAY_PUBLISHABLE_KEY =
+  process.env.MOON_PAY_PUBLISHABLE_KEY || 'test-moonpay-pub';
+process.env.MOON_PAY_SECRET_KEY =
+  process.env.MOON_PAY_SECRET_KEY || 'test-moonpay-secret';
+process.env.INCH_API_KEY = process.env.INCH_API_KEY || 'test-inch-key';
+process.env.QUOTER_BASE =
+  process.env.QUOTER_BASE || 'https://api.1inch.dev/quoter';
+process.env.FUSION_PLUS_QUOTER_BASE =
+  process.env.FUSION_PLUS_QUOTER_BASE ||
+  'https://api.1inch.dev/fusion-plus/quoter';
+process.env.INCH_RELAYER_BASE =
+  process.env.INCH_RELAYER_BASE || 'https://api.1inch.dev/relayer';
+process.env.FUSION_PLUS_RELAYER_BASE =
+  process.env.FUSION_PLUS_RELAYER_BASE ||
+  'https://api.1inch.dev/fusion-plus/relayer';
+process.env.INCH_ORDER_BASE =
+  process.env.INCH_ORDER_BASE || 'https://api.1inch.dev/order';
+process.env.FUSION_PLUS_ORDER_BASE =
+  process.env.FUSION_PLUS_ORDER_BASE ||
+  'https://api.1inch.dev/fusion-plus/order';
+process.env.FUSION_SECRETS_ENCRYPTION_KEY =
+  process.env.FUSION_SECRETS_ENCRYPTION_KEY ||
+  '12345678901234567890123456789012';
+process.env.MASTER_HASH_KEY =
+  process.env.MASTER_HASH_KEY || 'test-master-hash-key';
 process.env.POOL_FACTORY_CONTRACT_ADDRESS =
   process.env.POOL_FACTORY_CONTRACT_ADDRESS ||
   '0x3333333333333333333333333333333333333333';
@@ -23,10 +76,19 @@ process.env.BSC_TRANSACTION_WAIT_TIME_IN_SECONDS =
   process.env.BSC_TRANSACTION_WAIT_TIME_IN_SECONDS || '600';
 process.env.BSC_TRANSACTION_GAS_LIMIT =
   process.env.BSC_TRANSACTION_GAS_LIMIT || '300000';
+process.env.PROVIDER_RPC_BSC =
+  process.env.PROVIDER_RPC_BSC || 'http://127.0.0.1:8545';
+process.env.PROVIDER_RPC_ETH_1 =
+  process.env.PROVIDER_RPC_ETH_1 || 'http://127.0.0.1:8545';
 process.env.WETH_ADDRESS =
   process.env.WETH_ADDRESS || '0x7777777777777777777777777777777777777777';
 process.env.USDT_ADDRESS =
   process.env.USDT_ADDRESS || '0x8888888888888888888888888888888888888888';
+process.env.USDC_ADDRESS =
+  process.env.USDC_ADDRESS || '0x9999999999999999999999999999999999999999';
+process.env.ETH_SWAP_GAS_FEE_LIMIT =
+  process.env.ETH_SWAP_GAS_FEE_LIMIT || '300000';
+process.env.ETH_SWAP_TYPE = process.env.ETH_SWAP_TYPE || '2';
 process.env.SIGNING_DEVICE_UNIQUE_ID =
   process.env.SIGNING_DEVICE_UNIQUE_ID || 'web-device';
 

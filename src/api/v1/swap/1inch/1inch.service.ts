@@ -694,6 +694,7 @@ export class InchService implements OnModuleInit {
 
     const schedule = (delayMs: number): void => {
       const timeout = setTimeout(() => void tick(), delayMs);
+      timeout.unref?.();
       this.activeSecretPollers.set(orderHash, timeout);
     };
 

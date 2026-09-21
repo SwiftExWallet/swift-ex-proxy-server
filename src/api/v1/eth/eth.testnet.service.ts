@@ -88,7 +88,7 @@ export class EthTestnetSwapService {
 
       const formattedAmountIn: bigint = parseUnits(
         amount.toString(),
-        tokenIn.decimals,
+        Number(tokenIn.decimals),
       );
 
       const quotedOutput: QuotedOutput = await quoteExactInputSingle(
@@ -103,8 +103,8 @@ export class EthTestnetSwapService {
         quotedOutput,
       });
       const formattedAmountOut: string = formatUnits(
-        quotedOutput[0],
-        tokenOut.decimals,
+        quotedOutput[0] ?? quotedOutput.amountOut,
+        Number(tokenOut.decimals),
       );
 
       const pricePerToken: string = (

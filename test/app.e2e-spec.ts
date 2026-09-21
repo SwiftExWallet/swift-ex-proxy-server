@@ -1,17 +1,134 @@
+const mockAlphaRoute = jest.fn();
+const mockUniswapRpcProvider = {
+  getFeeData: jest.fn(),
+  getTransactionCount: jest.fn(),
+};
+const mockEthersJsonRpcProvider = {
+  call: jest.fn(),
+  waitForTransaction: jest.fn(),
+};
+const mockCrossChainSdk = {
+  createOrder: jest.fn(),
+  getOrderStatus: jest.fn(),
+  getQuote: jest.fn(),
+  getReadyToAcceptSecretFills: jest.fn(),
+  submitNativeOrder: jest.fn(),
+  submitSecret: jest.fn(),
+};
+const mockFusionSdk = {
+  createOrder: jest.fn(),
+  getOrderStatus: jest.fn(),
+  getQuote: jest.fn(),
+  submitNativeOrder: jest.fn(),
+};
+const mockEvmCrossChainOrder = class EvmCrossChainOrder {};
+
+jest.mock('@uniswap/smart-order-router', () => ({
+  AlphaRouter: jest.fn().mockImplementation(() => ({
+    route: mockAlphaRoute,
+  })),
+  SwapType: {
+    SWAP_ROUTER_02: 'SWAP_ROUTER_02',
+  },
+}));
+
+jest.mock('@ethersproject/providers', () => ({
+  JsonRpcProvider: jest.fn().mockImplementation(() => mockUniswapRpcProvider),
+}));
+
 jest.mock('ethers', () => {
   const actual = jest.requireActual('ethers');
+  const mockContract = jest.fn().mockImplementation(() => ({
+    name: jest.fn().mockResolvedValue('Mock Token'),
+    symbol: jest.fn().mockResolvedValue('MOCK'),
+    decimals: jest.fn().mockResolvedValue(18),
+    balanceOf: jest.fn().mockResolvedValue(1000000000000000000n),
+  }));
+  const mockJsonRpcProvider = jest
+    .fn()
+    .mockImplementation(() => mockEthersJsonRpcProvider);
 
   return {
     ...actual,
-    Contract: jest.fn().mockImplementation(() => ({
-      name: jest.fn().mockResolvedValue('Mock Token'),
-      symbol: jest.fn().mockResolvedValue('MOCK'),
-      decimals: jest.fn().mockResolvedValue(18),
-      balanceOf: jest.fn().mockResolvedValue(1000000000000000000n),
-    })),
+    Contract: mockContract,
+    JsonRpcProvider: mockJsonRpcProvider,
+    ethers: {
+      ...actual.ethers,
+      Contract: mockContract,
+      JsonRpcProvider: mockJsonRpcProvider,
+    },
   };
 });
 
+jest.mock('@1inch/cross-chain-sdk', () => ({
+  Address: jest.fn().mockImplementation((value: string) => ({
+    toString: () => value,
+  })),
+  EvmAddress: { fromString: jest.fn((value: string) => value) },
+  EvmCrossChainOrder: mockEvmCrossChainOrder,
+  HashLock: {
+    forMultipleFills: jest.fn((leaves: string[]) => ({
+      leaves,
+      type: 'multiple',
+    })),
+    forSingleFill: jest.fn((secret: string) => ({
+      secret,
+      type: 'single',
+    })),
+    getMerkleLeavesFromSecretHashes: jest.fn((hashes: string[]) => hashes),
+    hashSecret: jest.fn((secret: string) => `hash:${secret}`),
+  },
+  MerkleLeaf: jest.fn(),
+  NativeOrdersFactory: {
+    default: jest.fn(() => ({
+      create: jest.fn(() => ({
+        data: '0xnativecalldata',
+        to: {
+          toString: () => '0x9999999999999999999999999999999999999999',
+        },
+        value: {
+          toString: () => '0',
+        },
+      })),
+    })),
+  },
+  OrderStatus: {
+    Cancelled: 'Cancelled',
+    Executed: 'Executed',
+    Expired: 'Expired',
+    Pending: 'Pending',
+    Refunded: 'Refunded',
+    Refunding: 'Refunding',
+  },
+  PresetEnum: { fast: 'fast' },
+  SDK: jest.fn().mockImplementation(() => mockCrossChainSdk),
+}));
+
+jest.mock('@1inch/fusion-sdk', () => ({
+  Address: jest.fn().mockImplementation((value: string) => ({
+    toString: () => value,
+  })),
+  FusionSDK: jest.fn().mockImplementation(() => mockFusionSdk),
+  OrderStatus: {
+    Cancelled: 'Cancelled',
+    Expired: 'Expired',
+    Filled: 'Filled',
+  },
+}));
+
+jest.mock('axios', () => ({
+  __esModule: true,
+  default: {
+    get: jest.fn(),
+    post: jest.fn(),
+    request: jest.fn(),
+  },
+  get: jest.fn(),
+  post: jest.fn(),
+  request: jest.fn(),
+}));
+
+import axios from 'axios';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -20,7 +137,6 @@ import { json, urlencoded } from 'express';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
-import { PancakeSwapService } from '../src/api/v1/bsc/pancake/bsc.pancake.service';
 import {
   DEVICE_AUTH_TOKEN_HEADER,
   WALLET_AUTH_TOKEN_HEADER,
@@ -28,18 +144,12 @@ import {
 import { bigintJsonSerializerMiddleware } from '../src/api/v1/common/middleware/bigintJsonSerializer.middleware';
 import { UserQueueService } from '../src/api/v1/common/user-queue/user-queue.service';
 import { DeviceRepository } from '../src/api/v1/device/device.repository';
-import { EthTestnetSwapService } from '../src/api/v1/eth/eth.testnet.service';
-import { UniSwapService } from '../src/api/v1/eth/uniSwap/eth.uniswap.service';
 import { FirebaseNotificationService } from '../src/api/v1/notification/firebase/notification.service';
 import { MarketDataRepository } from '../src/api/v1/market-data/market-data.repository';
-import { AlchemyService } from '../src/api/v1/on-off-ramp/alchemy/alchemy.service';
-import { BanxaService } from '../src/api/v1/on-off-ramp/banxa/banxa.service';
-import { MoonPayService } from '../src/api/v1/on-off-ramp/moonpay/moonpay.service';
+import { HttpService as AlchemyHttpService } from '../src/api/v1/on-off-ramp/alchemy/http.service';
+import { HttpService as CommonHttpService } from '../src/api/v1/common/services/httpService';
 import { ProviderService } from '../src/api/v1/provider/provider.service';
 import { RedisService } from '../src/api/v1/redis/redis.service';
-import { FusionNativeService } from '../src/api/v1/swap/1inch/1inch.fusion.native.swap.service';
-import { InchService } from '../src/api/v1/swap/1inch/1inch.service';
-import { UniswapService } from '../src/api/v1/swap/uniswap/uniswap.service';
 import { SwapOrderRepository } from '../src/api/v1/swapOrders/swapOrder.repository';
 import { WalletRepository } from '../src/api/v1/wallet/wallet.repository';
 
@@ -50,6 +160,7 @@ type RouteCase = {
   auth?: AuthMode;
   body?: any;
   expectedBody?: any;
+  expectedText?: string;
   expectedStatus?: number;
   method: HttpMethod;
   name: string;
@@ -121,6 +232,63 @@ const gaslessQuoteBody = {
     chainId: 56,
   },
 };
+const ethSwapPrepareBody = {
+  approveData: '0x095ea7b3',
+  depositData: '0xdeposit',
+  swapData: '0xswap',
+  swapType: 'EthToUsdc',
+  value: '1000000000000000000',
+};
+const inchQuoteBody = {
+  amount: '1',
+  chain: 'ETH',
+  tokenIn: tokenAddress,
+  tokenOut: nativeTokenAddress,
+};
+const fusionPlusQuoteBody = {
+  amount: '1',
+  dstChain: 'BSC',
+  dstTokenAddress: nativeTokenAddress,
+  srcChain: 'ETH',
+  srcTokenAddress: tokenAddress,
+};
+const fusionNativeOrderBody = {
+  ...fusionPlusQuoteBody,
+};
+const fusionNativeConfirmBody = {
+  orderHash: '0xnativehash',
+  srcChain: 'ETH',
+  txHash: '0xnativefulfillment',
+};
+const fusionOrderBody = {
+  amount: '1',
+  chain: 'ETH',
+  quote: { quoteId: 'quote-id' },
+  tokenIn: tokenAddress,
+  tokenOut: nativeTokenAddress,
+};
+const fusionPlusOrderBody = {
+  quoteId: 'quote-id',
+  requiresApprovalTransaction: false,
+  secretCount: 1,
+};
+const submitOrderBody = {
+  chain: 'ETH',
+  extension: '0xextension',
+  order: {
+    maker: walletAddress,
+    makerAsset: tokenAddress,
+    makerTraits: 'traits',
+    makingAmount: '1',
+    receiver: walletAddress,
+    salt: 'salt',
+    takerAsset: nativeTokenAddress,
+    takingAmount: '2',
+  },
+  orderHash: '0xorderhash',
+  quoteId: 'quote-id',
+  signature: '0xsignature',
+};
 const signingWallet = EthersWallet.createRandom();
 const validSigningPayload = `Sign:\nNonce: integration-test\nExpires At: ${new Date(
   Date.now() + 60 * 60 * 1000,
@@ -152,6 +320,7 @@ describe('AppModule HTTP integration', () => {
     },
     name: jest.fn().mockResolvedValue('Mock Token'),
     quoteExactInputSingle: jest.fn().mockResolvedValue({
+      0: 1000000000000000000n,
       amountOut: 1000000000000000000n,
     }),
     symbol: jest.fn().mockResolvedValue('MOCK'),
@@ -162,14 +331,68 @@ describe('AppModule HTTP integration', () => {
     data: { quoteId: 'quote-id' },
     success: true,
   };
-  const onOffRampOrder = { success: { orderId: 'order-id' } };
-  const onOffRampAssets = [{ code: 'ETH' }];
-  const onOffRampLink = { url: 'https://pay.example/link' };
+  const onOffRampOrder = {
+    success: { data: { orderId: 'order-id' }, status: true },
+  };
+  const onOffRampAssets = {
+    data: {
+      crypto_assets: [{ code: 'ETH' }],
+      fiat_currencies: [{ code: 'USD' }],
+      order_type: 'buy',
+      payment_methods: [{ id: 'card', type: 'buy' }],
+      status: true,
+    },
+    status: true,
+  };
+  const onOffRampLink = {
+    externalTransactionId: expect.any(String),
+    url: expect.stringContaining('https://moonpay.example/buy?'),
+  };
   const updatedDevice = { ...device, fcmToken: 'new-fcm-token' };
   const userDevice = { ...device, userId: 'user-id' };
   const createdWallet = { ...wallet, label: 'Primary' };
-  const ethQuote = { provider: 'eth', route: 'quote' };
-  const ethSwapPrepare = { provider: 'eth', route: 'swap-prepare' };
+  const ethQuote = {
+    fee: '3000',
+    inputAmount: '1',
+    inputToken: 'ETH',
+    outputAmount: '1.0',
+    outputToken: 'ETH',
+    poolAddress: tokenAddress,
+    pricePerToken: '1.000000',
+  };
+  const ethSwapPrepare = [
+    {
+      chainId: '1',
+      data: ethSwapPrepareBody.depositData,
+      gasLimit: 27300,
+      maxFeePerGas: '2',
+      maxPriorityFeePerGas: '1',
+      nonce: 7,
+      to: process.env.WETH_ADDRESS,
+      type: 2,
+      value: ethSwapPrepareBody.value,
+    },
+    {
+      chainId: '1',
+      data: ethSwapPrepareBody.approveData,
+      gasLimit: 27300,
+      maxFeePerGas: '2',
+      maxPriorityFeePerGas: '1',
+      nonce: 8,
+      to: process.env.WETH_ADDRESS,
+      type: 2,
+    },
+    {
+      chainId: '1',
+      data: ethSwapPrepareBody.swapData,
+      gasLimit: 27300,
+      maxFeePerGas: '2',
+      maxPriorityFeePerGas: '1',
+      nonce: 9,
+      to: process.env.SWAP_ROUTER_ADDRESS,
+      type: 2,
+    },
+  ];
   const broadcastResponse = { receipt: null, txHash: '0xmockhash' };
   const tokenInfoResponse = [
     {
@@ -220,9 +443,47 @@ describe('AppModule HTTP integration', () => {
     tokenBalance: '1000000000000000000',
     walletBalance: '1000000000000000000',
   };
-  const externalUniswapQuote = { quoteId: 'uniswap-quote' };
+  const uniswapQuote = {
+    fee: '3000',
+    inputAmount: '1',
+    inputToken: 'ETH',
+    isMultiHop: false,
+    minimumReceived: '1.000000000000000000',
+    networkFee: 0.000021,
+    outputAmount: '2',
+    outputToken: 'ETH',
+    pricePerToken: '2',
+  };
+  const uniswapRoute = {
+    estimatedGasUsed: {
+      toString: () => '21000',
+    },
+    gasPriceWei: {
+      toString: () => '1000000000',
+    },
+    methodParameters: {
+      calldata: '0xswapcalldata',
+      to: '0x9999999999999999999999999999999999999999',
+      value: '0',
+    },
+    quote: {
+      toExact: () => '2',
+    },
+    route: [
+      {
+        pools: [
+          {
+            fee: {
+              toString: () => '3000',
+            },
+          },
+        ],
+        tokenPath: [{ symbol: 'ETH' }, { symbol: 'ETH' }],
+      },
+    ],
+  };
   const quoterUniswapResponse = {
-    data: externalUniswapQuote,
+    data: uniswapQuote,
     provider: 'UNISWAP',
     success: true,
   };
@@ -231,7 +492,23 @@ describe('AppModule HTTP integration', () => {
     provider: 'ONEINCH_FUSION_PLUS',
     success: true,
   };
-  const swapResponse = { provider: 'uniswap', route: 'swap' };
+  const swapResponse = {
+    data: [
+      {
+        chainId: 1,
+        data: '0xswapcalldata',
+        from: walletAddress,
+        gasLimit: '220000',
+        maxFeePerGas: '2',
+        maxPriorityFeePerGas: '1',
+        nonce: 7,
+        to: '0x9999999999999999999999999999999999999999',
+        type: 2,
+        value: '0',
+      },
+    ],
+    success: true,
+  };
   const inchQuote = { provider: '1inch', route: 'quote' };
   const inchFusionPlusQuote = { provider: '1inch', route: 'fusion-plus-quote' };
   const inchFusionOrder = { provider: '1inch', route: 'fusion-order' };
@@ -245,12 +522,33 @@ describe('AppModule HTTP integration', () => {
     route: 'submit-fusion-plus-order',
   };
   const inchOrderStatus = { status: 'pending' };
-  const inchNativeOrder = { provider: '1inch', route: 'native-order' };
-  const inchNativeConfirm = { provider: '1inch', route: 'native-confirm' };
-  const customNotification = { delivered: true };
+  const inchNativeQuote = {
+    presets: {
+      fast: {
+        secretsCount: 1,
+      },
+    },
+    recommendedPreset: 'fast',
+    srcChainId: 1,
+  };
+  const inchNativeOrder = {
+    orderHash: '0xnativehash',
+    quote: inchNativeQuote,
+    transaction: {
+      data: '0xnativecalldata',
+      to: '0x9999999999999999999999999999999999999999',
+      value: '0',
+    },
+  };
+  const inchNativeConfirm = {
+    message: 'Fulfillment loop initiated on backend.',
+    success: true,
+    typeTx: 'fusion',
+  };
   const storedSwapOrder = { orderHash: '0xorderhash' };
   const swapOrders = [{ orderHash: '0xorderhash' }];
   const swapOrder = { orderHash: '0xorderhash' };
+  const redisStore = new Map<string, string>();
 
   const deviceRepository = {
     create: jest.fn().mockResolvedValue(device),
@@ -309,61 +607,44 @@ describe('AppModule HTTP integration', () => {
     updateOrderStatus: jest.fn().mockResolvedValue(swapOrder),
     updateStatus: jest.fn().mockResolvedValue({ ok: true }),
   };
-  const ethTestnetSwapService = {
-    getQuote: jest.fn().mockResolvedValue(ethQuote),
-    prepareSwapTransaction: jest.fn().mockResolvedValue(ethSwapPrepare),
-  };
-  const uniSwapService = {
-    buildSwapTx: jest.fn().mockResolvedValue(ethSwapPrepare),
-    getQuote: jest.fn().mockResolvedValue(ethQuote),
-  };
-  const pancakeSwapService = {
-    createUnsignedSwapTransaction: jest.fn().mockResolvedValue(bscSwapPrepare),
-    getSwapQuote: jest.fn().mockResolvedValue('2.0'),
-  };
-  const uniswapService = {
-    buildSwapResponse: jest.fn().mockResolvedValue(swapResponse),
-    getSwapQuote: jest.fn().mockResolvedValue(externalUniswapQuote),
-  };
-  const inchService = {
-    buildFusionOrder: jest.fn().mockResolvedValue(inchFusionOrder),
-    buildFusionPlusOrder: jest.fn().mockResolvedValue(inchFusionPlusOrder),
-    fireCustomNotification: jest.fn().mockResolvedValue(customNotification),
-    getFusionPlusSwapQuote: jest.fn().mockResolvedValue(inchFusionPlusQuote),
-    getSwapQuote: jest.fn().mockResolvedValue(inchQuote),
-    orderStatus: jest.fn().mockResolvedValue(inchOrderStatus),
-    submitFusionOrder: jest.fn().mockResolvedValue(inchSubmitOrder),
-    submitFusionPlusOrder: jest
-      .fn()
-      .mockResolvedValue(inchSubmitFusionPlusOrder),
-  };
-  const fusionNativeService = {
-    confirmSwapOrder: jest.fn().mockResolvedValue(inchNativeConfirm),
-    createSwapOrder: jest.fn().mockResolvedValue(inchNativeOrder),
-  };
-  const banxaService = {
-    buyOrderCreate: jest.fn().mockResolvedValue({ orderId: 'order-id' }),
-    fetchAssets: jest.fn().mockResolvedValue(onOffRampAssets),
-    fetchQuotes: jest.fn().mockResolvedValue({
-      data: { quoteId: 'quote-id' },
-      status: true,
+  const commonHttpService = {
+    delete: jest.fn(),
+    get: jest.fn((request: { url: string }) => {
+      if (request.url.endsWith('/v2/crypto')) {
+        return Promise.resolve({ data: [{ code: 'ETH' }], status: true });
+      }
+
+      if (request.url.endsWith('/v2/fiats')) {
+        return Promise.resolve({ data: [{ code: 'USD' }], status: true });
+      }
+
+      if (request.url.endsWith('/v2/payment-methods')) {
+        return Promise.resolve({
+          data: { data: { payment_methods: [{ id: 'card', type: 'buy' }] } },
+          status: true,
+        });
+      }
+
+      return Promise.resolve({ data: [], status: true });
     }),
-    sellOrderCreate: jest.fn().mockResolvedValue({ orderId: 'order-id' }),
+    post: jest.fn(),
+    put: jest.fn(),
+    request: jest.fn((request: { url: string }) => {
+      if (request.url.includes('/quote/')) {
+        return Promise.resolve({ data: { quoteId: 'quote-id' }, status: true });
+      }
+
+      return Promise.resolve({ data: { orderId: 'order-id' }, status: true });
+    }),
   };
-  const moonPayService = {
-    buildLink: jest.fn().mockResolvedValue(onOffRampLink),
-    getCurrencies: jest.fn().mockResolvedValue(onOffRampAssets),
-    getQuote: jest.fn().mockResolvedValue(onOffRampQuote),
-  };
-  const alchemyService = {
-    fetchQuotes: jest.fn().mockResolvedValue({
+  const alchemyHttpService = {
+    delete: jest.fn(),
+    post: jest.fn(),
+    put: jest.fn(),
+    request: jest.fn().mockResolvedValue({
       data: { quoteId: 'alchemy-quote-id' },
       status: true,
     }),
-    orderCreate: jest.fn().mockResolvedValue({ orderId: 'alchemy-order-id' }),
-    sellOrderCreate: jest
-      .fn()
-      .mockResolvedValue({ orderId: 'alchemy-sell-order-id' }),
   };
   const userQueueService = {
     processUserRequest: jest.fn((handler: () => Promise<any>) => handler()),
@@ -371,27 +652,126 @@ describe('AppModule HTTP integration', () => {
 
   beforeAll(async () => {
     broadcastTransaction.mockResolvedValue({ hash: '0xmockhash' });
+    redisStore.clear();
+    mockAlphaRoute.mockResolvedValue(uniswapRoute);
+    mockUniswapRpcProvider.getFeeData.mockResolvedValue(feeData);
+    mockUniswapRpcProvider.getTransactionCount.mockResolvedValue(7);
+    mockEthersJsonRpcProvider.call.mockResolvedValue('0x');
+    mockEthersJsonRpcProvider.waitForTransaction.mockReturnValue(
+      new Promise(() => undefined),
+    );
+    mockCrossChainSdk.getQuote.mockResolvedValue(inchNativeQuote);
+    mockCrossChainSdk.createOrder.mockReturnValue({
+      hash: '0xnativehash',
+      order: new mockEvmCrossChainOrder(),
+      quoteId: 'native-quote-id',
+    });
+    mockCrossChainSdk.submitNativeOrder.mockResolvedValue({
+      order: { provider: '1inch', route: 'native-order' },
+    });
+    mockCrossChainSdk.getOrderStatus.mockResolvedValue({ status: 'Pending' });
+    mockCrossChainSdk.getReadyToAcceptSecretFills.mockResolvedValue({
+      fills: [],
+    });
+    mockCrossChainSdk.submitSecret.mockResolvedValue(undefined);
+    mockFusionSdk.getOrderStatus.mockResolvedValue({ status: 'Filled' });
+    const mockedAxios = axios as jest.Mocked<typeof axios>;
+    mockedAxios.get.mockImplementation((url: string) => {
+      if (url.includes('/fusion-plus/quoter/quote/receive')) {
+        return Promise.resolve({ data: inchFusionPlusQuote });
+      }
+
+      if (url.includes('/quote/receive')) {
+        return Promise.resolve({ data: inchQuote });
+      }
+
+      if (
+        url.includes('/order/status/') ||
+        url.includes('/fusion-plus/order')
+      ) {
+        return Promise.resolve({ data: inchOrderStatus });
+      }
+
+      throw new Error(`Unexpected axios.get URL: ${url}`);
+    });
+    mockedAxios.post.mockImplementation((url: string) => {
+      if (url.includes('/fusion-plus/quoter/quote/build/evm')) {
+        return Promise.resolve({ data: inchFusionPlusOrder });
+      }
+
+      if (url.includes('/quote/build')) {
+        return Promise.resolve({ data: inchFusionOrder });
+      }
+
+      if (url.includes('/fusion-plus/relayer/submit')) {
+        return Promise.resolve({ data: inchSubmitFusionPlusOrder });
+      }
+
+      if (url.includes('/order/submit')) {
+        return Promise.resolve({ data: inchSubmitOrder });
+      }
+
+      throw new Error(`Unexpected axios.post URL: ${url}`);
+    });
+    (global as any).fetch = jest.fn((url: string) => {
+      if (String(url).includes('/v3/currencies?')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                code: 'eth',
+                isSellSupported: true,
+                isSuspended: false,
+                metadata: { networkCode: 'ethereum' },
+                name: 'Ethereum',
+                type: 'crypto',
+              },
+            ]),
+        });
+      }
+
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            feeAmount: 1,
+            networkFeeAmount: 0.1,
+            quoteCurrencyAmount: 0.5,
+            totalAmount: 101.1,
+          }),
+      });
+    });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(RedisService)
       .useValue({
-        delKey: jest.fn().mockResolvedValue(undefined),
+        delKey: jest.fn((key: string) => {
+          redisStore.delete(key);
+          return Promise.resolve(undefined);
+        }),
         getHealthSnapshot: jest.fn().mockReturnValue({
           healthy: true,
           state: 'ready',
         }),
-        getKey: jest.fn().mockResolvedValue(null),
+        getKey: jest.fn((key: string) =>
+          Promise.resolve(redisStore.get(key) ?? null),
+        ),
         isHealthy: jest.fn().mockReturnValue(true),
         onModuleDestroy: jest.fn(),
         onModuleInit: jest.fn(),
         pingHealth: jest.fn().mockResolvedValue(true),
-        setKey: jest.fn().mockResolvedValue(undefined),
+        setKey: jest.fn((key: string, value: unknown) => {
+          redisStore.set(key, String(value));
+          return Promise.resolve(undefined);
+        }),
       })
       .overrideProvider(ProviderService)
       .useValue({
         getContract: jest.fn().mockReturnValue(tokenContract),
+        getChainRpcUrl: jest.fn().mockReturnValue('http://127.0.0.1:8545'),
         getProvider: jest.fn().mockReturnValue(provider),
         getProviderForChainId: jest.fn().mockReturnValue(provider),
         getRpcUrl: jest.fn().mockReturnValue('http://127.0.0.1:8545'),
@@ -409,24 +789,10 @@ describe('AppModule HTTP integration', () => {
       .useValue(marketDataRepository)
       .overrideProvider(SwapOrderRepository)
       .useValue(swapOrderRepository)
-      .overrideProvider(EthTestnetSwapService)
-      .useValue(ethTestnetSwapService)
-      .overrideProvider(UniSwapService)
-      .useValue(uniSwapService)
-      .overrideProvider(PancakeSwapService)
-      .useValue(pancakeSwapService)
-      .overrideProvider(UniswapService)
-      .useValue(uniswapService)
-      .overrideProvider(InchService)
-      .useValue(inchService)
-      .overrideProvider(FusionNativeService)
-      .useValue(fusionNativeService)
-      .overrideProvider(BanxaService)
-      .useValue(banxaService)
-      .overrideProvider(MoonPayService)
-      .useValue(moonPayService)
-      .overrideProvider(AlchemyService)
-      .useValue(alchemyService)
+      .overrideProvider(CommonHttpService)
+      .useValue(commonHttpService)
+      .overrideProvider(AlchemyHttpService)
+      .useValue(alchemyHttpService)
       .overrideProvider(UserQueueService)
       .useValue(userQueueService)
       .compile();
@@ -484,6 +850,10 @@ describe('AppModule HTTP integration', () => {
 
     if ('expectedBody' in route) {
       expect(response.body).toEqual(route.expectedBody);
+    }
+
+    if (route.expectedText !== undefined) {
+      expect(response.text).toBe(route.expectedText);
     }
   }
 
@@ -591,8 +961,9 @@ describe('AppModule HTTP integration', () => {
         path: '/api/v1/on-off-ramp/link',
       },
       {
+        auth: 'device',
         body: { title: 'Swap', message: 'Done' },
-        expectedBody: customNotification,
+        expectedText: 'true',
         expectedStatus: 201,
         method: 'post',
         name: 'fires a custom notification from an allowed origin',
@@ -670,7 +1041,7 @@ describe('AppModule HTTP integration', () => {
       },
       {
         auth: 'wallet',
-        body: quoteBody,
+        body: ethSwapPrepareBody,
         expectedBody: ethSwapPrepare,
         method: 'post',
         name: 'prepares an ETH swap transaction',
@@ -800,7 +1171,7 @@ describe('AppModule HTTP integration', () => {
       },
       {
         auth: 'wallet',
-        body: { amount: '1' },
+        body: quoteBody,
         expectedBody: swapResponse,
         method: 'post',
         name: 'prepares a generic EVM swap transaction',
@@ -904,7 +1275,7 @@ describe('AppModule HTTP integration', () => {
       },
       {
         auth: 'wallet',
-        body: { amount: '1' },
+        body: quoteBody,
         expectedBody: swapResponse,
         method: 'post',
         name: 'builds a Uniswap swap response',
@@ -912,7 +1283,7 @@ describe('AppModule HTTP integration', () => {
       },
       {
         auth: 'wallet',
-        body: { amount: '1' },
+        body: inchQuoteBody,
         expectedBody: inchQuote,
         expectedStatus: 201,
         method: 'post',
@@ -921,7 +1292,7 @@ describe('AppModule HTTP integration', () => {
       },
       {
         auth: 'wallet',
-        body: { amount: '1' },
+        body: fusionPlusQuoteBody,
         expectedBody: inchFusionPlusQuote,
         expectedStatus: 201,
         method: 'post',
@@ -930,7 +1301,7 @@ describe('AppModule HTTP integration', () => {
       },
       {
         auth: 'wallet',
-        body: { order: 'order' },
+        body: fusionOrderBody,
         expectedBody: inchFusionOrder,
         expectedStatus: 201,
         method: 'post',
@@ -939,7 +1310,7 @@ describe('AppModule HTTP integration', () => {
       },
       {
         auth: 'wallet',
-        body: { order: 'order' },
+        body: fusionPlusOrderBody,
         expectedBody: inchFusionPlusOrder,
         expectedStatus: 201,
         method: 'post',
@@ -948,7 +1319,7 @@ describe('AppModule HTTP integration', () => {
       },
       {
         auth: 'wallet',
-        body: { order: 'order' },
+        body: submitOrderBody,
         expectedBody: inchSubmitOrder,
         expectedStatus: 201,
         method: 'post',
@@ -957,7 +1328,7 @@ describe('AppModule HTTP integration', () => {
       },
       {
         auth: 'wallet',
-        body: { order: 'order' },
+        body: submitOrderBody,
         expectedBody: inchSubmitFusionPlusOrder,
         expectedStatus: 201,
         method: 'post',
@@ -970,11 +1341,15 @@ describe('AppModule HTTP integration', () => {
         method: 'get',
         name: 'gets a 1inch order status',
         path: '/api/v1/swap/1inch/orderStatus',
-        query: { orderHash: '0xorderhash' },
+        query: {
+          chain: 'ETH',
+          orderHash: '0xorderhash',
+          swapProvider: 'ONEINCH_FUSION',
+        },
       },
       {
         auth: 'wallet',
-        body: { amount: '1' },
+        body: fusionNativeOrderBody,
         expectedBody: inchNativeOrder,
         expectedStatus: 201,
         method: 'post',
@@ -983,7 +1358,7 @@ describe('AppModule HTTP integration', () => {
       },
       {
         auth: 'wallet',
-        body: { orderHash: '0xorderhash' },
+        body: fusionNativeConfirmBody,
         expectedBody: inchNativeConfirm,
         expectedStatus: 201,
         method: 'post',
