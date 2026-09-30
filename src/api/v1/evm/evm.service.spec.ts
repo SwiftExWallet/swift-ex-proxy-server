@@ -87,7 +87,11 @@ describe('EvmService', () => {
   });
 
   it('returns wallet nonce and gas fee data for the selected chain', async () => {
-    const feeData = { maxFeePerGas: 30n } as any;
+    const feeData = {
+      gasPrice: 20n,
+      maxFeePerGas: 30n,
+      maxPriorityFeePerGas: 5n,
+    } as any;
     (getTransactionCount as jest.Mock).mockResolvedValue(7);
     (getFeeData as jest.Mock).mockResolvedValue(feeData);
 
@@ -95,7 +99,11 @@ describe('EvmService', () => {
       service.getWalletAddressInfo('arb', { walletAddress }),
     ).resolves.toEqual({
       transactionCount: 7,
-      gasFeeData: feeData,
+      gasFeeData: {
+        gasPrice: 24n,
+        maxFeePerGas: 36n,
+        maxPriorityFeePerGas: 6n,
+      },
     });
 
     expect(providerService.getProvider).toHaveBeenCalledWith(ChainEnum.ARB);
@@ -180,7 +188,7 @@ describe('EvmService', () => {
       unsignedTx,
       nonce: 3,
       gasLimit: 21000n,
-      gasPrice: 30n,
+      gasPrice: 36n,
       chainId: 8453n,
     });
 
@@ -189,6 +197,32 @@ describe('EvmService', () => {
       walletAddress,
       unsignedTx,
     );
+  });
+
+  it.each([
+    [20n, 24n],
+    [1n, 2n],
+    [9007199254740993n, 10808639105689192n],
+    [null, null],
+  ])('bumps legacy fee %s safely to %s', async (gasPrice, expected) => {
+    (getTransactionCount as jest.Mock).mockResolvedValue(3);
+    (getEstimateGas as jest.Mock).mockResolvedValue(21000n);
+    (getFeeData as jest.Mock).mockResolvedValue({
+      gasPrice,
+      maxFeePerGas: null,
+      maxPriorityFeePerGas: null,
+    });
+    (getNetwork as jest.Mock).mockResolvedValue({ chainId: 56n });
+    await expect(
+      service.prepareTransaction('bsc', {
+        unsignedTx: { to: tokenAddress, value: '0x0' },
+        walletAddress,
+      } as any),
+    ).resolves.toMatchObject({
+      gasPrice: expected,
+      gasLimit: 21000n,
+      nonce: 3,
+    });
   });
 
   it('broadcasts one signed transaction', async () => {

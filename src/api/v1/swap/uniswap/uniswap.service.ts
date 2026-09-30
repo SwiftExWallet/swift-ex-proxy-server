@@ -28,6 +28,7 @@ import {
   withProviderControls,
 } from '../../common/utils/retry.util';
 import { validateProviderUrl } from '../../common/config/provider-url.config';
+import { bumpEvmFee } from '../../common/utils/evm-fee.util';
 import { TokenMetadataService } from '../../common/services/tokenMetadata.service';
 import {
   resolveWalletChain,
@@ -309,8 +310,8 @@ export class UniswapService {
           nonce: nonce,
           chainId: tokenIn.chainId,
           type: 2,
-          maxFeePerGas: feeData.maxFeePerGas?.toString(),
-          maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
+          maxFeePerGas: bumpEvmFee(feeData.maxFeePerGas)?.toString(),
+          maxPriorityFeePerGas: bumpEvmFee(feeData.maxPriorityFeePerGas)?.toString(),
           gasLimit: '76056',
         });
       }
@@ -323,8 +324,8 @@ export class UniswapService {
         nonce: isNativeIn ? nonce : nonce + 1,
         chainId: tokenIn.chainId,
         type: 2,
-        maxFeePerGas: feeData.maxFeePerGas?.toString(),
-        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
+        maxFeePerGas: bumpEvmFee(feeData.maxFeePerGas)?.toString(),
+        maxPriorityFeePerGas: bumpEvmFee(feeData.maxPriorityFeePerGas)?.toString(),
         gasLimit: '220000',
       });
       return txs;

@@ -68,6 +68,7 @@ export class SwapOrderService {
         usdValue,
         ...(device?._id ? { deviceId: device._id } : {}),
         ...(device?.fcmToken ? { deviceFcmToken: device.fcmToken } : {}),
+        ...(verifiedDto.provider === "STELLAR"? { status: SwapOrderStatus.COMPLETED }: {status:verifiedDto.status}),
       };
 
       if (provider === swapProvider.ONEINCH_FUSION_PLUS) {

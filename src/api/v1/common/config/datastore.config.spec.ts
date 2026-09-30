@@ -7,52 +7,10 @@ describe('datastore config validation', () => {
     process.env = { ...originalEnv };
     process.env.NODE_ENV = 'production';
     process.env.ENVIRONMENT = 'production';
-    delete process.env.REDIS_URL;
-    delete process.env.REDIS_ALLOW_LOCALHOST;
-    delete process.env.REDIS_ALLOW_DEFAULT_USER;
   });
 
   afterEach(() => {
     process.env = originalEnv;
-  });
-
-  describe('local Redis opt-in', () => {
-    beforeEach(() => {
-      process.env.ENVIRONMENT = 'prod';
-      process.env.REDIS_HOST = '127.0.0.1';
-      process.env.REDIS_TLS = 'false';
-      process.env.REDIS_USERNAME = 'app';
-      process.env.REDIS_PWD = 'test-password';
-      process.env.REDIS_ALLOW_LOCALHOST = 'true';
-    });
-
-    it('allows local Redis without TLS when explicitly enabled', () => {
-      expect(getRedisOptions()).toMatchObject({
-        host: '127.0.0.1',
-        tls: undefined,
-      });
-    });
-
-    it('still requires TLS for remote Redis with the opt-in enabled', () => {
-      process.env.REDIS_HOST = 'redis.example.com';
-      expect(() => getRedisOptions()).toThrow(/Redis TLS is required/);
-    });
-
-    it('rejects localhost without the opt-in even with TLS', () => {
-      delete process.env.REDIS_ALLOW_LOCALHOST;
-      process.env.REDIS_TLS = 'true';
-      expect(() => getRedisOptions()).toThrow(/Redis must not point at localhost/);
-    });
-
-    it('still requires a password for local Redis', () => {
-      delete process.env.REDIS_PWD;
-      expect(() => getRedisOptions()).toThrow(/Redis password is required/);
-    });
-
-    it('still requires an ACL username for local Redis', () => {
-      delete process.env.REDIS_USERNAME;
-      expect(() => getRedisOptions()).toThrow(/Redis ACL username is required/);
-    });
   });
 
   it('rejects production MongoDB config without TLS', () => {

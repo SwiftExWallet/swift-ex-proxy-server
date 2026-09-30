@@ -35,6 +35,7 @@ import {
   throwIfHttpException,
 } from '../common/utils/provider-error.util';
 import { withProviderControls } from '../common/utils/retry.util';
+import { bumpEvmFee } from '../common/utils/evm-fee.util';
 import { ProviderService } from '../provider/provider.service';
 import { QuoterService } from '../quoter/quoter.service';
 import { UniswapService } from '../swap/uniswap/uniswap.service';
@@ -156,7 +157,14 @@ export class EvmService {
         getFeeData(provider),
       ]);
 
-      return { transactionCount, gasFeeData };
+      return {
+        transactionCount,
+        gasFeeData: new FeeData(
+          bumpEvmFee(gasFeeData.gasPrice),
+          bumpEvmFee(gasFeeData.maxFeePerGas),
+          bumpEvmFee(gasFeeData.maxPriorityFeePerGas),
+        ),
+      };
     } catch (error) {
       throwIfHttpException(error);
       throw createProviderBadRequestException(error);
@@ -261,7 +269,7 @@ export class EvmService {
         unsignedTx,
         nonce,
         gasLimit,
-        gasPrice: feeData?.maxFeePerGas ?? feeData?.gasPrice ?? null,
+        gasPrice: bumpEvmFee(feeData?.maxFeePerGas ?? feeData?.gasPrice),
         chainId: network.chainId,
       };
     } catch (error) {

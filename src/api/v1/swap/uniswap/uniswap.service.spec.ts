@@ -1,3 +1,6 @@
+jest.mock('@ethersproject/providers', () => ({ JsonRpcProvider: jest.fn() }));
+import { JsonRpcProvider } from '@ethersproject/providers';
+import { BigNumber } from '@ethersproject/bignumber';
 jest.mock('@uniswap/smart-order-router', () => ({
   AlphaRouter: jest.fn(),
   SwapType: {
@@ -107,6 +110,46 @@ describe('UniswapService', () => {
       },
     });
   });
+
+  it.each([false, true])(
+    'bumps new swap fees once (native input: %s)',
+    async (native) => {
+      const feeData = {
+        maxFeePerGas: BigNumber.from('30'),
+        maxPriorityFeePerGas: BigNumber.from('5'),
+      };
+      (JsonRpcProvider as unknown as jest.Mock).mockImplementation(() => ({
+        getTransactionCount: jest.fn().mockResolvedValue(7),
+        getFeeData: jest.fn().mockResolvedValue(feeData),
+      }));
+      jest.spyOn(service, 'getQuote').mockResolvedValue({
+        methodParameters: {
+          to: '0x4444444444444444444444444444444444444444',
+          calldata: '0x1234',
+          value: '0x0',
+        },
+      } as any);
+      const txs = await service.buildSwapTx({
+        ...resolvedDto,
+        tokenIn: {
+          ...resolvedDto.tokenIn,
+          address: native
+            ? '0x0000000000000000000000000000000000000000'
+            : resolvedDto.tokenIn.address,
+        },
+      });
+      expect(txs).toHaveLength(native ? 1 : 2);
+      txs.forEach((tx, index) => {
+        expect(tx).toMatchObject({
+          maxFeePerGas: '36',
+          maxPriorityFeePerGas: '6',
+          nonce: 7 + index,
+          gasLimit: !native && index === 0 ? '76056' : '220000',
+        });
+      });
+      expect(feeData.maxFeePerGas.toString()).toBe('30');
+    },
+  );
 
   it('normalizes and wraps swap transaction builds', async () => {
     const txs = [{ to: '0x4444444444444444444444444444444444444444' }];

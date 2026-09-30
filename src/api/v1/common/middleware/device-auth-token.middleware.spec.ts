@@ -83,6 +83,39 @@ describe('DeviceAuthTokenMiddleware', () => {
     };
   }
 
+  it.each(['quote', 'prepare-swap', 'broadcast'])(
+    'requires wallet authentication for Soroswap %s',
+    async (route) => {
+      await expect(
+        middleware.use(
+          {
+            method: 'POST',
+            originalUrl: `/api/v1/soroswap/${route}`,
+            headers: {},
+          },
+          {} as any,
+          jest.fn(),
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+    },
+  );
+
+  it('allows bridge routes without authentication', async () => {
+    const next = jest.fn();
+
+    await middleware.use(
+      {
+        method: 'GET',
+        originalUrl: '/api/v1/bridge/transfer-id',
+        headers: {},
+      },
+      {} as any,
+      next,
+    );
+
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
   it('sets req.device from a verified token payload', async () => {
     const req = requestWithToken();
     const next = jest.fn();

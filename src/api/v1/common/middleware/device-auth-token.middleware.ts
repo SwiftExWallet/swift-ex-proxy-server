@@ -33,6 +33,7 @@ const WALLET_REQUIRED_ROUTE_PREFIXES = [
   'api/v1/bsc',
   'api/v1/evm',
   'api/v1/transaction-history',
+  'api/v1/soroswap',
 ];
 const WALLET_REQUIRED_ROUTE_PATHS = ['api/v1/swap'];
 const DEVICE_REQUIRED_ROUTE_PREFIXES = ['api/v1/wallet', 'api/v1/portfolio'];

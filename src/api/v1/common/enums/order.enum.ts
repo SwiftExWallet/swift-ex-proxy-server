@@ -27,4 +27,7 @@ export enum OrderTxType {
   BRIDGE = 'Bridge',
   CONTRACT_CALL = 'Contract Call',
   UNKNOWN = 'Unknown',
+  SELL_OFFER = 'Sell Offer',
+  BUY_OFFER = 'Buy Offer',
+  TOKEN_SEND = 'Token Send',
 }

@@ -29,11 +29,15 @@ import { TransactionHistoryModule } from './api/v1/transaction-history/transacti
 import { PortfolioModule } from './api/v1/portfolio/portfolio.module';
 import { AppAvailableModule } from './api/v1/app-available/app-available.module';
 import { StellarModule } from './api/v1/stellar/stellar.module';
+import { SoroswapModule } from './api/v1/soroswap/soroswap.module';
+import { BridgeModule } from './api/v1/bridge/bridge.module';
+import blockchainConfig from './api/v1/bridge/config/blockchain.config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      load: [blockchainConfig],
     }),
     MongooseModule.forRootAsync({
       useFactory: () => {
@@ -78,6 +82,8 @@ import { StellarModule } from './api/v1/stellar/stellar.module';
     PortfolioModule,
     AppAvailableModule,
     StellarModule,
+    SoroswapModule,
+    BridgeModule,
   ],
   controllers: [AppController],
   providers: [
@@ -118,6 +124,14 @@ export class AppModule {
         {
           path: '/api/v1/signing/verify',
           method: RequestMethod.POST,
+        },
+        {
+          path: '/api/v1/bridge',
+          method: RequestMethod.ALL,
+        },
+        {
+          path: '/api/v1/bridge/{*path}',
+          method: RequestMethod.ALL,
         },
       )
       .forRoutes('*');

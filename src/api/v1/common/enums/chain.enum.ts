@@ -45,6 +45,7 @@ export enum SwapNetwork {
   UNI = 'UNI',
   SOL = 'SOL',
   SRB = 'SRB',
+  STR = 'STR',
 }
 
 const isDevEnvironment = process.env.ENVIRONMENT === 'dev';
@@ -89,6 +90,7 @@ export enum swapProvider {
   DYDX = 'DYDX',
   SRBTODYDX = 'SRBTODYDX',
   NEARINTENT = 'NEARINTENT',
+  STELLAR = 'STELLAR',
 }
 
 export enum SupportedWalletChain {
