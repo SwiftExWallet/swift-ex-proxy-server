@@ -96,6 +96,16 @@ export function getBlockscoutAllowedHosts(): string[] {
 }
 
 export function getOneInchAllowedHosts(): readonly string[] {
+  if (isDevEnvironment() && process.env.INCH_MOCK_BASE_URL) {
+    try {
+      const mockHostname = normalizeHostname(
+        new URL(process.env.INCH_MOCK_BASE_URL).hostname,
+      );
+      return [...ONE_INCH_ALLOWED_HOSTS, mockHostname];
+    } catch {
+      return ONE_INCH_ALLOWED_HOSTS;
+    }
+  }
   return ONE_INCH_ALLOWED_HOSTS;
 }
 

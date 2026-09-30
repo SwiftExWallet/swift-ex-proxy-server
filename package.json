@@ -38,6 +38,7 @@
     "@nestjs/swagger": "^11.4.6",
     "@pancakeswap/sdk": "^5.8.16",
     "@pancakeswap/tokens": "^0.7.8",
+    "@stellar/stellar-sdk": "^14.1.0",
     "@uniswap/sdk-core": "^7.7.2",
     "@uniswap/smart-order-router": "^4.31.10",
     "@uniswap/v3-sdk": "^3.25.2",

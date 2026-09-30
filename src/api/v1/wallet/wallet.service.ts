@@ -14,6 +14,7 @@ import {
   EVM_ADDRESS_PATTERN,
   STELLAR_ADDRESS_PATTERN,
 } from '../common/constants/walletAddress.constants';
+import { StellarService } from '../stellar/stellar.service';
 
 const SUPPORTED_WALLET_ADDRESS_FIELDS = Object.values(SupportedWalletChain);
 
@@ -30,6 +31,7 @@ export class WalletService {
     private readonly walletRepo: WalletRepository,
     private readonly httpService: HttpService,
     private readonly walletSyncFailedService: WalletSyncFailedService,
+    private readonly stellarService: StellarService
   ) {}
 
   async create(
@@ -175,5 +177,41 @@ export class WalletService {
       walletId,
       address: normalizedAddress,
     };
+  }
+
+  async activateWallet(stellarAddressDto: StellarAddressDto, device: Device) {
+    const { stellarAddress } = stellarAddressDto;
+    this.logger.log('=== stellarAddress', stellarAddress);
+    // let activatedWallet: ActivatedWallet | null =
+    //   await this.activatedWalletRepo.findOne({
+    //     stellarAddress,
+    //   });
+    // if (activatedWallet) {
+    //   this.logger.log('wallet is already activated', { stellarAddress });
+    //   throw new BadRequestException(`${stellarAddress} is already activated`);
+    // }
+
+    // activatedWallet = await this.activatedWalletRepo.findOne({
+    //   deviceId: device._id,
+    // });
+    // if (activatedWallet) {
+    //   this.logger.log('wallet is already activated on this device', {
+    //     id: device._id,
+    //   });
+
+    //   throw new BadRequestException(
+    //     `Another address is already activated on this device`,
+    //   );
+    // }
+    // const wallet: Wallet | null = await this.walletRepo.findOne({
+    //   stellarAddress,
+    //   deviceId: device._id,
+    // });
+    // if (!wallet) {
+    //   throw new NotFoundException(`Wallet not found`);
+    // }
+    this.logger.log('==== preparing transaction to send XLM to wallet==');
+    const xdr =await this.stellarService.activateWalletBySendingXlm(stellarAddress);
+    return xdr;
   }
 }

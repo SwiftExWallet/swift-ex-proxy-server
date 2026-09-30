@@ -69,4 +69,8 @@ export class PortfolioRepository {
   async markStaleByAddress(address: string): Promise<void> {
     await this.model.updateMany({ address }, { $set: { stale: true } }).exec();
   }
+
+  async updateDevice(address: string, deviceId: string): Promise<void> {
+    await this.model.updateOne({ address }, { $set: { deviceId } }).exec();
+  }
 }

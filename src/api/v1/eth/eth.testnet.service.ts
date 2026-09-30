@@ -127,9 +127,11 @@ export class EthTestnetSwapService {
 
   async prepareSwapTransaction(
     swapPrepareDto: SwapPrepareDto,
-  ): Promise<SwapTransaction[]> {
-    const { address, swapType, value, depositData, approveData, swapData } =
+  ): Promise<any> {
+   try {
+     const { address, swapType, value, depositData, approveData, swapData } =
       swapPrepareDto;
+    this.logger.debug("this.provider",this.provider)
     const nonce: number = await getTransactionCount(this.provider, address);
     const { chainId } = await getNetwork(this.provider);
     this.logger.log('==== nonce, chainId ===', { nonce, chainId });
@@ -246,6 +248,9 @@ export class EthTestnetSwapService {
       throw new BadRequestException('Invalid swap type');
     }
     return txs;
+   } catch (error) {
+    console.error("erroror",error)
+   }
   }
 
   async estimateGas(

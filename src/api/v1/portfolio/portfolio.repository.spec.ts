@@ -87,6 +87,19 @@ describe('PortfolioRepository', () => {
     expect(query.exec).toHaveBeenCalledTimes(1);
   });
 
+  it('re-assigns the owning device for an address', async () => {
+    const query = createQuery();
+    model.updateOne.mockReturnValue(query);
+
+    await repository.updateDevice('0xwallet', 'new-device-id');
+
+    expect(model.updateOne).toHaveBeenCalledWith(
+      { address: '0xwallet' },
+      { $set: { deviceId: 'new-device-id' } },
+    );
+    expect(query.exec).toHaveBeenCalledTimes(1);
+  });
+
   it('marks all records for an address as stale', async () => {
     const query = createQuery();
     model.updateMany.mockReturnValue(query);

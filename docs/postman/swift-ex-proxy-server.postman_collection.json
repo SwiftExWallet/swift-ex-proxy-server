@@ -109,6 +109,14 @@
     {
       "key": "depositData",
       "value": "0x"
+    },
+    {
+      "key": "sentPageKey",
+      "value": ""
+    },
+    {
+      "key": "receivedPageKey",
+      "value": ""
     }
   ],
   "item": [
@@ -977,6 +985,67 @@
               }
             ],
             "url": "{{baseUrl}}/api/v1/swapOrders/{{orderHash}}?address={{walletAddress}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transaction History",
+      "item": [
+        {
+          "name": "Get Wallet Transaction History",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"walletAddress\": \"{{walletAddress}}\",\n  \"chain\": \"eth\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/transaction-history"
+          }
+        },
+        {
+          "name": "Get Wallet Transaction History - Next Page",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-wallet-address",
+                "value": "{{walletAddress}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"walletAddress\": \"{{walletAddress}}\",\n  \"chain\": \"eth\",\n  \"sentPageKey\": \"{{sentPageKey}}\",\n  \"receivedPageKey\": \"{{receivedPageKey}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/v1/transaction-history"
           }
         }
       ]

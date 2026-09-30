@@ -65,7 +65,37 @@ describe('encryption.util', () => {
       );
     });
 
+    it('uses a development-only fallback when the encryption key is missing', () => {
+      process.env.ENVIRONMENT = 'dev';
+      delete process.env.FUSION_SECRETS_ENCRYPTION_KEY;
+
+      const encrypted = encryptFusionSecrets(secretPayload);
+
+      expect(decryptFusionSecrets(encrypted)).toEqual(secretPayload);
+      expect(encrypted).not.toContain(secretPayload.secret);
+    });
+
+    it('uses the development-only fallback when the configured key is invalid', () => {
+      process.env.ENVIRONMENT = 'dev';
+      process.env.FUSION_SECRETS_ENCRYPTION_KEY = 'short-key';
+
+      const encrypted = encryptFusionSecrets(secretPayload);
+
+      expect(decryptFusionSecrets(encrypted)).toEqual(secretPayload);
+      expect(encrypted).not.toContain(secretPayload.secret);
+    });
+
+    it('does not use the development fallback outside dev', () => {
+      process.env.ENVIRONMENT = 'production';
+      delete process.env.FUSION_SECRETS_ENCRYPTION_KEY;
+
+      expect(() => encryptFusionSecrets(secretPayload)).toThrow(
+        'Invalid or missing FUSION_SECRETS_ENCRYPTION_KEY. Must be 32 bytes.',
+      );
+    });
+
     it('throws when the encryption key is not 32 bytes', () => {
+      process.env.ENVIRONMENT = 'production';
       process.env.FUSION_SECRETS_ENCRYPTION_KEY = 'short-key';
 
       expect(() => encryptFusionSecrets(secretPayload)).toThrow(

@@ -18,6 +18,7 @@ import {
   WalletSyncFailedSchema,
 } from './schema/wallet-sync-failed.schema';
 import { HttpService } from '../common/services/httpService';
+import { StellarModule } from '../stellar/stellar.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { HttpService } from '../common/services/httpService';
     UsersModule,
     NotificationModule,
     AlchemyModule,
+    StellarModule,
   ],
   providers: [
     WalletService,

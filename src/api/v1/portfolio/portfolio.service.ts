@@ -1,9 +1,13 @@
 import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
-import axios from 'axios';
+import { HttpService } from '../on-off-ramp/alchemy/http.service';
+import { GetPortfolioData } from './dto/getPortfolioData';
 import { PortfolioRepository } from './portfolio.repository';
 import { PortfolioMapper } from './portfolio.mapper';
 import { Portfolio, PortfolioToken } from './schema/portfolio.schema';
-import { AlchemyPortfolioResponse } from './interfaces/portfolio-sync.interface';
+import {
+  AlchemyPortfolioResponse,
+  PortfolioResponse,
+} from './interfaces/portfolio-sync.interface';
 import { normalizeWalletAddress } from '../common/utils/address.util';
 
 const DEFAULT_NETWORKS = [
@@ -19,48 +23,68 @@ const DEFAULT_NETWORKS = [
 @Injectable()
 export class PortfolioService {
   private readonly logger = new Logger(PortfolioService.name);
-  private readonly url = `https://api.g.alchemy.com/data/v1/${process.env.ALCHEMY_PORTFOLIO_KEY}/assets/tokens/by-address`;
+  private readonly url: string;
   private readonly networks = this.getNetworks();
+  private readonly SYNC_TTL_MS =
+    Number(process.env.PORTFOLIO_SYNC_TTL_SECONDS ?? 35) * 1000;
 
   constructor(
-    private readonly repository: PortfolioRepository,
-    private readonly mapper: PortfolioMapper,
-  ) {}
+    private readonly httpService: HttpService,
+    private readonly portfolioRepository: PortfolioRepository,
+    private readonly portfolioMapper: PortfolioMapper,
+  ) {
+    this.url = `https://api.g.alchemy.com/data/v1/${process.env.ALCHEMY_PORTFOLIO_KEY}/assets/tokens/by-address`;
+  }
 
-  async getPortfolio(deviceId: string, address: string): Promise<Portfolio> {
+  async getPortfolio(
+    deviceId: string,
+    address: string,
+    hardRefresh = false,
+  ): Promise<PortfolioResponse> {
     address = this.normalizeAddress(address);
-    const existing = await this.repository.findByAddress(address);
-    const isFresh = !!existing && existing.stale === false;
 
-    if (isFresh) {
-      return existing;
+    const existing = await this.portfolioRepository.findByAddress(address);
+
+    const canForceRefresh =
+      hardRefresh &&
+      !!existing?.lastSyncedAt &&
+      Date.now() - existing.lastSyncedAt.getTime() >= this.SYNC_TTL_MS;
+
+    const shouldFetch = !existing || existing.stale || canForceRefresh;
+
+    if (!shouldFetch) {
+      const existingDeviceId = String(existing.deviceId as unknown);
+      if (existingDeviceId !== String(deviceId)) {
+        await this.portfolioRepository.updateDevice(address, deviceId);
+      }
+      return this.portfolioMapper.toAlchemyResponse(existing);
     }
 
     try {
-      const response = await this.fetchFromAlchemy(address);
-      const { tokens, totalValueUsd } = this.mapper.normalize(response);
-      return (await this.repository.upsert(
+      const raw = await this.fetchFromAlchemy(address);
+      const { tokens, totalValueUsd } = this.portfolioMapper.normalize(raw);
+      const saved = await this.portfolioRepository.upsert(
         deviceId,
         address,
         tokens,
         totalValueUsd,
-      )) as Portfolio;
+      );
+      return this.portfolioMapper.toAlchemyResponse(saved as Portfolio);
     } catch (error) {
-      this.logger.error('Failed to sync portfolio', {
+      this.logger.error('Failed to sync portfolio from Alchemy', {
         deviceId,
         address,
         error,
       });
 
       if (existing) {
-        await this.repository.markFailed(
+        await this.portfolioRepository.markFailed(
           deviceId,
           address,
           (error as Error).message,
         );
-        return existing;
+        return this.portfolioMapper.toAlchemyResponse(existing);
       }
-
       throw new BadGatewayException('Failed to fetch portfolio');
     }
   }
@@ -73,15 +97,21 @@ export class PortfolioService {
     address = this.normalizeAddress(address);
     try {
       const existing = chains?.length
-        ? await this.repository.findByAddress(address)
+        ? await this.portfolioRepository.findByAddress(address)
         : null;
 
       if (chains?.length && existing) {
         await this.refreshNetworks(deviceId, address, chains, existing);
       } else {
         const response = await this.fetchFromAlchemy(address);
-        const { tokens, totalValueUsd } = this.mapper.normalize(response);
-        await this.repository.upsert(deviceId, address, tokens, totalValueUsd);
+        const { tokens, totalValueUsd } =
+          this.portfolioMapper.normalize(response);
+        await this.portfolioRepository.upsert(
+          deviceId,
+          address,
+          tokens,
+          totalValueUsd,
+        );
       }
     } catch (error) {
       this.logger.error('Failed to refresh portfolio', {
@@ -89,7 +119,7 @@ export class PortfolioService {
         address,
         error,
       });
-      await this.repository.markFailed(
+      await this.portfolioRepository.markFailed(
         deviceId,
         address,
         (error as Error).message,
@@ -112,7 +142,7 @@ export class PortfolioService {
     }
 
     const response = await this.fetchFromAlchemy(address, networks);
-    const { tokens: freshTokens } = this.mapper.normalize(response);
+    const { tokens: freshTokens } = this.portfolioMapper.normalize(response);
 
     const targetNetworks = new Set(networks);
     const preserved = existing.tokens.filter(
@@ -120,7 +150,7 @@ export class PortfolioService {
     );
     const merged = [...preserved, ...freshTokens];
 
-    await this.repository.upsert(
+    await this.portfolioRepository.upsert(
       deviceId,
       address,
       merged,
@@ -131,7 +161,7 @@ export class PortfolioService {
   private resolveNetworks(chains: string[]): string[] {
     const networks = new Set<string>();
     for (const chain of chains) {
-      const network = this.mapper.resolveAlchemyNetwork(chain);
+      const network = this.portfolioMapper.resolveAlchemyNetwork(chain);
       if (network) {
         networks.add(network);
       }
@@ -163,7 +193,7 @@ export class PortfolioService {
     address: string,
     networks: string[] = this.networks,
   ): Promise<AlchemyPortfolioResponse> {
-    const response = await axios.post(this.url, {
+    const body: GetPortfolioData = {
       addresses: [
         {
           address,
@@ -174,8 +204,8 @@ export class PortfolioService {
       withPrices: true,
       includeNativeTokens: true,
       includeErc20Tokens: true,
-    });
-
+    };
+    const response = await this.httpService.post(this.url, body);
     return response.data as AlchemyPortfolioResponse;
   }
 }

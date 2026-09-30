@@ -1,5 +1,6 @@
 import {
   getBlockscoutAllowedHosts,
+  getOneInchAllowedHosts,
   getProviderRpcAllowedHosts,
   validateProviderUrl,
 } from './provider-url.config';
@@ -88,6 +89,23 @@ describe('provider-url config', () => {
         allowedHosts: [],
       }),
     ).toBe('http://localhost:8545');
+  });
+
+  it('adds only the configured mock hostname to the dev 1inch allowlist', () => {
+    process.env.ENVIRONMENT = 'dev';
+    process.env.INCH_MOCK_BASE_URL = 'http://localhost:4010';
+
+    expect(getOneInchAllowedHosts()).toEqual([
+      'api.1inch.com',
+      'api.1inch.dev',
+      'localhost',
+    ]);
+
+    process.env.ENVIRONMENT = 'prod';
+    expect(getOneInchAllowedHosts()).toEqual([
+      'api.1inch.com',
+      'api.1inch.dev',
+    ]);
   });
 
   it('parses RPC and Blockscout allowlist env vars', () => {

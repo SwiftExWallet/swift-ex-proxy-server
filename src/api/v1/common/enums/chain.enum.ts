@@ -47,26 +47,27 @@ export enum SwapNetwork {
   SRB = 'SRB',
 }
 
+const isDevEnvironment = process.env.ENVIRONMENT === 'dev';
+
 export enum ChainId {
-  ETH = 1,
-  BNB = 56,
-  BSC = 56,
-  MATIC = 137,
-  POL = 137,
-  ARB = 42161,
-  OP = 10,
-  OPT = 10,
-  OP138 = 138,
-  AVAX = 43114,
-  AVA = 43114,
-  BASE = 8453,
-  BAS = 8453,
-  GNO = 100,
-  ZK = 324,
-  LINEA = 59144,
-  SONIC = 146,
-  UNI = 130,
-  SOL = 501,
+  ETH = isDevEnvironment ? 11155111 : 1,
+  BNB = isDevEnvironment ? 97 : 56,
+  BSC = isDevEnvironment ? 97 : 56,
+  MATIC = isDevEnvironment ? 80002 : 137,
+  POL = isDevEnvironment ? 80002 : 137,
+  ARB = isDevEnvironment ? 421614 : 42161,
+  OP = isDevEnvironment ? 11155420 : 10,
+  OPT = isDevEnvironment ? 11155420 : 10,
+  AVAX = isDevEnvironment ? 43113 : 43114,
+  AVA = isDevEnvironment ? 43113 : 43114,
+  BASE = isDevEnvironment ? 84532 : 8453,
+  BAS = isDevEnvironment ? 84532 : 8453,
+  GNO = isDevEnvironment ? 10200 : 100,
+  ZK = isDevEnvironment ? 300 : 324,
+  LINEA = isDevEnvironment ? 59141 : 59144,
+  SONIC = isDevEnvironment ? 14601 : 146,
+  UNI = isDevEnvironment ? 1301 : 130,
+  OP138 = isDevEnvironment ? 10200 : 138,
 }
 
 export const SUPPORTED_QUOTE_CHAIN_IDS = [
@@ -77,6 +78,7 @@ export const SUPPORTED_QUOTE_CHAIN_IDS = [
   ChainId.BSC,
   ChainId.POL,
   ChainId.OP138,
+  ChainId.ETH,
 ] as const;
 
 export enum swapProvider {

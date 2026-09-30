@@ -58,7 +58,7 @@ const NATIVE_TOKEN_SYMBOL_BY_CHAIN_ID: Partial<Record<ChainId, string>> = {
   [ChainId.OP138]: 'OPT',
   [ChainId.AVA]: 'AVAX',
   [ChainId.BAS]: 'ETH',
-  [ChainId.GNO]: 'XDAI',
+  // [ChainId.GNO]: 'XDAI',
   [ChainId.ZK]: 'ETH',
   [ChainId.LINEA]: 'ETH',
   [ChainId.SONIC]: 'S',

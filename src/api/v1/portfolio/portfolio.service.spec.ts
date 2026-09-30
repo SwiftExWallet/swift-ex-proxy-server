@@ -1,43 +1,52 @@
-import axios from 'axios';
 import { BadGatewayException, Logger } from '@nestjs/common';
 import { PortfolioService } from './portfolio.service';
 
-jest.mock('axios');
-
 describe('PortfolioService', () => {
   let service: PortfolioService;
+  let httpService: { post: jest.Mock };
   let repository: {
     findByAddress: jest.Mock;
     upsert: jest.Mock;
     markFailed: jest.Mock;
+    updateDevice: jest.Mock;
   };
   let mapper: {
     normalize: jest.Mock;
     resolveAlchemyNetwork: jest.Mock;
+    toAlchemyResponse: jest.Mock;
   };
-  const axiosPost = axios.post as jest.Mock;
   const originalEnv = process.env;
 
   beforeEach(() => {
     jest.spyOn(Logger.prototype, 'error').mockImplementation();
-    jest.clearAllMocks();
+    jest.spyOn(Logger.prototype, 'debug').mockImplementation();
     process.env = {
       ...originalEnv,
       ALCHEMY_PORTFOLIO_KEY: 'portfolio-key',
       ALCHEMY_PORTFOLIO_NETWORKS: '',
+      PORTFOLIO_SYNC_TTL_SECONDS: '35',
     };
+    httpService = { post: jest.fn() };
     repository = {
       findByAddress: jest.fn(),
       upsert: jest.fn(),
       markFailed: jest.fn(),
+      updateDevice: jest.fn(),
     };
     mapper = {
       normalize: jest.fn(),
       resolveAlchemyNetwork: jest.fn(
         (chain: string) => ({ ETH: 'eth-mainnet', BSC: 'bnb-mainnet' })[chain],
       ),
+      // identity passthrough is enough for these tests - toAlchemyResponse's
+      // own mapping is covered by portfolio.mapper.spec.ts
+      toAlchemyResponse: jest.fn((portfolio) => portfolio),
     };
-    service = new PortfolioService(repository as any, mapper as any);
+    service = new PortfolioService(
+      httpService as any,
+      repository as any,
+      mapper as any,
+    );
   });
 
   afterEach(() => {
@@ -48,7 +57,9 @@ describe('PortfolioService', () => {
   it('returns a fresh cached portfolio without calling Alchemy', async () => {
     const portfolio = {
       address: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
+      deviceId: 'device-id',
       stale: false,
+      lastSyncedAt: new Date(),
     };
     repository.findByAddress.mockResolvedValue(portfolio);
 
@@ -62,15 +73,34 @@ describe('PortfolioService', () => {
     expect(repository.findByAddress).toHaveBeenCalledWith(
       '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd',
     );
-    expect(axiosPost).not.toHaveBeenCalled();
+    expect(httpService.post).not.toHaveBeenCalled();
     expect(repository.upsert).not.toHaveBeenCalled();
+    expect(repository.updateDevice).not.toHaveBeenCalled();
+  });
+
+  it('re-attaches the requesting device to a fresh portfolio synced by another device', async () => {
+    const portfolio = {
+      address: '0xwallet',
+      deviceId: 'other-device',
+      stale: false,
+      lastSyncedAt: new Date(),
+    };
+    repository.findByAddress.mockResolvedValue(portfolio);
+
+    await service.getPortfolio('device-id', '0xWallet');
+
+    expect(repository.updateDevice).toHaveBeenCalledWith(
+      '0xwallet',
+      'device-id',
+    );
+    expect(httpService.post).not.toHaveBeenCalled();
   });
 
   it('syncs a stale EVM portfolio using a normalized address', async () => {
     const tokens = [{ network: 'eth-mainnet', valueUsd: '2' }];
     repository.findByAddress.mockResolvedValue({ stale: true });
     repository.upsert.mockResolvedValue({ address: '0xwallet' });
-    axiosPost.mockResolvedValue({ data: { data: { tokens: [] } } });
+    httpService.post.mockResolvedValue({ data: { data: { tokens: [] } } });
     mapper.normalize.mockReturnValue({ tokens, totalValueUsd: '2' });
 
     await service.getPortfolio(
@@ -78,7 +108,7 @@ describe('PortfolioService', () => {
       '0xABCDEFabcdefABCDEFabcdefABCDEFabcdefABCD',
     );
 
-    expect(axiosPost).toHaveBeenCalledWith(
+    expect(httpService.post).toHaveBeenCalledWith(
       'https://api.g.alchemy.com/data/v1/portfolio-key/assets/tokens/by-address',
       expect.objectContaining({
         addresses: [
@@ -96,6 +126,37 @@ describe('PortfolioService', () => {
     );
   });
 
+  it('does not force a refetch when hardRefresh is set but the sync TTL has not elapsed', async () => {
+    const portfolio = {
+      address: '0xwallet',
+      deviceId: 'device-id',
+      stale: false,
+      lastSyncedAt: new Date(),
+    };
+    repository.findByAddress.mockResolvedValue(portfolio);
+
+    await service.getPortfolio('device-id', '0xWallet', true);
+
+    expect(httpService.post).not.toHaveBeenCalled();
+  });
+
+  it('forces a refetch when hardRefresh is set and the sync TTL has elapsed', async () => {
+    const portfolio = {
+      address: '0xwallet',
+      deviceId: 'device-id',
+      stale: false,
+      lastSyncedAt: new Date(Date.now() - 60_000),
+    };
+    repository.findByAddress.mockResolvedValue(portfolio);
+    repository.upsert.mockResolvedValue({ address: '0xwallet' });
+    httpService.post.mockResolvedValue({ data: { data: { tokens: [] } } });
+    mapper.normalize.mockReturnValue({ tokens: [], totalValueUsd: '0' });
+
+    await service.getPortfolio('device-id', '0xWallet', true);
+
+    expect(httpService.post).toHaveBeenCalled();
+  });
+
   it('refreshes requested networks and preserves tokens from other networks', async () => {
     const existing = {
       tokens: [
@@ -105,7 +166,7 @@ describe('PortfolioService', () => {
     };
     const freshBscTokens = [{ network: 'bnb-mainnet', valueUsd: '4' }];
     repository.findByAddress.mockResolvedValue(existing);
-    axiosPost.mockResolvedValue({ data: { data: { tokens: [] } } });
+    httpService.post.mockResolvedValue({ data: { data: { tokens: [] } } });
     mapper.normalize.mockReturnValue({
       tokens: freshBscTokens,
       totalValueUsd: '4',
@@ -113,7 +174,7 @@ describe('PortfolioService', () => {
 
     await service.refreshPortfolio('device-id', '0xWallet', ['BSC']);
 
-    expect(axiosPost).toHaveBeenCalledWith(
+    expect(httpService.post).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
         addresses: [
@@ -138,7 +199,7 @@ describe('PortfolioService', () => {
   it('returns stale existing portfolio after a provider failure', async () => {
     const existing = { address: '0xwallet', stale: true };
     repository.findByAddress.mockResolvedValue(existing);
-    axiosPost.mockRejectedValue(new Error('alchemy failed'));
+    httpService.post.mockRejectedValue(new Error('alchemy failed'));
 
     await expect(service.getPortfolio('device-id', '0xWallet')).resolves.toBe(
       existing,
@@ -153,7 +214,7 @@ describe('PortfolioService', () => {
 
   it('throws bad gateway when an initial provider sync fails', async () => {
     repository.findByAddress.mockResolvedValue(null);
-    axiosPost.mockRejectedValue(new Error('alchemy failed'));
+    httpService.post.mockRejectedValue(new Error('alchemy failed'));
 
     await expect(
       service.getPortfolio('device-id', '0xWallet'),
