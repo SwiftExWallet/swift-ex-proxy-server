@@ -549,9 +549,10 @@ export class FusionNativeService {
       );
     }
 
-    if (!result.data) {
-      throw new NotFoundException('Order not found.');
-    }
+    // if (!result.data) {
+    //   this.logger.error("Order not found.",result)
+    //   throw new NotFoundException('Order not found.');
+    // }
   }
 
   private async exhaustSecretSubmissionLoop(

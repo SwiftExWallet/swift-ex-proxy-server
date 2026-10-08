@@ -1,7 +1,11 @@
 import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '../on-off-ramp/alchemy/http.service';
 import { GetPortfolioData } from './dto/getPortfolioData';
-import { PortfolioRepository } from './portfolio.repository';
+import {
+  DevicePortfolioResponse,
+  PortfolioRepository,
+  PortfolioTokenTotalsResponse,
+} from './portfolio.repository';
 import { PortfolioMapper } from './portfolio.mapper';
 import { Portfolio, PortfolioToken } from './schema/portfolio.schema';
 import {
@@ -87,6 +91,150 @@ export class PortfolioService {
       }
       throw new BadGatewayException('Failed to fetch portfolio');
     }
+  }
+
+  async getDevicePortfolioTotals(deviceId: string) {
+    const deviceIdText = this.stringifyDeviceId(deviceId);
+    const [totals, portfolios] = await Promise.all([
+      this.portfolioRepository.aggregateTotalsByDevice(deviceId),
+      this.portfolioRepository.findByDevice(deviceId),
+    ]);
+
+    const assets = totals.map((token) => this.toResponseAsset(token));
+    const formattedPortfolios = portfolios.map((portfolio, index) => ({
+      id: this.formatPortfolioId(index),
+      address: portfolio.address,
+      name: `Portfolio #${this.formatPortfolioId(index)}`,
+      valueUsd: this.toNumber(portfolio.totalValueUsd),
+      assets: portfolio.tokens.map((token) => this.toResponseAsset(token)),
+    }));
+
+    return {
+      success: true,
+      data: {
+        device: {
+          id: deviceIdText,
+          maskedId: this.maskDeviceId(deviceIdText),
+          isSynced: portfolios.every((p) => p.syncStatus === 'idle'),
+          lastUpdated: this.getLastUpdated(portfolios),
+        },
+        summary: {
+          totalValueUsd: formattedPortfolios.reduce(
+            (sum, portfolio) => sum + portfolio.valueUsd,
+            0,
+          ),
+          portfolioCount: portfolios.length,
+          assetCount: assets.length,
+          networkCount: new Set(assets.map((asset) => asset.network)).size,
+        },
+        networks: this.buildNetworkSummaries(assets),
+        assets,
+        portfolios: formattedPortfolios,
+      },
+    };
+  }
+
+  private toResponseAsset(
+    token: PortfolioToken | PortfolioTokenTotalsResponse,
+  ) {
+    return {
+      network: token.network,
+      tokenAddress: token.tokenAddress,
+      name: token.name,
+      decimals: token.decimals,
+      logo: token.logo,
+      balance: token.balance,
+      valueUsd: this.toNumber(token.valueUsd),
+      priceUsd: token.priceUsd === null ? null : this.toNumber(token.priceUsd),
+      symbol: token.symbol,
+      balanceHex: token.balanceHex,
+    };
+  }
+
+  private buildNetworkSummaries(
+    assets: ReturnType<PortfolioService['toResponseAsset']>[],
+  ) {
+    const networks = new Map<
+      string,
+      { network: string; name: string; symbol: string; valueUsd: number; assetCount: number }
+    >();
+
+    for (const asset of assets) {
+      const existing = networks.get(asset.network);
+      if (existing) {
+        existing.valueUsd += asset.valueUsd;
+        existing.assetCount += 1;
+        continue;
+      }
+
+      networks.set(asset.network, {
+        network: asset.network,
+        name: this.getNetworkName(asset.network),
+        symbol: this.getNetworkSymbol(asset.network),
+        valueUsd: asset.valueUsd,
+        assetCount: 1,
+      });
+    }
+
+    return [...networks.values()];
+  }
+
+  private formatPortfolioId(index: number): string {
+    return (index + 1).toString().padStart(2, '0');
+  }
+
+  private maskDeviceId(deviceId: string): string {
+    return `••••${deviceId.slice(-4)}`;
+  }
+
+  private stringifyDeviceId(deviceId: unknown): string {
+    return String(deviceId);
+  }
+
+  private getLastUpdated(portfolios: DevicePortfolioResponse[]): string | null {
+    const latest = portfolios
+      .map((portfolio) => portfolio.updatedAt ?? portfolio.lastSyncedAt)
+      .filter((date): date is Date => !!date)
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+
+    return latest ? latest.toISOString() : null;
+  }
+
+  private toNumber(value: string | null): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private getNetworkName(network: string): string {
+    const names: Record<string, string> = {
+      'eth-mainnet': 'Ethereum',
+      'ethereum-mainnet': 'Ethereum',
+      'base-mainnet': 'Base',
+      'matic-mainnet': 'Polygon',
+      'polygon-mainnet': 'Polygon',
+      'bnb-mainnet': 'BNB Smart Chain',
+      'arb-mainnet': 'Arbitrum',
+      'avax-mainnet': 'Avalanche',
+      'opt-mainnet': 'Optimism',
+    };
+
+    return names[network] ?? network;
+  }
+
+  private getNetworkSymbol(network: string): string {
+    const symbols: Record<string, string> = {
+      'eth-mainnet': 'ETH',
+      'ethereum-mainnet': 'ETH',
+      'base-mainnet': 'ETH',
+      'matic-mainnet': 'POL',
+      'polygon-mainnet': 'POL',
+      'bnb-mainnet': 'BNB',
+      'arb-mainnet': 'ETH',
+      'avax-mainnet': 'AVAX',
+      'opt-mainnet': 'ETH',
+    };
+
+    return symbols[network] ?? '';
   }
 
   async refreshPortfolio(

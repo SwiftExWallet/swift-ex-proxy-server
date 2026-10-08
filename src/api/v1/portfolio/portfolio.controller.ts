@@ -7,6 +7,14 @@ import { GetPortfolioQueryDto } from './dto/get-portfolio-query.dto';
 export class PortfolioController {
   constructor(private readonly portfolioService: PortfolioService) {}
 
+  @Get('/totals')
+  async getDevicePortfolioTotals(@Req() req: any, @Res() response) {
+    const totals = await this.portfolioService.getDevicePortfolioTotals(
+      req.device._id,
+    );
+    response.status(200).json(totals);
+  }
+
   @Get('/:address')
   async getPortfolio(
     @Req() req: any,

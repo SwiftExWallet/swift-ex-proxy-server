@@ -5,7 +5,9 @@ describe('PortfolioRepository', () => {
   let repository: PortfolioRepository;
   let model: {
     findOne: jest.Mock;
+    find: jest.Mock;
     findOneAndUpdate: jest.Mock;
+    aggregate: jest.Mock;
     updateOne: jest.Mock;
     updateMany: jest.Mock;
   };
@@ -18,7 +20,9 @@ describe('PortfolioRepository', () => {
     jest.spyOn(Logger.prototype, 'log').mockImplementation();
     model = {
       findOne: jest.fn(),
+      find: jest.fn(),
       findOneAndUpdate: jest.fn(),
+      aggregate: jest.fn(),
       updateOne: jest.fn(),
       updateMany: jest.fn(),
     };
@@ -37,6 +41,33 @@ describe('PortfolioRepository', () => {
     await expect(repository.findByAddress('0xwallet')).resolves.toBe(portfolio);
 
     expect(model.findOne).toHaveBeenCalledWith({ address: '0xwallet' });
+    expect(query.exec).toHaveBeenCalledTimes(1);
+  });
+
+  it('finds portfolio addresses and tokens by device', async () => {
+    const portfolios = [{ address: '0xwallet', tokens: [] }];
+    const query = {
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(portfolios),
+    };
+    model.find.mockReturnValue(query);
+
+    await expect(repository.findByDevice('device-id')).resolves.toBe(
+      portfolios,
+    );
+
+    expect(model.find).toHaveBeenCalledWith({ deviceId: 'device-id' });
+    expect(query.select).toHaveBeenCalledWith({
+      _id: 0,
+      address: 1,
+      totalValueUsd: 1,
+      syncStatus: 1,
+      lastSyncedAt: 1,
+      updatedAt: 1,
+      tokens: 1,
+    });
+    expect(query.lean).toHaveBeenCalledTimes(1);
     expect(query.exec).toHaveBeenCalledTimes(1);
   });
 
@@ -111,5 +142,107 @@ describe('PortfolioRepository', () => {
       { $set: { stale: true } },
     );
     expect(query.exec).toHaveBeenCalledTimes(1);
+  });
+
+  it('aggregates token totals by device into token-shaped rows', async () => {
+    const query = createQuery([
+      {
+        network: 'eth-mainnet',
+        tokenAddress: null,
+        symbol: 'ETH',
+        name: 'Ethereum',
+        decimals: 18,
+        logo: null,
+        balanceHex: '0x0',
+        balance: 10,
+        priceUsd: null,
+        valueUsd: 25000,
+      },
+    ]);
+    model.aggregate.mockReturnValue(query);
+
+    await expect(repository.aggregateTotalsByDevice('device-id')).resolves.toEqual(
+      [
+        {
+          network: 'eth-mainnet',
+          tokenAddress: null,
+          symbol: 'ETH',
+          name: 'Ethereum',
+          decimals: 18,
+          logo: null,
+          balanceHex: '0x0',
+          balance: '10',
+          priceUsd: null,
+          valueUsd: '25000',
+        },
+      ],
+    );
+
+    expect(model.aggregate).toHaveBeenCalledWith([
+      { $match: { deviceId: 'device-id' } },
+      { $unwind: '$tokens' },
+      {
+        $match: {
+          'tokens.symbol': { $nin: [null, ''] },
+        },
+      },
+      {
+        $group: {
+          _id: { $toUpper: '$tokens.symbol' },
+          network: { $first: '$tokens.network' },
+          tokenAddress: { $first: '$tokens.tokenAddress' },
+          name: { $first: '$tokens.name' },
+          decimals: { $first: '$tokens.decimals' },
+          logo: { $first: '$tokens.logo' },
+          balance: {
+            $sum: {
+              $convert: {
+                input: '$tokens.balance',
+                to: 'double',
+                onError: 0,
+                onNull: 0,
+              },
+            },
+          },
+          valueUsd: {
+            $sum: {
+              $convert: {
+                input: '$tokens.valueUsd',
+                to: 'double',
+                onError: 0,
+                onNull: 0,
+              },
+            },
+          },
+          priceUsd: { $first: '$tokens.priceUsd' },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          network: 1,
+          tokenAddress: 1,
+          symbol: '$_id',
+          name: 1,
+          decimals: 1,
+          logo: 1,
+          balanceHex: '0x0',
+          balance: 1,
+          priceUsd: 1,
+          valueUsd: 1,
+        },
+      },
+      { $sort: { symbol: 1 } },
+    ]);
+    expect(query.exec).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns empty totals when no device portfolios have tokens', async () => {
+    const query = createQuery([]);
+    model.aggregate.mockReturnValue(query);
+
+    await expect(
+      repository.aggregateTotalsByDevice('device-id'),
+    ).resolves.toEqual([]);
   });
 });

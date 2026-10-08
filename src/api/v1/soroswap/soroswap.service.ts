@@ -105,8 +105,8 @@ export class SoroswapService {
     if (
       process.env.SOROSWAP_ENVIRONMENT !== 'dev'
     ) {
-      throw new Error(
-        'This service currently supports TESTNET only',
+      this.logger.log(
+        'Soroswap service currently supports TESTNET only',
       );
     }
 
@@ -114,8 +114,8 @@ export class SoroswapService {
       process.env.SOROSWAP_QUERY_ACCOUNT || '';
 
     if (!this.queryAccount) {
-      throw new Error(
-        'SOROSWAP_QUERY_ACCOUNT is required',
+      this.logger.log(
+        'Soroswap query account is required on TESTNET only',
       );
     }
 
@@ -143,17 +143,17 @@ export class SoroswapService {
       !walletAddress ||
       !/^G[A-Z2-7]{55}$/.test(walletAddress)
     ) {
-      throw new BadRequestException(
-        'Valid Stellar public wallet address is required',
-      );
+      // throw new BadRequestException(
+      //   'Valid Stellar public wallet address is required',
+      // );
     }
 
     try {
       new Address(walletAddress);
     } catch {
-      throw new BadRequestException(
-        'Invalid Stellar wallet address',
-      );
+      // throw new BadRequestException(
+      //   'Invalid Stellar wallet address',
+      // );
     }
   }
 
