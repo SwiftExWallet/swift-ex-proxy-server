@@ -18,10 +18,6 @@ export interface PortfolioTokenTotalsResponse {
 
 export interface DevicePortfolioResponse {
   address: string;
-  totalValueUsd: string;
-  syncStatus: string;
-  lastSyncedAt: Date | null;
-  updatedAt: Date;
   tokens: PortfolioToken[];
 }
 
@@ -43,15 +39,7 @@ export class PortfolioRepository {
 
     return this.model
       .find({ deviceId: matchDeviceId })
-      .select({
-        _id: 0,
-        address: 1,
-        totalValueUsd: 1,
-        syncStatus: 1,
-        lastSyncedAt: 1,
-        updatedAt: 1,
-        tokens: 1,
-      })
+      .select({ _id: 0, address: 1, tokens: 1 })
       .lean<DevicePortfolioResponse[]>()
       .exec();
   }

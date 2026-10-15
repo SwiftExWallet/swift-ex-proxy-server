@@ -50,6 +50,16 @@ export class BridgeController {
     return this.bridge.submitSourceTx(id, body.txHash);
   }
 
+  @Post(':id/approval-tx')
+  async submitApprovalTx(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: SourceTxDto,
+  ) {
+    await this.bridge.assertAccess(id, req.wallet);
+    return this.bridge.submitApprovalTx(id, body.txHash);
+  }
+
   @Post(':id/stellar-signature')
   async submitStellarSignature(
     @Req() req: any,

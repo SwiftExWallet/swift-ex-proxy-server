@@ -114,11 +114,6 @@ export class BridgeService {
       throw new BadRequestException('Insufficient USDC balance.');
     }
 
-    if (!hasTrustline) {
-      throw new BadRequestException(
-        'Stellar wallet does not have USDC trustline.',
-      );
-    }
 
     const finalityThreshold = dto.fast ? 1000 : 2000;
 
@@ -483,6 +478,17 @@ export class BridgeService {
     });
     return updated;
   }
+
+  async submitApprovalTx(id: string, txHash: string): Promise<BridgeTransfer> {
+    const direction = await this.bridgeRepository.findById(id);
+    if (direction?.direction === BridgeDirection.STELLAR_TO_EVM) {
+      return this.stellarToEvm.submitApprovalTx(id, txHash);
+    }
+    throw new BadRequestException(
+      'Approval transaction hash is only supported for Stellar source transfers.',
+    );
+  }
+
 
   async getStatus(id: string): Promise<BridgeTransfer> {
     const direction = await this.bridgeRepository.findById(id);

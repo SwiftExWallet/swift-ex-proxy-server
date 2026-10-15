@@ -145,12 +145,7 @@ function validateRedisOptions(options: RedisOptions): void {
     return;
   }
 
-  const allowLocalRedis =
-    !!options.host &&
-    isLocalHost(options.host) &&
-    isTrue(process.env.REDIS_ALLOW_LOCALHOST);
-
-  if (!options.tls && !allowLocalRedis) {
+  if (!options.tls) {
     throw new Error(
       'Redis TLS is required in production. Use REDIS_TLS=true or a rediss:// REDIS_URL.',
     );
@@ -166,7 +161,7 @@ function validateRedisOptions(options: RedisOptions): void {
     );
   }
 
-  if (options.host && isLocalHost(options.host) && !allowLocalRedis) {
+  if (options.host && isLocalHost(options.host)) {
     throw new Error(
       'Redis must not point at localhost in production-like environments.',
     );

@@ -57,32 +57,46 @@ describe('PortfolioController', () => {
     );
   });
 
-  it('returns the wrapped portfolio summary for the authenticated device', async () => {
-    const req = { device: { _id: 'device-id' } };
+  it('returns totals and individual portfolios for the requested device id', async () => {
     const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
     const result = {
-      success: true,
-      data: {
-        device: {
-          id: 'device-id',
-          maskedId: '••••e-id',
-          isSynced: true,
-          lastUpdated: '2026-10-03T07:20:00.000Z',
+      totals: [
+        {
+          network: 'eth-mainnet',
+          tokenAddress: null,
+          symbol: 'ETH',
+          name: 'Ethereum',
+          decimals: 18,
+          logo: null,
+          balanceHex: '0x0',
+          balance: '10',
+          priceUsd: null,
+          valueUsd: '25000',
         },
-        summary: {
-          totalValueUsd: 25000,
-          portfolioCount: 1,
-          assetCount: 1,
-          networkCount: 1,
+      ],
+      portfolios: [
+        {
+          address: '0xwallet',
+          tokens: [
+            {
+              network: 'eth-mainnet',
+              tokenAddress: null,
+              symbol: 'ETH',
+              name: 'Ethereum',
+              decimals: 18,
+              logo: null,
+              balanceHex: '0x1',
+              balance: '10',
+              priceUsd: '2500',
+              valueUsd: '25000',
+            },
+          ],
         },
-        networks: [],
-        assets: [],
-        portfolios: [],
-      },
+      ],
     };
     portfolioService.getDevicePortfolioTotals.mockResolvedValue(result);
 
-    await controller.getDevicePortfolioTotals(req, res);
+    await controller.getDevicePortfolioTotals({ deviceId: 'device-id' }, res);
 
     expect(portfolioService.getDevicePortfolioTotals).toHaveBeenCalledWith(
       'device-id',

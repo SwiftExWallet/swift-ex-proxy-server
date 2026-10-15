@@ -261,6 +261,34 @@ export class StellarToEvmService {
     );
   }
 
+  async submitApprovalTx(id: string, txHash: string): Promise<BridgeTransfer> {
+    const hash = txHash.trim().replace(/^0x/i, '').toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(hash)) {
+      throw new BadRequestException('Invalid Stellar approval transaction hash.');
+    }
+    const transfer = await this.repository.findById(id);
+    if (!transfer) throw new BadRequestException('Bridge transfer not found.');
+    if (transfer.status !== BridgeStatus.APPROVAL_SIGNATURE_REQUIRED) {
+      throw new BadRequestException(
+        `Transfer is not waiting for approval. Current status: ${transfer.status}`,
+      );
+    }
+    const result = await this.stellar.getTransaction(hash);
+    if (result.status === StellarSdk.rpc.Api.GetTransactionStatus.NOT_FOUND) {
+      throw new BadRequestException('Approval transaction was not found.');
+    }
+    if (result.status !== StellarSdk.rpc.Api.GetTransactionStatus.SUCCESS) {
+      throw new BadRequestException('Approval transaction did not succeed.');
+    }
+    return this.publicTransfer(
+      await this.repository.update(id, {
+        approvalTxHash: hash,
+        status: BridgeStatus.APPROVAL_PENDING,
+        error: null,
+      }),
+    );
+  }
+
   async status(id: string): Promise<BridgeTransfer> {
     const current = await this.repository.get(id);
     this.logger.log(`Bridge status request id=${id} status=${current.status}`);

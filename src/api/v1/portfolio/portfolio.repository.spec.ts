@@ -61,10 +61,6 @@ describe('PortfolioRepository', () => {
     expect(query.select).toHaveBeenCalledWith({
       _id: 0,
       address: 1,
-      totalValueUsd: 1,
-      syncStatus: 1,
-      lastSyncedAt: 1,
-      updatedAt: 1,
       tokens: 1,
     });
     expect(query.lean).toHaveBeenCalledTimes(1);

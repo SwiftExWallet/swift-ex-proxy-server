@@ -226,134 +226,37 @@ describe('PortfolioService', () => {
     expect(repository.markFailed).not.toHaveBeenCalled();
   });
 
-  it('returns the requested device portfolio response structure', async () => {
-    const assets = [
+  it('returns token totals and individual portfolios by the requested device', async () => {
+    const totals = [
       {
-        network: 'base-mainnet',
+        network: 'eth-mainnet',
         tokenAddress: null,
         symbol: 'ETH',
         name: 'Ethereum',
         decimals: 18,
         logo: null,
         balanceHex: '0x0',
-        balance: '0.5',
-        priceUsd: '3400.50',
-        valueUsd: '1700.25',
-      },
-      {
-        network: 'base-mainnet',
-        tokenAddress: '0xusdc',
-        symbol: 'USDC',
-        name: 'USD Coin',
-        decimals: 6,
-        logo: 'https://example.com/usdc.png',
-        balanceHex: '0x0',
-        balance: '250.5',
-        priceUsd: '1',
-        valueUsd: '250.50',
+        balance: '10',
+        priceUsd: null,
+        valueUsd: '25000',
       },
     ];
     const portfolios = [
       {
         address: '0xwallet',
-        totalValueUsd: '1950.75',
-        syncStatus: 'idle',
-        lastSyncedAt: new Date('2026-10-03T07:20:00.000Z'),
-        updatedAt: new Date('2026-10-03T07:21:00.000Z'),
-        tokens: assets,
+        tokens: totals,
       },
     ];
-    repository.aggregateTotalsByDevice.mockResolvedValue(assets);
+    repository.aggregateTotalsByDevice.mockResolvedValue(totals);
     repository.findByDevice.mockResolvedValue(portfolios);
 
     await expect(
       service.getDevicePortfolioTotals('device-id'),
-    ).resolves.toEqual({
-      success: true,
-      data: {
-        device: {
-          id: 'device-id',
-          maskedId: '••••e-id',
-          isSynced: true,
-          lastUpdated: '2026-10-03T07:21:00.000Z',
-        },
-        summary: {
-          totalValueUsd: 1950.75,
-          portfolioCount: 1,
-          assetCount: 2,
-          networkCount: 1,
-        },
-        networks: [
-          {
-            network: 'base-mainnet',
-            name: 'Base',
-            symbol: 'ETH',
-            valueUsd: 1950.75,
-            assetCount: 2,
-          },
-        ],
-        assets: [
-          {
-            ...assets[0],
-            priceUsd: 3400.5,
-            valueUsd: 1700.25,
-          },
-          {
-            ...assets[1],
-            priceUsd: 1,
-            valueUsd: 250.5,
-          },
-        ],
-        portfolios: [
-          {
-            id: '01',
-            address: '0xwallet',
-            name: 'Portfolio #01',
-            valueUsd: 1950.75,
-            assets: [
-              {
-                ...assets[0],
-                priceUsd: 3400.5,
-                valueUsd: 1700.25,
-              },
-              {
-                ...assets[1],
-                priceUsd: 1,
-                valueUsd: 250.5,
-              },
-            ],
-          },
-        ],
-      },
-    });
+    ).resolves.toEqual({ totals, portfolios });
 
     expect(repository.aggregateTotalsByDevice).toHaveBeenCalledWith(
       'device-id',
     );
     expect(repository.findByDevice).toHaveBeenCalledWith('device-id');
-  });
-
-  it('handles object device ids when building device metadata', async () => {
-    const deviceId = {
-      toString: () => '507f1f77bcf86cd799439011',
-    };
-    repository.aggregateTotalsByDevice.mockResolvedValue([]);
-    repository.findByDevice.mockResolvedValue([]);
-
-    await expect(
-      service.getDevicePortfolioTotals(deviceId as any),
-    ).resolves.toEqual(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          device: expect.objectContaining({
-            id: '507f1f77bcf86cd799439011',
-            maskedId: '••••9011',
-          }),
-        }),
-      }),
-    );
-
-    expect(repository.aggregateTotalsByDevice).toHaveBeenCalledWith(deviceId);
-    expect(repository.findByDevice).toHaveBeenCalledWith(deviceId);
   });
 });
