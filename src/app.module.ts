@@ -32,6 +32,7 @@ import { StellarModule } from './api/v1/stellar/stellar.module';
 import { SoroswapModule } from './api/v1/soroswap/soroswap.module';
 import { BridgeModule } from './api/v1/bridge/bridge.module';
 import blockchainConfig from './api/v1/bridge/config/blockchain.config';
+import { RecoveryModule } from './api/v1/recovery/recovery.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import blockchainConfig from './api/v1/bridge/config/blockchain.config';
     StellarModule,
     SoroswapModule,
     BridgeModule,
+    RecoveryModule,
   ],
   controllers: [AppController],
   providers: [
