@@ -56,6 +56,15 @@ pids
 *.seed
 *.pid.lock
 
+# Recovery circuit artifacts and private proof data
+circuits/recovery-tmp/
+circuits/**/*.wtns
+circuits/**/input.json
+circuits/**/proof.json
+circuits/**/public.json
+circuits/**/*.zkey
+circuits/bin/
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
