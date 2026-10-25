@@ -34,6 +34,7 @@ const WALLET_REQUIRED_ROUTE_PREFIXES = [
   'api/v1/evm',
   'api/v1/transaction-history',
   'api/v1/soroswap',
+  'api/v1/recovery',
 ];
 const WALLET_REQUIRED_ROUTE_PATHS = ['api/v1/swap'];
 const DEVICE_REQUIRED_ROUTE_PREFIXES = ['api/v1/wallet', 'api/v1/portfolio'];
@@ -202,6 +203,10 @@ export class DeviceAuthTokenMiddleware implements NestMiddleware {
     const path = this.getPath(req);
 
     if (method === 'POST' && path === 'api/v1/swap/1inch/customNotification') {
+      return false;
+    }
+
+    if (method === 'POST' && path === 'api/v1/recovery/ses-hook') {
       return false;
     }
 

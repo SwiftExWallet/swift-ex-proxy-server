@@ -3,6 +3,7 @@ import { WalletService } from './wallet.service';
 import { WalletRepository } from './wallet.repository';
 import { HttpService } from '../common/services/httpService';
 import { WalletSyncFailedService } from './wallet-sync-failed.service';
+import { StellarService } from '../stellar/stellar.service';
 
 describe('WalletService', () => {
   let service: WalletService;
@@ -21,6 +22,10 @@ describe('WalletService', () => {
         },
         {
           provide: WalletSyncFailedService,
+          useValue: {},
+        },
+        {
+          provide: StellarService,
           useValue: {},
         },
       ],

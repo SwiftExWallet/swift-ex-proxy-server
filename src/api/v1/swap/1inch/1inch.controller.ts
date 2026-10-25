@@ -95,15 +95,15 @@ export class inchController {
 
   @Post('/buildFusionPlusOrder')
   @BodySizeLimit(BODY_SIZE_LIMITS.standard, 'inch-build-fusion-plus-order')
-  // @RateLimit(
-  //   ...failClosedRateLimits(
-  //     rateLimitByIpDeviceAndWallet('inch-build-fusion-plus-order', {
-  //       ip: 30,
-  //       device: 15,
-  //       wallet: 15,
-  //     }),
-  //   ),
-  // )
+  @RateLimit(
+    ...failClosedRateLimits(
+      rateLimitByIpDeviceAndWallet('inch-build-fusion-plus-order', {
+        ip: 30,
+        device: 15,
+        wallet: 15,
+      }),
+    ),
+  )
   async createFusionPlusOrder(
     @Req() req: any,
     @Body() fusionPlusOrder: FusionPlusOrderDto,
@@ -117,13 +117,13 @@ export class inchController {
 
   @Post('/submitOrder')
   @BodySizeLimit(BODY_SIZE_LIMITS.providerOrderPayload, 'inch-submit-order')
-  // @RateLimit(
-  //   ...rateLimitByIpDeviceAndWallet('inch-submit-order', {
-  //     ip: 20,
-  //     device: 10,
-  //     wallet: 10,
-  //   }),
-  // )
+  @RateLimit(
+    ...rateLimitByIpDeviceAndWallet('inch-submit-order', {
+      ip: 20,
+      device: 10,
+      wallet: 10,
+    }),
+  )
   async submitOrder(@Req() req: any, @Body() submitOrderDto: SubmitOrderDto) {
     const data = await this.inchService.submitFusionOrder(
       req.device,
@@ -138,15 +138,15 @@ export class inchController {
     BODY_SIZE_LIMITS.providerOrderPayload,
     'inch-submit-fusion-plus-order',
   )
-  // @RateLimit(
-  //   ...failClosedRateLimits(
-  //     rateLimitByIpDeviceAndWallet('inch-submit-fusion-plus-order', {
-  //       ip: 20,
-  //       device: 10,
-  //       wallet: 10,
-  //     }),
-  //   ),
-  // )
+  @RateLimit(
+    ...failClosedRateLimits(
+      rateLimitByIpDeviceAndWallet('inch-submit-fusion-plus-order', {
+        ip: 20,
+        device: 10,
+        wallet: 10,
+      }),
+    ),
+  )
   async submitFusionPlusOrder(
     @Req() req: any,
     @Body() submitOrderDto: SubmitOrderDto,
@@ -183,15 +183,15 @@ export class inchController {
     BODY_SIZE_LIMITS.providerOrderPayload,
     'inch-build-fusion-plus-native-order',
   )
-  // @RateLimit(
-  //   ...failClosedRateLimits(
-  //     rateLimitByIpDeviceAndWallet('inch-build-fusion-plus-native-order', {
-  //       ip: 30,
-  //       device: 15,
-  //       wallet: 15,
-  //     }),
-  //   ),
-  // )
+  @RateLimit(
+    ...failClosedRateLimits(
+      rateLimitByIpDeviceAndWallet('inch-build-fusion-plus-native-order', {
+        ip: 30,
+        device: 15,
+        wallet: 15,
+      }),
+    ),
+  )
   async buildFusionPlusNativeOrder(
     @Req() req: any,
     @Body() body: FusionPlusSwapQuoteDto,
@@ -204,15 +204,15 @@ export class inchController {
     BODY_SIZE_LIMITS.simple,
     'inch-submit-fusion-plus-native-order',
   )
-  // @RateLimit(
-  //   ...failClosedRateLimits(
-  //     rateLimitByIpDeviceAndWallet('inch-submit-fusion-plus-native-order', {
-  //       ip: 20,
-  //       device: 10,
-  //       wallet: 10,
-  //     }),
-  //   ),
-  // )
+  @RateLimit(
+    ...failClosedRateLimits(
+      rateLimitByIpDeviceAndWallet('inch-submit-fusion-plus-native-order', {
+        ip: 20,
+        device: 10,
+        wallet: 10,
+      }),
+    ),
+  )
   async confirmOrder(
     @Req() req: any,
     @Body() confirmSwapOrderDto: ConfirmSwapOrderDto,
@@ -226,20 +226,20 @@ export class inchController {
   @Post('/customNotification')
   @UseGuards(CustomNotificationOriginGuard)
   @BodySizeLimit(BODY_SIZE_LIMITS.notification, 'custom-notification')
-  // @RateLimit(
-  //   ...rateLimitByIpAndDevice('custom-notification-minute', {
-  //     ip: 10,
-  //     device: 10,
-  //   }),
-  //   ...rateLimitByIpAndDevice(
-  //     'custom-notification-hour',
-  //     {
-  //       ip: 50,
-  //       device: 50,
-  //     },
-  //     3600,
-  //   ),
-  // )
+  @RateLimit(
+    ...rateLimitByIpAndDevice('custom-notification-minute', {
+      ip: 10,
+      device: 10,
+    }),
+    ...rateLimitByIpAndDevice(
+      'custom-notification-hour',
+      {
+        ip: 50,
+        device: 50,
+      },
+      3600,
+    ),
+  )
   async customNotification(
     @Req() req: any,
     @Body() notification: NotificationDto,

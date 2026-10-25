@@ -116,6 +116,23 @@ describe('DeviceAuthTokenMiddleware', () => {
     expect(next).toHaveBeenCalledTimes(1);
   });
 
+  it('allows the public SES recovery webhook without wallet authentication', async () => {
+    const next = jest.fn();
+
+    await middleware.use(
+      {
+        method: 'POST',
+        originalUrl: '/api/v1/recovery/ses-hook',
+        headers: {},
+      },
+      {} as any,
+      next,
+    );
+
+    expect(jwtService.verifyAsync).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
   it('sets req.device from a verified token payload', async () => {
     const req = requestWithToken();
     const next = jest.fn();
