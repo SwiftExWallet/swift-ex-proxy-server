@@ -46,6 +46,13 @@ export class RecoveryAttemptService {
     }) as Promise<RecoveryAttemptRecord>;
   }
 
+  async clearActive(owner: string) {
+    await this.attemptModel.deleteMany({
+      owner,
+      status: { $in: ACTIVE_STATUSES },
+    });
+  }
+
   update(id: unknown, update: RecoveryAttemptUpdate) {
     return this.attemptModel
       .findByIdAndUpdate(id, { $set: update }, { new: true })

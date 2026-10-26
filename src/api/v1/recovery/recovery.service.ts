@@ -34,6 +34,10 @@ export class RecoveryService {
     }
     let attempt: { _id?: unknown } | null = null;
     try {
+      // chain is source of truth: if nothing is pending on-chain, drop any stale Mongo attempt
+      if (!(await this.chain.pending(owner))) {
+        await this.attempts.clearActive(owner);
+      }
       attempt = await this.attempts.createStarted(owner);
       await this.chain.assertConfiguredVerifier();
       const registration = await this.chain.registration(owner);
