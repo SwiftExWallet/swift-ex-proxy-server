@@ -108,14 +108,14 @@ The source currently contains testnet-oriented defaults for several public IDs, 
 
 ### Artifact source and prerequisites
 
-The circuit source and build scripts are included in this repository:
+The circuit source and build scripts are in [circut-setup](circut-setup/README.md). Build artifacts there, then install the runtime files into the proxy's `circuits/` directory. Contract source is maintained in a separate repository.
 
 ```text
-circuits/
+circut-setup/circuits/
 ├── src/legacy_claim.circom       # circuit logic
 ├── src/claim704.circom           # generated 704-byte wrapper
 ├── build-circuit.sh              # wrapper generation and Circom compilation
-├── prove.sh                      # development contribution, proof, and verifier generation
+├── prove-email.sh                # witness generation, proving, and local verification
 ├── ptau/ppot_0080_21.ptau        # separately supplied Powers of Tau input
 └── package.json                  # snarkjs 0.7.6 and zkEmail circuit dependencies
 ```
@@ -123,19 +123,20 @@ circuits/
 Install Circom 2.1.6 and ensure `circom` is on `PATH`. Circuit compilation and setup are memory-intensive; use at least 8 GB RAM, with 16 GB recommended. Then install the circuit dependencies:
 
 ```bash
-cd circuits
+cd circut-setup/circuits
 npm install
+mkdir -p build
 circom --version
 npx snarkjs --version
 ```
 
-The 2.3 GB Powers-of-Tau file is intentionally not committed. Supply the trusted `ppot_0080_21.ptau` artifact at `circuits/ptau/ppot_0080_21.ptau` and verify its published checksum before setup.
+The 2.3 GB Powers-of-Tau file is intentionally not committed. Supply the trusted `ppot_0080_21.ptau` artifact at `circut-setup/circuits/ptau/ppot_0080_21.ptau` and verify its published checksum before setup.
 
-The prover binary is platform-specific and is not committed. Build Rapidsnark for the deployment host and install it as `circuits/bin/rapidsnark-prover`.
+The prover binary is platform-specific and is not committed. Build Rapidsnark for the deployment host and install it as `circut-setup/circuits/bin/rapidsnark-prover` for local proving.
 
 ### Generate each circuit artifact
 
-Run these commands from `circuits`.
+Run these commands from `circut-setup/circuits`.
 
 1. Generate the fixed-size wrapper and compile the circuit:
 
@@ -175,7 +176,7 @@ Run these commands from `circuits`.
      -e="$(openssl rand -hex 32)"
    ```
 
-   `prove.sh` performs this same development contribution, exports the verification key, proves a prepared witness, verifies the proof locally, and generates the Soroban verifier contract. It expects a witness at `build/witness704.wtns` by default; override that with `WITNESS=/path/to/witness.wtns`.
+   This replaces the final proving key. Run it only when creating a new testnet setup, before generating and deploying the matching verifier.
 
 4. Export and verify the matching verification key:
 
@@ -194,7 +195,7 @@ Run these commands from `circuits`.
 
    ```bash
    HEIR_SALT=<decimal-registration-salt> CIRCUIT=claim704 \
-     node gen-input.mjs recovery.eml build/input.json
+     node gen-input.mjs /absolute/path/recovery.eml build/input.json
 
    node build/claim704_js/generate_witness.js \
      build/claim704_js/claim704.wasm \
@@ -215,26 +216,27 @@ Run these commands from `circuits`.
 
 The `.eml` must be a delivered DKIM-signed message with CRLF line endings. A sent-folder copy usually does not contain the received DKIM signature.
 
-6. Generate and deploy the Soroban verifier that matches this exact verification key. Run from the proxy repository root so the generator receives a safe output path:
+6. Generate and deploy the Soroban verifier that matches this exact verification key. Return to the proxy repository root, and set `VERIFIER_DIR` to the verifier crate directory in the separate contracts repository. The generator replaces that directory's generated verifier files; use a clean checkout for the new setup.
 
    ```bash
-   cd ..
+   cd ../..
+   VERIFIER_DIR=/absolute/path/to/contracts-repository/contracts/zkverifier
 
    soroban-verifier-gen \
-     --vk circuits/build/verification_key.json \
-     --proof circuits/build/proof.json \
-     --public circuits/build/public.json \
-     --out contracts/zkverifier \
+     --vk circut-setup/circuits/build/verification_key.json \
+     --proof circut-setup/circuits/build/proof.json \
+     --public circut-setup/circuits/build/public.json \
+     --out "$VERIFIER_DIR" \
      --crate-name legacy-zk-verifier \
      --contract-name ZkEmailGroth16Verifier \
      --soroban-sdk-version v27 \
      --force
 
    stellar contract build \
-     --manifest-path contracts/zkverifier/Cargo.toml
+     --manifest-path "$VERIFIER_DIR/Cargo.toml"
 
    VERIFIER_ID=$(stellar contract deploy \
-     --wasm contracts/zkverifier/target/wasm32v1-none/release/legacy_zk_verifier.wasm \
+     --wasm "$VERIFIER_DIR/target/wasm32v1-none/release/legacy_zk_verifier.wasm" \
      --source <DEPLOYER_KEY> \
      --network testnet | tail -1)
    ```
@@ -256,7 +258,7 @@ The `.eml` must be a delivered DKIM-signed message with CRLF line endings. A sen
      -- verifier
    ```
 
-   Set `SWIFTEX_ZK_VERIFIER_ID=$VERIFIER_ID` only after the on-chain `verifier()` result matches. Generating a fresh final zkey without deploying and installing its matching verifier makes every proof fail on-chain. Do not run `prove.sh` after this sequence: it performs another contribution and would replace the final key you just deployed.
+   Set `SWIFTEX_ZK_VERIFIER_ID=$VERIFIER_ID` only after the on-chain `verifier()` result matches. Generating a fresh final zkey without deploying and installing its matching verifier makes every proof fail on-chain. Do not make another contribution after this sequence; it would replace the final key you just deployed.
 
 ### Production phase-2 ceremony
 
@@ -276,11 +278,16 @@ Changing the circuit, wrapper parameters, R1CS, ptau, or final proving key requi
 
 ### Install generated artifacts in the proxy
 
-The helper scripts and generated WASM runtime are already included. From the repository root, install the locally generated proving key and a Rapidsnark binary built for the deployment host:
+From the proxy repository root, copy the matching setup artifacts and helpers into the runtime directory. Install a Rapidsnark binary built for the deployment host:
 
 ```bash
-# Install a Rapidsnark binary built for this deployment host.
-mkdir -p circuits/bin
+mkdir -p circuits/build/claim704_js circuits/bin
+cp circut-setup/circuits/build/claim704_final.zkey circuits/build/
+cp circut-setup/circuits/build/claim704_js/claim704.wasm circuits/build/claim704_js/
+cp circut-setup/circuits/build/claim704_js/generate_witness.js circuits/build/claim704_js/
+cp circut-setup/circuits/build/claim704_js/witness_calculator.js circuits/build/claim704_js/
+cp circut-setup/circuits/gen-input.mjs circuits/
+cp circut-setup/circuits/proof-args.mjs circuits/
 install -m 755 /path/to/rapidsnark-prover circuits/bin/rapidsnark-prover
 ```
 

@@ -1,0 +1,22 @@
+node_modules/
+.env*
+!.env.example
+.DS_Store
+*.log
+
+# Generated circuit artifacts and host-specific tools
+/circuits/build/
+/circuits/bin/
+/circuits/ptau/
+*.zkey
+*.r1cs
+
+# Private email, witness, and proof-job data
+*.eml
+*.wtns
+/circuits/inputs/
+/circuits/out*/
+/circuits/recovery-tmp/
+input*.json
+proof.json
+public.json

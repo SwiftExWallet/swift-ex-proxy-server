@@ -20,6 +20,7 @@ This is the central documentation page for the recovery module. Use the links be
 | :---------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------- |
 | 🏗️ [**Architecture & Integration Guide**](Architecture.md)       | Components, persistence, authentication, proof pipeline, Stellar calls, state transitions, and trust boundaries |
 | ⚙️ [**Installation & Setup Guide**](Installation.md)              | Backend configuration, circuit generation, ceremony requirements, verifier deployment, startup, and validation  |
+| 🧮 [**Circuit Setup Guide**](circut-setup/README.md)                | Circuit source, compilation, proving tools, and runtime artifact installation                                    |
 | 🚀 [**Backend API Walkthrough & Demo Guide**](DemoGuide.md)       | Registration, recovery start, status, execution, cancellation, SES ingestion, and failure checks                |
 
 ---

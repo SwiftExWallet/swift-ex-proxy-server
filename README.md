@@ -42,7 +42,7 @@ A self-custody wallet normally becomes inaccessible when its owner loses the dev
 
 During registration, the owner signs the on-chain recovery configuration. When recovery is needed, a DKIM-signed email is converted into a zkEmail proof. The SpareKey contract validates that proof, enforces the configured timelock, and allows the registered assets to move to the proven replacement address. The owner can cancel a pending recovery before execution.
 
-For the API summary, architecture, circuit installation, and end-to-end walkthrough, see the [Wallet Recovery Module documentation](README_RECOVERY.md).
+For the API summary, architecture, and end-to-end walkthrough, see the [Wallet Recovery Module documentation](README_RECOVERY.md). Use the [circuit setup guide](circut-setup/README.md) to build the recovery circuit and prepare its proving artifacts. Contract source and deployment are maintained in a separate repository.
 
 ## Compile and run the project
 
