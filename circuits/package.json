@@ -1,0 +1,14 @@
+{
+  "name": "@swiftex/circuits",
+  "version": "0.1.0",
+  "private": true,
+  "description": "zkEmail circuit for SwiftEx wallet recovery",
+  "dependencies": {
+    "@zk-email/circuits": "6.3.4",
+    "@zk-email/helpers": "6.3.4",
+    "circomlib": "2.0.5"
+  },
+  "devDependencies": {
+    "snarkjs": "^0.7.6"
+  }
+}

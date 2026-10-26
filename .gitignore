@@ -64,6 +64,9 @@ circuits/**/proof.json
 circuits/**/public.json
 circuits/**/*.zkey
 circuits/bin/
+circuits/ptau/
+circuits/**/*.r1cs
+circuits/**/verification_key.json
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json

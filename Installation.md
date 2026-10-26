@@ -108,32 +108,34 @@ The source currently contains testnet-oriented defaults for several public IDs, 
 
 ### Artifact source and prerequisites
 
-The circuit source is maintained separately in the sibling `DeadOrAlive` repository, not in this proxy:
+The circuit source and build scripts are included in this repository:
 
 ```text
-../DeadOrAlive/circuits/
+circuits/
 ├── src/legacy_claim.circom       # circuit logic
 ├── src/claim704.circom           # generated 704-byte wrapper
 ├── build-circuit.sh              # wrapper generation and Circom compilation
 ├── prove.sh                      # development contribution, proof, and verifier generation
-├── ptau/ppot_0080_21.ptau        # Powers of Tau input
+├── ptau/ppot_0080_21.ptau        # separately supplied Powers of Tau input
 └── package.json                  # snarkjs 0.7.6 and zkEmail circuit dependencies
 ```
 
 Install Circom 2.1.6 and ensure `circom` is on `PATH`. Circuit compilation and setup are memory-intensive; use at least 8 GB RAM, with 16 GB recommended. Then install the circuit dependencies:
 
 ```bash
-cd ../DeadOrAlive/circuits
-npm ci
+cd circuits
+npm install
 circom --version
 npx snarkjs --version
 ```
 
-The checked-in `bin/rapidsnark-prover` is a macOS ARM64 binary. Do not copy it to a Linux or x86 deployment; build Rapidsnark for the target host and install that binary as `swift-ex-proxy-server/circuits/bin/rapidsnark-prover`.
+The 2.3 GB Powers-of-Tau file is intentionally not committed. Supply the trusted `ppot_0080_21.ptau` artifact at `circuits/ptau/ppot_0080_21.ptau` and verify its published checksum before setup.
+
+The prover binary is platform-specific and is not committed. Build Rapidsnark for the deployment host and install it as `circuits/bin/rapidsnark-prover`.
 
 ### Generate each circuit artifact
 
-Run these commands from `DeadOrAlive/circuits`.
+Run these commands from `circuits`.
 
 1. Generate the fixed-size wrapper and compile the circuit:
 
@@ -213,7 +215,7 @@ Run these commands from `DeadOrAlive/circuits`.
 
 The `.eml` must be a delivered DKIM-signed message with CRLF line endings. A sent-folder copy usually does not contain the received DKIM signature.
 
-6. Generate and deploy the Soroban verifier that matches this exact verification key. Run from the `DeadOrAlive` repository root so the generator receives a safe output path:
+6. Generate and deploy the Soroban verifier that matches this exact verification key. Run from the proxy repository root so the generator receives a safe output path:
 
    ```bash
    cd ..
@@ -274,19 +276,11 @@ Changing the circuit, wrapper parameters, R1CS, ptau, or final proving key requi
 
 ### Install generated artifacts in the proxy
 
-From the `swift-ex-proxy-server` repository root, copy the generated runtime files from the sibling circuit repository:
+The helper scripts and generated WASM runtime are already included. From the repository root, install the locally generated proving key and a Rapidsnark binary built for the deployment host:
 
 ```bash
-mkdir -p circuits/build/claim704_js circuits/bin
-
-cp ../DeadOrAlive/circuits/build/claim704_final.zkey circuits/build/
-cp ../DeadOrAlive/circuits/build/claim704_js/claim704.wasm circuits/build/claim704_js/
-cp ../DeadOrAlive/circuits/build/claim704_js/generate_witness.js circuits/build/claim704_js/
-cp ../DeadOrAlive/circuits/build/claim704_js/witness_calculator.js circuits/build/claim704_js/
-cp ../DeadOrAlive/circuits/gen-input.mjs circuits/
-cp ../DeadOrAlive/circuits/proof-args.mjs circuits/
-
 # Install a Rapidsnark binary built for this deployment host.
+mkdir -p circuits/bin
 install -m 755 /path/to/rapidsnark-prover circuits/bin/rapidsnark-prover
 ```
 
