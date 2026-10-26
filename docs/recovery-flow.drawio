@@ -1,0 +1,60 @@
+<mxfile host="app.diagrams.net" modified="2026-10-26T00:00:00.000Z" agent="SwiftEx" version="24.7.17">
+  <diagram id="recovery-flow" name="Recovery Flow">
+    <mxGraphModel dx="1500" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="SwiftEx Wallet Recovery — Registration, Start and Execute" style="text;html=1;align=center;verticalAlign=middle;fontSize=24;fontStyle=1;fontColor=#172554;" vertex="1" parent="1"><mxGeometry x="10" y="10" width="1560" height="40" as="geometry"/></mxCell>
+
+        <mxCell id="phase-reg" value="1. REGISTRATION" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontStyle=1;fontSize=15;" vertex="1" parent="1"><mxGeometry x="170" y="65" width="430" height="40" as="geometry"/></mxCell>
+        <mxCell id="phase-start" value="2. START RECOVERY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontStyle=1;fontSize=15;" vertex="1" parent="1"><mxGeometry x="620" y="65" width="450" height="40" as="geometry"/></mxCell>
+        <mxCell id="phase-execute" value="3. EXECUTE RECOVERY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontStyle=1;fontSize=15;" vertex="1" parent="1"><mxGeometry x="1090" y="65" width="460" height="40" as="geometry"/></mxCell>
+
+        <mxCell id="lane-client" value="CLIENT / OWNER" style="swimlane;html=1;horizontal=0;startSize=150;fillColor=#f8fafc;swimlaneFillColor=#ffffff;strokeColor=#94a3b8;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="20" y="120" width="1530" height="130" as="geometry"/></mxCell>
+        <mxCell id="lane-backend" value="SWIFTEX BACKEND" style="swimlane;html=1;horizontal=0;startSize=150;fillColor=#eff6ff;swimlaneFillColor=#ffffff;strokeColor=#60a5fa;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="20" y="250" width="1530" height="180" as="geometry"/></mxCell>
+        <mxCell id="lane-db" value="MONGODB&lt;br&gt;(orchestration state)" style="swimlane;html=1;horizontal=0;startSize=150;fillColor=#fff7ed;swimlaneFillColor=#ffffff;strokeColor=#fb923c;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="20" y="430" width="1530" height="125" as="geometry"/></mxCell>
+        <mxCell id="lane-proof" value="zkEMAIL PROVER" style="swimlane;html=1;horizontal=0;startSize=150;fillColor=#faf5ff;swimlaneFillColor=#ffffff;strokeColor=#c084fc;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="20" y="555" width="1530" height="125" as="geometry"/></mxCell>
+        <mxCell id="lane-chain" value="STELLAR / SOROBAN&lt;br&gt;(contract authority)" style="swimlane;html=1;horizontal=0;startSize=150;fillColor=#f0fdf4;swimlaneFillColor=#ffffff;strokeColor=#4ade80;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="20" y="680" width="1530" height="210" as="geometry"/></mxCell>
+
+        <mxCell id="reg-request" value="POST /registration/prepare&lt;br&gt;email + assets" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2563eb;" vertex="1" parent="1"><mxGeometry x="185" y="150" width="150" height="65" as="geometry"/></mxCell>
+        <mxCell id="reg-sign" value="Owner signs + submits&lt;br&gt;unsigned XDR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="420" y="150" width="160" height="65" as="geometry"/></mxCell>
+        <mxCell id="reg-prepare" value="Validate policy; prepare&lt;br&gt;register_and_approve XDR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2563eb;" vertex="1" parent="1"><mxGeometry x="260" y="290" width="185" height="70" as="geometry"/></mxCell>
+        <mxCell id="reg-confirm" value="POST /registration/confirm&lt;br&gt;Verify SUCCESS + commitment" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#2563eb;" vertex="1" parent="1"><mxGeometry x="470" y="290" width="195" height="70" as="geometry"/></mxCell>
+        <mxCell id="reg-db" value="Upsert registration&lt;br&gt;metadata" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7ed;strokeColor=#ea580c;" vertex="1" parent="1"><mxGeometry x="470" y="465" width="170" height="55" as="geometry"/></mxCell>
+        <mxCell id="reg-chain" value="register_and_approve&lt;br&gt;Store commitment + allowances" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;" vertex="1" parent="1"><mxGeometry x="390" y="725" width="205" height="65" as="geometry"/></mxCell>
+
+        <mxCell id="start-request" value="POST /start with .eml&lt;br&gt;(or SES/SNS hook)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7c3aed;" vertex="1" parent="1"><mxGeometry x="650" y="150" width="170" height="65" as="geometry"/></mxCell>
+        <mxCell id="start-backend" value="Validate owner/email;&lt;br&gt;read on-chain pending" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#7c3aed;" vertex="1" parent="1"><mxGeometry x="650" y="285" width="185" height="70" as="geometry"/></mxCell>
+        <mxCell id="start-submit" value="Preview destination; keeper signs&lt;br&gt;start_recovery" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="875" y="285" width="185" height="70" as="geometry"/></mxCell>
+        <mxCell id="start-db1" value="Clear stale active;&lt;br&gt;create STARTED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7ed;strokeColor=#ea580c;" vertex="1" parent="1"><mxGeometry x="650" y="460" width="165" height="65" as="geometry"/></mxCell>
+        <mxCell id="start-db2" value="Persist PENDING + unlockAt&lt;br&gt;Failure → FAILED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7ed;strokeColor=#ea580c;" vertex="1" parent="1"><mxGeometry x="900" y="460" width="180" height="65" as="geometry"/></mxCell>
+        <mxCell id="proof" value="Generate proof from DKIM email&lt;br&gt;+ on-chain salt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#faf5ff;strokeColor=#9333ea;" vertex="1" parent="1"><mxGeometry x="755" y="590" width="200" height="60" as="geometry"/></mxCell>
+        <mxCell id="start-chain" value="SpareKey verifies proof; stores&lt;br&gt;destination, nullifier, unlock time" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="865" y="720" width="220" height="75" as="geometry"/></mxCell>
+
+        <mxCell id="execute-request" value="Poll status, then&lt;br&gt;POST /execute" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;" vertex="1" parent="1"><mxGeometry x="1115" y="150" width="150" height="65" as="geometry"/></mxCell>
+        <mxCell id="execute-result" value="Return transaction hash&lt;br&gt;or contract rejection" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;" vertex="1" parent="1"><mxGeometry x="1380" y="150" width="150" height="65" as="geometry"/></mxCell>
+        <mxCell id="execute-backend" value="Require local PENDING;&lt;br&gt;set EXECUTING" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#16a34a;" vertex="1" parent="1"><mxGeometry x="1110" y="285" width="170" height="70" as="geometry"/></mxCell>
+        <mxCell id="execute-submit" value="Keeper signs&lt;br&gt;execute_recovery" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1320" y="285" width="165" height="70" as="geometry"/></mxCell>
+        <mxCell id="execute-db" value="Success → COMPLETED&lt;br&gt;Rejection → FAILED" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7ed;strokeColor=#ea580c;" vertex="1" parent="1"><mxGeometry x="1320" y="460" width="180" height="65" as="geometry"/></mxCell>
+        <mxCell id="execute-chain" value="Contract enforces unlock readiness&lt;br&gt;and executes asset recovery" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1260" y="720" width="230" height="75" as="geometry"/></mxCell>
+
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#2563eb;" edge="1" parent="1" source="reg-request" target="reg-prepare"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#2563eb;" edge="1" parent="1" source="reg-prepare" target="reg-sign"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#2563eb;" edge="1" parent="1" source="reg-sign" target="reg-chain"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" value="tx hash" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#2563eb;" edge="1" parent="1" source="reg-chain" target="reg-confirm"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#2563eb;" edge="1" parent="1" source="reg-confirm" target="reg-db"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7c3aed;" edge="1" parent="1" source="start-request" target="start-backend"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7c3aed;" edge="1" parent="1" source="start-backend" target="start-db1"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7c3aed;" edge="1" parent="1" source="start-backend" target="proof"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7c3aed;" edge="1" parent="1" source="proof" target="start-submit"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7c3aed;" edge="1" parent="1" source="start-submit" target="start-chain"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#7c3aed;" edge="1" parent="1" source="start-chain" target="start-db2"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#16a34a;" edge="1" parent="1" source="execute-request" target="execute-backend"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#16a34a;" edge="1" parent="1" source="execute-backend" target="execute-submit"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#16a34a;" edge="1" parent="1" source="execute-submit" target="execute-chain"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#16a34a;" edge="1" parent="1" source="execute-chain" target="execute-db"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;strokeColor=#16a34a;" edge="1" parent="1" source="execute-db" target="execute-result"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
