@@ -71,7 +71,7 @@ export class SigningService {
 
     const jwt = this.jwtService.sign({
       _id: device._id,
-      walletAddress,
+      [chain === 'stellar' ? 'xlm' : 'multi']: walletAddress,
     });
 
     return { valid: true, jwt };

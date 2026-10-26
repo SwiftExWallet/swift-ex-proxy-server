@@ -40,10 +40,17 @@ export class RecoveryAttemptService {
       throw new ConflictException('recovery already pending for this owner');
     }
 
-    return this.attemptModel.create({
-      owner,
-      status: RecoveryAttemptStatus.STARTED,
-    }) as Promise<RecoveryAttemptRecord>;
+    try {
+      return (await this.attemptModel.create({
+        owner,
+        status: RecoveryAttemptStatus.STARTED,
+      })) as RecoveryAttemptRecord;
+    } catch (error) {
+      if ((error as { code?: number })?.code === 11000) {
+        throw new ConflictException('recovery already pending for this owner');
+      }
+      throw error;
+    }
   }
 
   update(id: unknown, update: RecoveryAttemptUpdate) {

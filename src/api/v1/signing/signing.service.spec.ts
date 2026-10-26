@@ -92,7 +92,7 @@ describe('SigningService', () => {
 
     expect(jwtService.sign).toHaveBeenCalledWith({
       _id: 'device-id',
-      walletAddress: wallet.address.toLowerCase(),
+      multi: wallet.address.toLowerCase(),
     });
   });
 
@@ -114,7 +114,7 @@ describe('SigningService', () => {
 
     expect(jwtService.sign).toHaveBeenCalledWith({
       _id: 'device-id',
-      walletAddress: signer.publicKey(),
+      xlm: signer.publicKey(),
     });
   });
 
@@ -134,7 +134,7 @@ describe('SigningService', () => {
 
     expect(jwtService.sign).toHaveBeenCalledWith({
       _id: 'device-id',
-      walletAddress: signer.publicKey(),
+      xlm: signer.publicKey(),
     });
   });
 

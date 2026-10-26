@@ -27,3 +27,20 @@ export class RecoveryAttempt {
 
 export const RecoveryAttemptSchema =
   SchemaFactory.createForClass(RecoveryAttempt);
+
+RecoveryAttemptSchema.index(
+  { owner: 1 },
+  {
+    unique: true,
+    name: 'unique_active_recovery_per_owner',
+    partialFilterExpression: {
+      status: {
+        $in: [
+          RecoveryAttemptStatus.STARTED,
+          RecoveryAttemptStatus.PENDING,
+          RecoveryAttemptStatus.EXECUTING,
+        ],
+      },
+    },
+  },
+);
