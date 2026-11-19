@@ -3,6 +3,27 @@ import * as crypto from 'crypto';
 const ALGORITHM = 'aes-256-gcm';
 const FUSION_SECRET_STATE_ENVELOPE_VERSION = 1;
 const FUSION_SECRET_STATE_ENVELOPE_TYPE = 'fusion-secret-state';
+const DEVELOPMENT_FUSION_SECRETS_ENCRYPTION_KEY =
+  'swift-ex-dev-fusion-secret-key01';
+
+function getFusionSecretsEncryptionKey(): string {
+  const configuredKey = process.env.FUSION_SECRETS_ENCRYPTION_KEY;
+
+  if (
+    process.env.ENVIRONMENT === 'dev' &&
+    (!configuredKey || configuredKey.length !== 32)
+  ) {
+    return DEVELOPMENT_FUSION_SECRETS_ENCRYPTION_KEY;
+  }
+
+  if (!configuredKey || configuredKey.length !== 32) {
+    throw new Error(
+      'Invalid or missing FUSION_SECRETS_ENCRYPTION_KEY. Must be 32 bytes.',
+    );
+  }
+
+  return configuredKey;
+}
 
 export interface FusionSecretStateEnvelope {
   version: typeof FUSION_SECRET_STATE_ENVELOPE_VERSION;
@@ -11,12 +32,7 @@ export interface FusionSecretStateEnvelope {
 }
 
 export function encryptFusionSecrets(data: object): string {
-  const keyStr = process.env.FUSION_SECRETS_ENCRYPTION_KEY;
-  if (!keyStr || keyStr.length !== 32) {
-    throw new Error(
-      'Invalid or missing FUSION_SECRETS_ENCRYPTION_KEY. Must be 32 bytes.',
-    );
-  }
+  const keyStr = getFusionSecretsEncryptionKey();
 
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv(
@@ -34,12 +50,7 @@ export function encryptFusionSecrets(data: object): string {
 }
 
 export function decryptFusionSecrets(encryptedPayload: string): object {
-  const keyStr = process.env.FUSION_SECRETS_ENCRYPTION_KEY;
-  if (!keyStr || keyStr.length !== 32) {
-    throw new Error(
-      'Invalid or missing FUSION_SECRETS_ENCRYPTION_KEY. Must be 32 bytes.',
-    );
-  }
+  const keyStr = getFusionSecretsEncryptionKey();
 
   const parts = encryptedPayload.split(':');
   if (parts.length !== 3) {

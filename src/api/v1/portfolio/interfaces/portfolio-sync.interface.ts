@@ -25,3 +25,26 @@ export interface AlchemyPortfolioResponse {
     tokens: AlchemyTokenEntry[];
   };
 }
+
+// Client-facing shape returned by PortfolioService.getPortfolio - the
+// normalized/stored portfolio, not the raw upstream Alchemy response.
+export interface PortfolioResponse {
+  address: string;
+  totalValueUsd: string;
+  stale: boolean;
+  syncStatus: string;
+  lastSyncedAt: Date | null;
+  lastSyncError: string | null;
+  tokens: {
+    network: string;
+    tokenAddress: string | null;
+    symbol: string | null;
+    name: string | null;
+    decimals: number | null;
+    logo: string | null;
+    balanceHex: string;
+    balance: string | null;
+    priceUsd: string | null;
+    valueUsd: string | null;
+  }[];
+}

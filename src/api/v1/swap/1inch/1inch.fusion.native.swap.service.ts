@@ -53,6 +53,7 @@ import {
   withExplicitVerifiedWalletAddress,
 } from '../../common/helpers/requestWallet';
 import { PortfolioService } from '../../portfolio/portfolio.service';
+import { resolveOneInchUrls } from '../../common/config/one-inch-url.config';
 
 interface RedisOrderSecretState {
   secrets: string[];
@@ -75,6 +76,7 @@ const DEFAULT_FUSION_NATIVE_SECRET_POLL_MAX_PROVIDER_FAILURES = 5;
 @Injectable()
 export class FusionNativeService {
   private readonly logger = new Logger(FusionNativeService.name);
+  private readonly oneInchUrls = resolveOneInchUrls(process.env);
   private readonly oneInchAllowedHosts = getOneInchAllowedHosts();
   private readonly rpcAllowedHosts = getProviderRpcAllowedHosts();
   private readonly providers = new Map<number, ethers.JsonRpcProvider>();
@@ -255,7 +257,7 @@ export class FusionNativeService {
     };
 
     this.crossChainSdk = new CrossChainSDK({
-      url: validateProviderUrl('https://api.1inch.com/fusion-plus', {
+      url: validateProviderUrl(this.oneInchUrls.fusionPlusSdk, {
         source: 'INCH_FUSION_PLUS_SDK_URL',
         allowedHosts: this.oneInchAllowedHosts,
       }),
@@ -268,7 +270,7 @@ export class FusionNativeService {
     if (!this.fusionSdkMap.has(chainId)) {
       const authKey = this.configService.get<string>('INCH_API_KEY');
       const instance = new FusionSDK({
-        url: validateProviderUrl('https://api.1inch.com/fusion', {
+        url: validateProviderUrl(this.oneInchUrls.fusionSdk, {
           source: 'INCH_FUSION_SDK_URL',
           allowedHosts: this.oneInchAllowedHosts,
         }),

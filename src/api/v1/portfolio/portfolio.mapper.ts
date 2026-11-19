@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { PortfolioToken } from './schema/portfolio.schema';
-import { AlchemyPortfolioResponse } from './interfaces/portfolio-sync.interface';
+import { Portfolio, PortfolioToken } from './schema/portfolio.schema';
+import {
+  AlchemyPortfolioResponse,
+  PortfolioResponse,
+} from './interfaces/portfolio-sync.interface';
 
 interface NativeTokenMeta {
   symbol: string;
@@ -108,5 +111,28 @@ export class PortfolioMapper {
     }
 
     return { tokens, totalValueUsd: totalValueUsd.toString() };
+  }
+
+  toAlchemyResponse(portfolio: Portfolio): PortfolioResponse {
+    return {
+      address: portfolio.address,
+      totalValueUsd: portfolio.totalValueUsd,
+      stale: portfolio.stale,
+      syncStatus: portfolio.syncStatus,
+      lastSyncedAt: portfolio.lastSyncedAt,
+      lastSyncError: portfolio.lastSyncError,
+      tokens: portfolio.tokens.map((token) => ({
+        network: token.network,
+        tokenAddress: token.tokenAddress,
+        symbol: token.symbol,
+        name: token.name,
+        decimals: token.decimals,
+        logo: token.logo,
+        balanceHex: token.balanceHex,
+        balance: token.balance,
+        priceUsd: token.priceUsd,
+        valueUsd: token.valueUsd,
+      })),
+    };
   }
 }

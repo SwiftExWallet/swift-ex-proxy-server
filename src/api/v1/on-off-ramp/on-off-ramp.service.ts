@@ -78,6 +78,9 @@ export class OnOffRampService {
 
   async createOrder(payload: OnOffRampOrderPayloadDto, device: any) {
     const { provider, side: rawSide, ...orderPayload } = payload;
+    const normalizedOrderPayload = Object.fromEntries(
+      Object.entries(orderPayload).filter(([, value]) => value !== undefined),
+    );
     const side = this.normalizeSide(rawSide);
 
     switch (this.normalizeProvider(provider)) {
@@ -85,21 +88,21 @@ export class OnOffRampService {
         if (side === 'buy') {
           return {
             success: this.alchemyService.orderCreate(
-              this.validateDto(CreateBuyOrderDto, orderPayload),
+              this.validateDto(CreateBuyOrderDto, normalizedOrderPayload),
             ),
           };
         }
 
         return {
           success: this.alchemyService.sellOrderCreate(
-            this.validateDto(SellOrderDto, orderPayload),
+            this.validateDto(SellOrderDto, normalizedOrderPayload),
           ),
         };
       case OnOffRampProvider.BANXA:
         if (side === 'buy') {
           return {
             success: await this.banxaService.buyOrderCreate(
-              this.validateDto(CreateOrderDto, orderPayload),
+              this.validateDto(CreateOrderDto, normalizedOrderPayload),
               device,
             ),
           };
@@ -107,7 +110,7 @@ export class OnOffRampService {
 
         return {
           success: await this.banxaService.sellOrderCreate(
-            this.validateDto(CreateOrderDto, orderPayload),
+            this.validateDto(CreateOrderDto, normalizedOrderPayload),
             device,
           ),
         };

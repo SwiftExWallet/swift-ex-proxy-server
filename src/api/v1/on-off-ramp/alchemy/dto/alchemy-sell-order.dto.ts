@@ -20,11 +20,6 @@ export class SellOrderDto {
   @IsString()
   @IsNotEmpty()
   country: string;
-
-  redirectUrl: string = process.env.ALCHEMY_PAY_SELL_REDIRECT as string;
-  callbackUrl: string = process.env.ALCHEMY_PAY_SELL_WEBHOOK as string;
-  language: string = 'en-US';
-  showTable: string = 'sell';
 }
 
 export function buildAlchemySellOrderPayload(requestPayload: SellOrderDto) {

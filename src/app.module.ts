@@ -25,6 +25,10 @@ import { BodySizeLimitGuard } from './api/v1/common/guard/body-size-limit.guard'
 import { MarketDataModule } from './api/v1/market-data/market-data.module';
 import { OnOffRampModule } from './api/v1/on-off-ramp/on-off-ramp.module';
 import { SigningModule } from './api/v1/signing/signing.module';
+import { TransactionHistoryModule } from './api/v1/transaction-history/transaction-history.module';
+import { PortfolioModule } from './api/v1/portfolio/portfolio.module';
+import { AppAvailableModule } from './api/v1/app-available/app-available.module';
+import { StellarModule } from './api/v1/stellar/stellar.module';
 
 @Module({
   imports: [
@@ -70,6 +74,10 @@ import { SigningModule } from './api/v1/signing/signing.module';
     MarketDataModule,
     OnOffRampModule,
     SigningModule,
+    TransactionHistoryModule,
+    PortfolioModule,
+    AppAvailableModule,
+    StellarModule,
   ],
   controllers: [AppController],
   providers: [

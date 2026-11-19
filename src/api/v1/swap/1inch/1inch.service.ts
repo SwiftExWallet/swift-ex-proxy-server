@@ -56,6 +56,10 @@ import {
 } from '../../common/helpers/requestWallet';
 import { ExhaustedOrderService } from '../../swapOrders/exhaustedOrder.service';
 import { PortfolioService } from '../../portfolio/portfolio.service';
+import {
+  OneInchUrls,
+  resolveOneInchUrls,
+} from '../../common/config/one-inch-url.config';
 
 interface RedisOrderSecretState {
   secrets: string[];
@@ -91,6 +95,7 @@ const FINAL_ORDER_STATUSES: ReadonlySet<SDKOrderStatus> = new Set([
 export class InchService implements OnModuleInit {
   private readonly logger = new Logger(InchService.name);
   private readonly sdk: SDK;
+  private readonly oneInchUrls = resolveOneInchUrls(process.env);
   private readonly oneInchAllowedHosts = getOneInchAllowedHosts();
   private readonly activeSecretPollers = new Map<string, NodeJS.Timeout>();
   private readonly secretPollReschedules = new Map<string, number>();
@@ -106,7 +111,7 @@ export class InchService implements OnModuleInit {
     private readonly portfolioService: PortfolioService,
   ) {
     this.sdk = new SDK({
-      url: validateProviderUrl('https://api.1inch.com/fusion-plus', {
+      url: validateProviderUrl(this.oneInchUrls.fusionPlusSdk, {
         source: 'INCH_FUSION_PLUS_SDK_URL',
         allowedHosts: this.oneInchAllowedHosts,
       }),
@@ -201,7 +206,18 @@ export class InchService implements OnModuleInit {
   }
 
   private getOneInchBaseUrl(envName: string): string {
-    return validateProviderUrl(process.env[envName], {
+    const urlKeyByEnvName: Record<string, keyof OneInchUrls> = {
+      QUOTER_BASE: 'quoter',
+      FUSION_PLUS_QUOTER_BASE: 'fusionPlusQuoter',
+      INCH_RELAYER_BASE: 'relayer',
+      FUSION_PLUS_RELAYER_BASE: 'fusionPlusRelayer',
+      INCH_ORDER_BASE: 'orders',
+      FUSION_PLUS_ORDER_BASE: 'fusionPlusOrders',
+    };
+    const urlKey = urlKeyByEnvName[envName];
+    const currentUrls = resolveOneInchUrls(process.env);
+    const rawUrl = urlKey ? currentUrls[urlKey] : process.env[envName];
+    return validateProviderUrl(rawUrl, {
       source: envName,
       allowedHosts: this.oneInchAllowedHosts,
     });
@@ -406,6 +422,7 @@ export class InchService implements OnModuleInit {
         config,
       );
     } catch (error) {
+      this.logger.error("error in buildFusionPlusOrder:",error)
       await this.delSecretState(`quote:${verifiedFusionPlusOrder.quoteId}`);
       throw createProviderBadRequestException(error);
     }
@@ -444,6 +461,7 @@ export class InchService implements OnModuleInit {
         config,
       );
     } catch (error: any) {
+      this.logger.error(error)
       throw createProviderBadRequestException(error);
     }
   }
@@ -515,6 +533,7 @@ export class InchService implements OnModuleInit {
 
       return data;
     } catch (error: any) {
+      this.logger.error("error",error)
       await this.delSecretState(tempKey);
       await this.delSecretState(orderHash);
       throw createProviderBadRequestException(error);

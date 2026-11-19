@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req, Res } from '@nestjs/common';
 import { WalletService } from './wallet.service';
 import { CreateWalletDto } from './dto/create-wallet.dto';
 import { WalletAddressDto } from './dto/wallet-address.dto';
@@ -42,5 +42,18 @@ export class WalletController {
       req.device._id,
     );
     return response.status(200).json({ wallets });
+  }
+
+  @Patch(':stellarAddress/activate-wallet')
+  async activateWallet(
+    @Req() req: any,
+    @Res() response,
+    @Param() stellarAddressDto: StellarAddressDto,
+  ) {
+    const wallet = await this.walletService.activateWallet(
+      stellarAddressDto,
+      req.device,
+    );
+    return response.status(200).json({ wallet });
   }
 }

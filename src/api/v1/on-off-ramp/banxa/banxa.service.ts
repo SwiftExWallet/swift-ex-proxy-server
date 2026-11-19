@@ -115,8 +115,9 @@ export class BanxaService {
   private async fetchBuyAssets(
     payload: AssetsDto,
     headers: BanxaHeaders,
-  ): Promise<HttpServiceResponse> {
-    const [crypto, fiats, paymentMethods] = await Promise.all([
+  ): Promise<any> {
+    try {
+      const [crypto, fiats, paymentMethods] = await Promise.all([
       this.httpService.get({
         body: payload,
         method: HttpRequestMethod.GET,
@@ -148,6 +149,9 @@ export class BanxaService {
         ).filter((pm: { type: string }) => pm.type === 'buy'),
       },
     };
+    } catch (error) {
+      this.logger.error(error)
+    }
   }
 
   private async fetchSellAssets(

@@ -32,9 +32,10 @@ const WALLET_REQUIRED_ROUTE_PREFIXES = [
   'api/v1/usdt',
   'api/v1/bsc',
   'api/v1/evm',
+  'api/v1/transaction-history',
 ];
 const WALLET_REQUIRED_ROUTE_PATHS = ['api/v1/swap'];
-const DEVICE_REQUIRED_ROUTE_PREFIXES = ['api/v1/wallet'];
+const DEVICE_REQUIRED_ROUTE_PREFIXES = ['api/v1/wallet', 'api/v1/portfolio'];
 const DEVICE_REQUIRED_ROUTE_PATHS = [
   'PATCH api/v1/device/update-fcm-token',
   'PATCH api/v1/device/update-user',
